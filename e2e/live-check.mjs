@@ -1,6 +1,7 @@
 // Headless browser check of a deployed (or previewed) Kush Games site.
 // Usage: node e2e/live-check.mjs [url] [screenshotDirectory]
 import { chromium } from 'playwright-core';
+import { measureSnake, reactCommitCounterScript } from './perf-snake.mjs';
 
 const siteUrl = process.argv[2] ?? 'https://abhi1kush.github.io/kush-games/';
 const screenshotDirectory = process.argv[3] ?? '/workspace';
@@ -68,6 +69,31 @@ async function steerToApples(page, appleCount, timeoutMs) {
   return Number(await page.getByTestId('snake-score').innerText()) - startScore;
 }
 
+/** Sample canvas pixels at the centre of the head cell, the first body cell and an empty cell. */
+async function headAndBodyColors(page) {
+  return page.evaluate(({ columns, rows }) => {
+    const board = document.querySelector('[data-testid=snake-board]');
+    const canvas = board.querySelector('canvas');
+    const context = canvas.getContext('2d');
+    const [headX, headY] = board.dataset.head.split(',').map(Number);
+    const offset = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[board.dataset.direction];
+    const bodyX = (headX - offset[0] + columns) % columns;
+    const bodyY = (headY - offset[1] + rows) % rows;
+    const cellPixels = canvas.width / columns;
+    const colorAt = (cellX, cellY, fractionX = 0.5, fractionY = 0.5) => {
+      // for the head, sample behind the eyes (towards the neck) so we hit the head colour
+      const pixel = context.getImageData(Math.floor((cellX + fractionX) * cellPixels), Math.floor((cellY + fractionY) * cellPixels), 1, 1).data;
+      return `${pixel[0]},${pixel[1]},${pixel[2]}`;
+    };
+    const behind = 0.5 - offset[0] * 0.2;
+    const behindY = 0.5 - offset[1] * 0.2;
+    const [appleX, appleY] = board.dataset.apple.split(',').map(Number);
+    let emptyX = (headX + 5) % columns; const emptyY = (headY + 5) % rows;
+    if (emptyX === appleX && emptyY === appleY) emptyX = (emptyX + 1) % columns;
+    return { head: colorAt(headX, headY, behind, behindY), body: colorAt(bodyX, bodyY), background: colorAt(emptyX, emptyY) };
+  }, { columns: SNAKE_COLUMNS, rows: SNAKE_ROWS });
+}
+
 async function swipe(cdp, fromX, fromY, toX, toY) {
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: fromX, y: fromY }] });
   for (let stepIndex = 1; stepIndex <= 6; stepIndex++) {
@@ -88,6 +114,7 @@ async function waitForBoardChange(page, before) {
 // ---------- Desktop ----------
 {
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  await context.addInitScript(reactCommitCounterScript);
   const page = await context.newPage();
   const pageErrors = [];
   page.on('pageerror', error => pageErrors.push(String(error)));
@@ -182,6 +209,12 @@ async function waitForBoardChange(page, before) {
   await page.keyboard.press('Space');
   check(await snakeStatus(page) === 'paused' && await page.getByTestId('snake-paused').isVisible(), 'desktop: Space pauses Snake');
   const pausedHead = await snakeHead(page);
+  check(await page.getByTestId('snake-canvas').count() === 1, 'desktop: Snake board is a single canvas');
+  check(await page.locator('[data-testid=snake-board] svg, [data-testid=snake-board] rect').count() === 0, 'desktop: no SVG segment elements on the board');
+  const colors = await headAndBodyColors(page);
+  check(colors.head !== colors.body && colors.head !== colors.background && colors.body !== colors.background,
+    `desktop: head pixel differs from body pixel (head ${colors.head}, body ${colors.body}, background ${colors.background})`);
+  check(colors.head === '141,255,159' && colors.body === '31,168,74', 'desktop: head is bright green, body is darker green');
   await page.waitForTimeout(500);
   const headAfterPause = await snakeHead(page);
   check(pausedHead.x === headAfterPause.x && pausedHead.y === headAfterPause.y, 'desktop: snake stays still while paused');
@@ -201,7 +234,19 @@ async function waitForBoardChange(page, before) {
     'desktop: snake wraps off the top edge and reappears at the bottom');
 
   // Game Over the only way left: eat two apples (length 5), then turn back into its own body.
-  const applesEaten = await steerToApples(page, 2, 40000);
+  check(await page.getByTestId('snake-mute').getAttribute('aria-pressed') === 'false', 'desktop: sound is on by default');
+  let applesEaten = await steerToApples(page, 1, 30000);
+  const chompsAfterFirstApple = Number(await page.getByTestId('snake-board').getAttribute('data-chomps') ?? 0);
+  check(applesEaten >= 1 && chompsAfterFirstApple >= 1, `desktop: eating an apple plays the chomp sound (chomps=${chompsAfterFirstApple})`);
+  await page.keyboard.press('m');
+  check(await page.getByTestId('snake-mute').getAttribute('aria-pressed') === 'true'
+    && await page.evaluate(() => localStorage.getItem('kush-games-snake-muted')) === 'true', 'desktop: M mutes and the choice is saved');
+  applesEaten += await steerToApples(page, 1, 30000);
+  const chompsWhileMuted = Number(await page.getByTestId('snake-board').getAttribute('data-chomps') ?? 0);
+  check(chompsWhileMuted === chompsAfterFirstApple, 'desktop: no chomp while muted');
+  await page.getByTestId('snake-mute').click();
+  check(await page.getByTestId('snake-mute').getAttribute('aria-pressed') === 'false'
+    && await page.evaluate(() => localStorage.getItem('kush-games-snake-muted')) === 'false', 'desktop: mute button turns sound back on');
   check(applesEaten >= 2 && Number(await page.getByTestId('snake-score').innerText()) >= 2, `desktop: snake eats apples and scores (score=${await page.getByTestId('snake-score').innerText()})`);
   check(Number(await page.getByTestId('snake-board').getAttribute('data-length')) >= 5, 'desktop: snake grows by one per apple');
   const currentDirection = await page.getByTestId('snake-board').getAttribute('data-direction');
@@ -211,6 +256,13 @@ async function waitForBoardChange(page, before) {
   check(await page.getByTestId('snake-over').isVisible() && /Score/.test(await page.getByTestId('snake-over').innerText()), 'desktop: Game Over screen shows the score');
   await page.getByTestId('snake-restart').click();
   check(await snakeStatus(page) === 'running' && Number(await page.getByTestId('snake-score').innerText()) === 0, 'desktop: Restart starts a new game');
+  // Performance sanity: 5 s of straight play (edges wrap, so it can't die).
+  const cdpDesktop = await context.newCDPSession(page);
+  const performance = await measureSnake(page, cdpDesktop, 5);
+  console.log(`INFO desktop Snake 5 s: ${JSON.stringify(performance)}`);
+  check(performance.reactCommits <= 4, `desktop: no React re-render per tick (${performance.reactCommits} commits in 5 s)`);
+  check(performance.elementOrTextMutations <= 12, `desktop: no DOM element churn per tick (${performance.elementOrTextMutations} element/text mutations in 5 s)`);
+  check(await snakeStatus(page) === 'running', 'desktop: still running after 5 s of wrapping');
   check(await hasNoHorizontalOverflow(page), 'desktop: no horizontal overflow on Snake page');
   check(pageErrors.length === 0, `desktop: no page errors ${pageErrors.join('; ')}`);
   await context.close();
@@ -279,6 +331,13 @@ async function waitForBoardChange(page, before) {
   check(snakeBoardBox.x >= 0 && snakeBoardBox.x + snakeBoardBox.width <= 375 && snakeBoardBox.y + snakeBoardBox.height <= 812,
     `mobile: Snake board fits the screen (${Math.round(snakeBoardBox.width)}px)`);
   check(await page.locator('.snake-game__dpad').isVisible(), 'mobile: on-screen D-pad is shown');
+  const headerBox = await page.locator('.snake-game__header').evaluate(header => {
+    const lastButton = header.querySelector('[data-testid=snake-pause]').getBoundingClientRect();
+    return { buttonsRight: lastButton.right, headerRight: header.getBoundingClientRect().right };
+  });
+  check(headerBox.buttonsRight <= headerBox.headerRight + 1, `mobile: score + mute + pause buttons fit in the header (${Math.round(headerBox.buttonsRight)} <= ${Math.round(headerBox.headerRight)})`);
+  const canvasSize = await page.getByTestId('snake-canvas').evaluate(canvas => ({ pixels: canvas.width, css: canvas.clientWidth }));
+  check(canvasSize.pixels === Math.round(canvasSize.css * 2), `mobile: canvas is sized for devicePixelRatio 2 (${canvasSize.pixels}px for ${canvasSize.css}px)`);
   const dpadBox = await page.locator('.snake-game__dpad').boundingBox();
   check(dpadBox.y + dpadBox.height <= 812, 'mobile: D-pad fits on screen without scrolling');
   check(await hasNoHorizontalOverflow(page), 'mobile: no horizontal overflow on Snake page');
@@ -294,11 +353,17 @@ async function waitForBoardChange(page, before) {
   check(await waitForSnake(page, head => head.x > headBeforeSwipe.x), 'mobile: swipe right turns the snake right');
   const headBeforeDpad = await snakeHead(page);
   await page.getByRole('button', { name: 'Down', exact: true }).tap();
-  check(await waitForSnake(page, head => head.y > headBeforeDpad.y), 'mobile: D-pad Down turns the snake down');
+  // wrap-aware: moving down from the bottom row lands on row 0
+  check(await waitForSnake(page, head => head.y === (headBeforeDpad.y + 1) % SNAKE_ROWS || head.y === (headBeforeDpad.y + 2) % SNAKE_ROWS, 2000)
+    && await page.getByTestId('snake-board').getAttribute('data-direction') === 'down', 'mobile: D-pad Down turns the snake down');
   await page.waitForTimeout(150);
   await page.screenshot({ path: `${screenshotDirectory}/kush-games-snake-mobile.png` });
   await page.getByTestId('snake-pause').tap();
   check(await snakeStatus(page) === 'paused', 'mobile: pause button pauses Snake');
+  const mobileColors = await headAndBodyColors(page);
+  check(mobileColors.head !== mobileColors.body, `mobile: head pixel differs from body pixel (head ${mobileColors.head}, body ${mobileColors.body})`);
+  await page.getByTestId('snake-mute').tap();
+  check(await page.getByTestId('snake-mute').getAttribute('aria-pressed') === 'true', 'mobile: mute button toggles');
   check(pageErrors.length === 0, `mobile: no page errors ${pageErrors.join('; ')}`);
   await context.close();
 }

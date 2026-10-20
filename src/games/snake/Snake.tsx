@@ -1,7 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { canvasPixelSize, diffBoard } from './boardDiff';
+import { CanvasBoardRenderer } from './canvasRenderer';
 import {
-  changeDirection, createInitialState, Direction, SnakeState, startGame, step, tickInterval, togglePause,
+  changeDirection, createInitialState, Direction, GameStatus, SnakeState, startGame, step, tickInterval, togglePause,
 } from './game';
+import { getChompsPlayed, playChomp, readMuted, saveMuted, unlockAudio } from './sound';
 import './snake.css';
 
 const BEST_SCORE_STORAGE_KEY = 'kush-games-snake-best';
@@ -19,51 +22,131 @@ function saveBestScore(score: number) {
   try { localStorage.setItem(BEST_SCORE_STORAGE_KEY, String(score)); } catch { /* storage unavailable */ }
 }
 
-/** A red SVG apple centred in grid cell (x, y). */
-function Apple({ x, y }: { x: number; y: number }) {
-  return (
-    <g transform={`translate(${x} ${y})`} className="snake-game__apple" data-testid="apple">
-      <path d="M0.5 0.32 C0.36 0.2 0.12 0.24 0.12 0.52 C0.12 0.78 0.32 0.94 0.5 0.86 C0.68 0.94 0.88 0.78 0.88 0.52 C0.88 0.24 0.64 0.2 0.5 0.32 Z"
-        fill="#e3262f" />
-      <ellipse cx="0.34" cy="0.46" rx="0.07" ry="0.12" fill="#ff8a8a" opacity="0.8" />
-      <path d="M0.5 0.32 Q0.5 0.18 0.56 0.1" stroke="#6b3e1f" strokeWidth="0.06" fill="none" strokeLinecap="round" />
-      <path d="M0.55 0.18 Q0.72 0.06 0.82 0.16 Q0.7 0.28 0.55 0.18 Z" fill="#3fbf4a" />
-    </g>
-  );
+const pointText = (point: { x: number; y: number } | null) => (point ? `${point.x},${point.y}` : '');
+
+/** Write the data-* attributes the e2e checks read, touching only the ones that changed. */
+function syncBoardAttributes(board: HTMLElement | null, previous: SnakeState | null, next: SnakeState) {
+  if (!board) return;
+  const setIfChanged = (name: string, previousValue: string | null, nextValue: string) => {
+    if (previousValue !== nextValue || board.getAttribute(name) !== nextValue) board.setAttribute(name, nextValue);
+  };
+  setIfChanged('data-status', previous?.status ?? null, next.status);
+  setIfChanged('data-head', previous ? pointText(previous.snake[0]) : null, pointText(next.snake[0]));
+  setIfChanged('data-length', previous ? String(previous.snake.length) : null, String(next.snake.length));
+  setIfChanged('data-direction', previous?.direction ?? null, next.direction);
+  setIfChanged('data-apple', previous ? pointText(previous.apple) : null, pointText(next.apple));
 }
 
+/**
+ * Snake on a single canvas. The game state lives in a ref and the game loop draws only the
+ * changed cells; React re-renders only when score, status, best score or mute change.
+ */
 export default function Snake() {
-  const [gameState, setGameState] = useState<SnakeState>(() => createInitialState());
+  const gameStateRef = useRef<SnakeState>(createInitialState());
+  const [status, setStatus] = useState<GameStatus>(gameStateRef.current.status);
+  const [score, setScore] = useState(0);
   const [bestScore, setBestScore] = useState(readBestScore);
   const [isNewBestScore, setIsNewBestScore] = useState(false);
+  const [isMuted, setIsMuted] = useState(readMuted);
+  const isMutedRef = useRef(isMuted);
   const containerRef = useRef<HTMLDivElement>(null);
-  const { status, score, snake, apple, columns, rows } = gameState;
-  const head = snake[0];
+  const boardRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rendererRef = useRef<CanvasBoardRenderer | null>(null);
+
+  /** Apply a new game state: draw the changed cells, update attributes, and React state only if it changed. */
+  const commitGameState = useCallback((nextState: SnakeState) => {
+    const previousState = gameStateRef.current;
+    if (nextState === previousState) return;
+    gameStateRef.current = nextState;
+    rendererRef.current?.apply(diffBoard(previousState, nextState), nextState);
+    syncBoardAttributes(boardRef.current, previousState, nextState);
+    if (nextState.status !== previousState.status) setStatus(nextState.status);
+    if (nextState.score !== previousState.score) {
+      setScore(nextState.score);
+      if (nextState.score > previousState.score && !isMutedRef.current) {
+        playChomp();
+        boardRef.current?.setAttribute('data-chomps', String(getChompsPlayed()));
+      }
+    }
+  }, []);
+
+  const updateGame = useCallback((update: (current: SnakeState) => SnakeState) => {
+    commitGameState(update(gameStateRef.current));
+  }, [commitGameState]);
 
   const steerSnake = useCallback((direction: Direction) => {
-    setGameState(current => {
+    updateGame(current => {
       const turned = changeDirection(current, direction);
       return turned.status === 'ready' ? startGame(turned) : turned;
     });
-  }, []);
+  }, [updateGame]);
 
   const restart = useCallback(() => {
     setIsNewBestScore(false);
-    setGameState(startGame(createInitialState()));
+    const freshGame = startGame(createInitialState());
+    const previousState = gameStateRef.current;
+    gameStateRef.current = freshGame;
+    rendererRef.current?.drawFull(freshGame);
+    syncBoardAttributes(boardRef.current, previousState, freshGame);
+    setStatus(freshGame.status);
+    setScore(0);
   }, []);
 
   const handlePrimaryAction = useCallback(() => {
-    if (status === 'over') restart();
-    else setGameState(current => togglePause(current));
-  }, [status, restart]);
+    if (gameStateRef.current.status === 'over') restart();
+    else updateGame(togglePause);
+  }, [restart, updateGame]);
 
-  // Game loop: one step per tick while running. Speed comes from the score.
+  const toggleMute = useCallback(() => {
+    setIsMuted(wasMuted => {
+      const nowMuted = !wasMuted;
+      isMutedRef.current = nowMuted;
+      saveMuted(nowMuted);
+      if (!nowMuted) unlockAudio();
+      return nowMuted;
+    });
+  }, []);
+
+  // Canvas setup: size with devicePixelRatio (capped at 2) and redraw fully on resize / DPR change.
+  useLayoutEffect(() => {
+    const canvas = canvasRef.current;
+    const board = boardRef.current;
+    if (!canvas || !board) return;
+    const renderer = new CanvasBoardRenderer(canvas);
+    rendererRef.current = renderer;
+    syncBoardAttributes(board, null, gameStateRef.current);
+    const fitToBoard = () => {
+      const cssSize = board.clientWidth;
+      if (!cssSize) return;
+      const pixels = canvasPixelSize(cssSize, window.devicePixelRatio);
+      if (renderer.resize(pixels, gameStateRef.current.columns)) renderer.drawFull(gameStateRef.current);
+    };
+    fitToBoard();
+    const resizeObserver = new ResizeObserver(fitToBoard);
+    resizeObserver.observe(board);
+    let resolutionQuery: MediaQueryList | null = null;
+    const watchResolution = () => {
+      resolutionQuery?.removeEventListener('change', handleResolutionChange);
+      resolutionQuery = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+      resolutionQuery.addEventListener('change', handleResolutionChange);
+    };
+    function handleResolutionChange() { fitToBoard(); watchResolution(); }
+    watchResolution();
+    return () => {
+      resizeObserver.disconnect();
+      resolutionQuery?.removeEventListener('change', handleResolutionChange);
+      rendererRef.current = null;
+    };
+  }, []);
+
+  // Game loop at the tick rate; only runs while playing.
   const currentTickMs = tickInterval(score);
   useEffect(() => {
     if (status !== 'running') return;
-    const timer = window.setInterval(() => setGameState(current => step(current)), currentTickMs);
+    const timer = window.setInterval(() => commitGameState(step(gameStateRef.current)), currentTickMs);
     return () => window.clearInterval(timer);
-  }, [status, currentTickMs]);
+  }, [status, currentTickMs, commitGameState]);
 
   // High score
   useEffect(() => {
@@ -78,24 +161,27 @@ export default function Snake() {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (!isMutedRef.current) unlockAudio();
       const direction = KEY_TO_DIRECTION[event.key];
       if (direction) { event.preventDefault(); steerSnake(direction); return; }
       if (event.key === ' ' || event.key === 'Spacebar') { event.preventDefault(); handlePrimaryAction(); return; }
-      if (event.key === 'p' || event.key === 'P') { setGameState(current => togglePause(current)); return; }
-      if (event.key === 'Enter' && (status === 'ready' || status === 'over')) { event.preventDefault(); handlePrimaryAction(); }
+      if (event.key === 'p' || event.key === 'P') { updateGame(togglePause); return; }
+      if (event.key === 'm' || event.key === 'M') { toggleMute(); return; }
+      const currentStatus = gameStateRef.current.status;
+      if (event.key === 'Enter' && (currentStatus === 'ready' || currentStatus === 'over')) { event.preventDefault(); handlePrimaryAction(); }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [steerSnake, handlePrimaryAction, status]);
+  }, [steerSnake, handlePrimaryAction, updateGame, toggleMute]);
 
-  // Pause automatically when the tab is hidden
+  // Pause when the tab is hidden (this also stops the interval).
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.hidden) setGameState(current => (current.status === 'running' ? togglePause(current) : current));
+      if (document.hidden) updateGame(current => (current.status === 'running' ? togglePause(current) : current));
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, []);
+  }, [updateGame]);
 
   // Swipe anywhere in the game area. Turns fire during the move, so one gesture can make several turns.
   useEffect(() => {
@@ -104,7 +190,9 @@ export default function Snake() {
     let startX = 0;
     let startY = 0;
     let isTracking = false;
+    const handlePointerDown = () => { if (!isMutedRef.current) unlockAudio(); };
     const handleTouchStart = (event: TouchEvent) => {
+      if (!isMutedRef.current) unlockAudio();
       const target = event.target as HTMLElement;
       if (event.touches.length !== 1 || target.closest('button')) return;
       isTracking = true;
@@ -124,11 +212,13 @@ export default function Snake() {
       startY = touch.clientY;
     };
     const handleTouchEnd = () => { isTracking = false; };
+    container.addEventListener('pointerdown', handlePointerDown, { passive: true });
     container.addEventListener('touchstart', handleTouchStart, { passive: true });
     container.addEventListener('touchmove', handleTouchMove, { passive: false });
     container.addEventListener('touchend', handleTouchEnd);
     container.addEventListener('touchcancel', handleTouchEnd);
     return () => {
+      container.removeEventListener('pointerdown', handlePointerDown);
       container.removeEventListener('touchstart', handleTouchStart);
       container.removeEventListener('touchmove', handleTouchMove);
       container.removeEventListener('touchend', handleTouchEnd);
@@ -149,7 +239,11 @@ export default function Snake() {
           <div className="snake-game__scores">
             <div className="snake-game__score"><span>Score</span><b data-testid="snake-score">{score}</b></div>
             <div className="snake-game__score"><span>Best</span><b data-testid="snake-best">{bestScore}</b></div>
-            <button type="button" className="snake-game__pause" onClick={handlePrimaryAction}
+            <button type="button" className="snake-game__icon-button" onClick={toggleMute} data-testid="snake-mute"
+              aria-pressed={isMuted} aria-label={isMuted ? 'Unmute sound' : 'Mute sound'} title={isMuted ? 'Unmute (M)' : 'Mute (M)'}>
+              {isMuted ? '🔇' : '🔊'}
+            </button>
+            <button type="button" className="snake-game__icon-button" onClick={handlePrimaryAction}
               disabled={status === 'over'} data-testid="snake-pause"
               aria-label={status === 'running' ? 'Pause' : 'Resume'}>
               {status === 'running' ? '❚❚' : '▶'}
@@ -157,57 +251,28 @@ export default function Snake() {
           </div>
         </header>
 
-        <div className="snake-game__board" data-testid="snake-board" data-status={status}
-          data-head={`${head.x},${head.y}`} data-length={snake.length} data-direction={gameState.direction}
-          data-apple={apple ? `${apple.x},${apple.y}` : ''}>
-          <svg viewBox={`0 0 ${columns} ${rows}`} className="snake-game__svg" role="img" aria-label="Snake board">
-            <defs>
-              <pattern id="snake-checker" width="2" height="2" patternUnits="userSpaceOnUse">
-                <rect width="2" height="2" fill="#1b1b1b" />
-                <rect width="1" height="1" fill="#202020" />
-                <rect x="1" y="1" width="1" height="1" fill="#202020" />
-              </pattern>
-              <linearGradient id="snake-body" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0" stopColor="#5af078" />
-                <stop offset="1" stopColor="#1fa84a" />
-              </linearGradient>
-            </defs>
-            <rect width={columns} height={rows} fill="url(#snake-checker)" />
-            {apple && <Apple x={apple.x} y={apple.y} />}
-            {snake.slice(1).map((segment, segmentIndex) => (
-              <rect key={segmentIndex} x={segment.x + 0.06} y={segment.y + 0.06} width={0.88} height={0.88} rx={0.25}
-                fill="url(#snake-body)" opacity={Math.max(0.55, 1 - segmentIndex * 0.02)} />
-            ))}
-            <g className="snake-game__head">
-              <rect x={head.x + 0.02} y={head.y + 0.02} width={0.96} height={0.96} rx={0.32} fill="#7dff95" />
-              <circle cx={head.x + 0.32} cy={head.y + 0.36} r={0.11} fill="#111" />
-              <circle cx={head.x + 0.68} cy={head.y + 0.36} r={0.11} fill="#111" />
-            </g>
-          </svg>
+        <div className="snake-game__board" ref={boardRef} data-testid="snake-board">
+          <canvas ref={canvasRef} className="snake-game__canvas" data-testid="snake-canvas" role="img" aria-label="Snake board" />
 
           {status === 'ready' && (
             <div className="snake-game__overlay" data-testid="snake-start">
               <div className="snake-game__overlay-glyph" aria-hidden="true">🐍🍎</div>
               <h2>Snake</h2>
               <p>Eat apples and grow longer. The edges wrap around, so just don’t bite yourself.</p>
-              <button type="button" className="snake-game__primary" onClick={() => setGameState(current => startGame(current))}>
-                ▶ Start
-              </button>
-              <p className="snake-game__hint">Arrow keys / WASD or swipe · Space to pause</p>
+              <button type="button" className="snake-game__primary" onClick={() => updateGame(startGame)}>▶ Start</button>
+              <p className="snake-game__hint">Arrow keys / WASD or swipe · Space to pause · M to mute</p>
             </div>
           )}
           {status === 'paused' && (
             <div className="snake-game__overlay" data-testid="snake-paused">
               <h2>Paused</h2>
-              <button type="button" className="snake-game__primary" onClick={() => setGameState(current => startGame(current))}>
-                ▶ Resume
-              </button>
+              <button type="button" className="snake-game__primary" onClick={() => updateGame(startGame)}>▶ Resume</button>
               <p className="snake-game__hint">Press Space to resume</p>
             </div>
           )}
           {status === 'over' && (
             <div className="snake-game__overlay snake-game__overlay--over" data-testid="snake-over">
-              <h2>{gameState.hasWon ? 'You win!' : 'Game Over'}</h2>
+              <h2>{gameStateRef.current.hasWon ? 'You win!' : 'Game Over'}</h2>
               <p className="snake-game__final-score">Score <b>{score}</b></p>
               {isNewBestScore && score > 0 ? <p className="snake-game__new-best">🏆 New high score!</p> : <p>Best {bestScore}</p>}
               <button type="button" className="snake-game__primary" onClick={restart} data-testid="snake-restart">↻ Restart</button>
@@ -224,7 +289,7 @@ export default function Snake() {
           <button type="button" className="snake-game__dpad-right" onPointerDown={pressDirectionButton('right')} aria-label="Right">▶</button>
           <button type="button" className="snake-game__dpad-down" onPointerDown={pressDirectionButton('down')} aria-label="Down">▼</button>
         </div>
-        <p className="snake-game__help">Arrow keys or <b>WASD</b> to steer · <b>Space</b> to pause · swipe on mobile</p>
+        <p className="snake-game__help">Arrow keys or <b>WASD</b> to steer · <b>Space</b> to pause · <b>M</b> to mute · swipe on mobile</p>
       </div>
     </div>
   );
