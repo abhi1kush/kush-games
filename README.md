@@ -26,7 +26,8 @@ Built with **React + TypeScript + Vite**. Deployed to GitHub Pages from the `gh-
 | 2048 | ✅ Playable |
 | Snake | ✅ Playable |
 | Blocks | ✅ Playable |
-| Minesweeper, Sudoku, Chess, Tic-Tac-Toe, Memory Match, Flappy Flight, Breakout | 🕒 Coming soon |
+| Chess (online with a friend, or pass and play) | ✅ Playable |
+| Minesweeper, Sudoku, Tic-Tac-Toe, Memory Match, Flappy Flight, Breakout | 🕒 Coming soon |
 
 ### Snake
 
@@ -79,6 +80,25 @@ Controls: ←/→ or A/D to move (hold to repeat), ↑/W to rotate, ↓/S soft d
 
 For tests, `?blocksSeed=N` fixes the piece order and `?blocksSetup=quad` starts with the bottom 4 rows full except one column and an I piece first (e.g. `…/kush-games/?blocksSetup=quad#/play/blocks`).
 
+### Chess
+
+`src/games/chess/` has chess you can play against a friend over the internet, or on one device.
+
+- **Rules:** [`chess.js`](https://github.com/jhlywa/chess.js) handles legal moves, check, checkmate, stalemate, threefold repetition, insufficient material, the fifty-move rule, castling, en passant and promotion. `match.ts` wraps it: a match is just the list of moves in UCI (`e2e4`, `e7e8q`) plus resignation or an agreed draw.
+- **Board:** `Board.tsx` draws 64 memoised squares. Tap a piece to see its legal squares (dots, or rings for captures), then tap where it should go. The last move and a king in check are highlighted. A pawn reaching the last rank opens a promotion picker. The board flips for Black. Pieces are Unicode glyphs coloured with CSS, so there are no images.
+- **Online:** *Play a friend* creates a room with a 5-character code (no 0/O/1/I/L). The host registers the PeerJS id `kushchess-<code>` on the free public PeerJS server and gets a link like `https://abhi1kush.github.io/kush-games/#/play/chess?room=K7M2Q`, with **Copy link** and **Share…** (`navigator.share`) buttons. Opening the link joins automatically, or you can type the code in *Join with a code*. The host chooses White or Black, and each rematch swaps colours.
+  - Moves go directly between the two browsers over a WebRTC data channel (`peerTransport.ts`), using PeerJS's default ICE servers. No game server is involved.
+  - Connection status is always shown: *Waiting for friend*, *Connected*, *Opponent left — reconnecting*. The guest keeps retrying, and a heartbeat notices a silent disconnect.
+  - If the browsers can't reach each other directly (strict office, school or mobile networks), the game says so and suggests trying another network.
+- **Protocol** (`protocol.ts`, tested in `protocol.test.ts` and `session.test.ts`):
+  - Each move is sent as UCI + SAN with its ply and game number, and the receiver checks it with chess.js.
+  - On every (re)connect both sides send their whole match (moves + FEN). The newer game wins. In the same game the longer move list wins when the other is a prefix of it, otherwise the host's version wins, so both sides always converge.
+  - Also covered: resign (with a confirm step), offer/accept/decline a draw, and rematch.
+- **Pass and play:** two players on one device, with Undo, Flip and New game.
+- **Saving:** the game is saved under `kush-games:chess:save:v1`, including the room code and your role. A refresh restores the board and re-joins the room (a refreshed host re-opens the same room). A finished pass-and-play game isn't kept. *Leave room* / *Exit* clears the save.
+- **Sound:** small Web Audio sounds for a move, a capture and check, with a 🔊/🔇 toggle saved as `kush-games-chess-muted`.
+- **Browser test:** `node e2e/chess-online.mjs [url]` plays a local game, then two browser contexts (a 1280px host and a 375px phone guest) play an online game: moves both ways, reloads on both sides, draw, resign, rematch and leave. If WebRTC can't connect on the test machine, it still checks the PeerJS server part, then runs the same two-browser test over a relay transport that the script installs (`window.__kushChessTestTransport`, a test-only hook).
+
 ### Where 2048 came from
 
 The 2048 game was copied from [abhi1kush/2048](https://github.com/abhi1kush/2048) (commit `f37ad66`) into `src/games/game2048/`:
@@ -92,7 +112,7 @@ Controls: arrow keys / WASD, or swipe on the board on mobile.
 
 ## Saved games
 
-Every playable game saves its game in progress to `localStorage` and restores it after a reload, Back, or closing the tab. Settings and best scores were already saved and still are.
+Every playable game (2048, Snake, Blocks and Chess) saves its game in progress to `localStorage` and restores it after a reload, Back, or closing the tab. Settings and best scores were already saved and still are.
 
 [`src/games/persistence.ts`](src/games/persistence.ts) is the shared helper:
 
@@ -103,6 +123,7 @@ Every playable game saves its game in progress to `localStorage` and restores it
 
 | Game | What is saved | When |
 | --- | --- | --- |
+| Chess | moves, game number, colours, resign/draw state, mode, room code and role | after every change (moves are rare) |
 | 2048 | tiles (value, row, column), score, won, keep-playing | after every move (and *Keep going*) |
 | Snake | body, direction, apple, score, length, apples eaten, speed setting + step interval, status | on every apple and pause at once; at most once per second while moving; on `pagehide`, tab hidden, and leaving the game |
 | Blocks | board cells, current piece (type, position, rotation), next queue, 7-bag and random-generator state (so the piece order carries on), hold + can-hold, score, lines, level, timers | on every lock, line clear, hold and pause; on `pagehide`, tab hidden, and leaving the game |

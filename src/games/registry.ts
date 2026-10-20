@@ -69,13 +69,14 @@ export const games: GameDefinition[] = [
   {
     id: 'chess',
     title: 'Chess',
-    tagline: 'The ultimate game of kings.',
-    description: 'Classic chess on a beautiful board. Checkmate your opponent\u2019s king in this timeless battle of tactics and strategy.',
+    tagline: 'Send a link, play a friend anywhere.',
+    description: 'Classic chess with all the rules: castling, en passant, promotion, check, checkmate and draws. Create a room and send the link to play a friend over the internet, or pass and play on one device.',
     categories: ['Strategy', 'Classic Board'],
-    status: 'coming-soon',
+    status: 'playable',
     artwork: { gradientFrom: '#3e2723', gradientTo: '#8d6e63', accentColor: '#f5deb3', glyph: '♞' },
-    controls: 'Click or drag pieces',
+    controls: 'Tap a piece, then tap where it should go',
     releaseYear: 2026,
+    component: lazy(() => import('./chess/Chess')),
   },
   {
     id: 'tic-tac-toe',

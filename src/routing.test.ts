@@ -8,5 +8,6 @@ describe('hash routing', () => {
     expect(parseHash(infoPath('snake'))).toEqual({ page: 'home', infoGameId: 'snake' });
     expect(parseHash(playPath('2048'))).toEqual({ page: 'play', gameId: '2048' });
     expect(parseHash('#/play/')).toEqual({ page: 'home' });
+    expect(parseHash('#/play/chess?room=K7M2Q')).toEqual({ page: 'play', gameId: 'chess' });
   });
 });
