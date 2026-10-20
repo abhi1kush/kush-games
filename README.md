@@ -30,9 +30,9 @@ Built with **React + TypeScript + Vite**. Deployed to GitHub Pages from the `gh-
 
 `src/games/snake/` has a Snake game written for Kush Games:
 
-- `game.ts`: pure logic with no React or timers. It covers state, `step`, `changeDirection` (instant reverses are ignored and quick turns are queued, up to 3), `spawnApple` (never on the snake), pause/resume, and `tickInterval` (starts at 150 ms per step, 3 ms faster per apple, never below 60 ms).
-- `game.test.ts`: unit tests for movement, growing, scoring, dying on walls or on itself, the queued turns, apple placement and speed.
-- `Snake.tsx` / `snake.css`: the dark SVG board with a drawn red apple, plus Start, Paused and Game Over screens. The high score is saved in `localStorage` (`kush-games-snake-best`).
+- `game.ts`: pure logic with no React or timers. The edges wrap around (modulo the 17×17 grid): leave the right edge and you come back on the left, leave the top and you come back at the bottom. Only running into yourself ends the game. It covers state, `step`, `changeDirection` (instant reverses are ignored and quick turns are queued, up to 3), `spawnApple` (never on the snake), pause/resume, and `tickInterval` (starts at 150 ms per step, 3 ms faster per apple, never below 60 ms).
+- `game.test.ts`: unit tests for movement, wrapping in all 4 directions, growing, scoring, dying on itself (including across an edge), the queued turns, apple placement and speed.
+- `Snake.tsx` / `snake.css`: the dark SVG board (its dashed edge shows the snake can pass through) with a drawn red apple, plus Start, Paused and Game Over screens. The high score is saved in `localStorage` (`kush-games-snake-best`).
 
 Controls: arrow keys / WASD to steer, Space (or P) to pause and resume, Space or Enter to restart. On phones, swipe anywhere on the game or use the on-screen D-pad. The game pauses on its own when the tab is hidden.
 

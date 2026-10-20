@@ -158,7 +158,8 @@ export default function Snake() {
         </header>
 
         <div className="snake-game__board" data-testid="snake-board" data-status={status}
-          data-head={`${head.x},${head.y}`} data-length={snake.length}>
+          data-head={`${head.x},${head.y}`} data-length={snake.length} data-direction={gameState.direction}
+          data-apple={apple ? `${apple.x},${apple.y}` : ''}>
           <svg viewBox={`0 0 ${columns} ${rows}`} className="snake-game__svg" role="img" aria-label="Snake board">
             <defs>
               <pattern id="snake-checker" width="2" height="2" patternUnits="userSpaceOnUse">
@@ -188,7 +189,7 @@ export default function Snake() {
             <div className="snake-game__overlay" data-testid="snake-start">
               <div className="snake-game__overlay-glyph" aria-hidden="true">🐍🍎</div>
               <h2>Snake</h2>
-              <p>Eat apples, grow longer, don’t hit the walls or yourself.</p>
+              <p>Eat apples and grow longer. The edges wrap around, so just don’t bite yourself.</p>
               <button type="button" className="snake-game__primary" onClick={() => setGameState(current => startGame(current))}>
                 ▶ Start
               </button>

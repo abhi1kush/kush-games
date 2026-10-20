@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  changeDirection, createInitialState, FASTEST_TICK_MS, INITIAL_LENGTH, pauseGame, spawnApple, SnakeState,
+  wrapCoordinate, changeDirection, createInitialState, FASTEST_TICK_MS, INITIAL_LENGTH, pauseGame, spawnApple, SnakeState,
   startGame, STARTING_TICK_MS, step, tickInterval, togglePause,
 } from './game';
 
@@ -47,13 +47,58 @@ describe('step', () => {
     expect(next.snake.some(segment => segment.x === next.apple!.x && segment.y === next.apple!.y)).toBe(false);
   });
 
-  it('dies on walls', () => {
-    const state = runningState({ snake: [{ x: 9, y: 2 }, { x: 8, y: 2 }, { x: 7, y: 2 }] });
+  it('wraps off the right edge back onto the left', () => {
+    const state = runningState({ snake: [{ x: 9, y: 2 }, { x: 8, y: 2 }, { x: 7, y: 2 }], direction: 'right' });
+    const next = step(state);
+    expect(next.status).toBe('running');
+    expect(next.snake).toEqual([{ x: 0, y: 2 }, { x: 9, y: 2 }, { x: 8, y: 2 }]);
+  });
+
+  it('wraps off the left edge back onto the right', () => {
+    const state = runningState({ snake: [{ x: 0, y: 4 }, { x: 1, y: 4 }, { x: 2, y: 4 }], direction: 'left' });
+    const next = step(state);
+    expect(next.status).toBe('running');
+    expect(next.snake[0]).toEqual({ x: 9, y: 4 });
+  });
+
+  it('wraps off the top edge back onto the bottom', () => {
+    const state = runningState({ snake: [{ x: 3, y: 0 }, { x: 3, y: 1 }, { x: 3, y: 2 }], direction: 'up' });
+    const next = step(state);
+    expect(next.status).toBe('running');
+    expect(next.snake[0]).toEqual({ x: 3, y: 9 });
+  });
+
+  it('wraps off the bottom edge back onto the top', () => {
+    const state = runningState({ snake: [{ x: 6, y: 9 }, { x: 6, y: 8 }, { x: 6, y: 7 }], direction: 'down' });
+    const next = step(state);
+    expect(next.status).toBe('running');
+    expect(next.snake[0]).toEqual({ x: 6, y: 0 });
+  });
+
+  it('wraps on the default 17x17 board and can eat an apple across the edge', () => {
+    const initial = createInitialState(17, 17, firstCell);
+    const state = { ...startGame(initial), snake: [{ x: 16, y: 0 }, { x: 15, y: 0 }, { x: 14, y: 0 }], apple: { x: 0, y: 0 } };
+    const next = step(state, () => 0.5);
+    expect(next.snake[0]).toEqual({ x: 0, y: 0 });
+    expect(next.score).toBe(1);
+    expect(next.snake).toHaveLength(4);
+  });
+
+  it('still dies when running into itself across the edge', () => {
+    // Body lies along the left edge; the head at the right edge moves right and wraps onto it.
+    const snake = [{ x: 9, y: 5 }, { x: 9, y: 4 }, { x: 0, y: 4 }, { x: 0, y: 5 }, { x: 0, y: 6 }];
+    const state = runningState({ snake, direction: 'down', directionQueue: ['right'], apple: { x: 5, y: 0 } });
     const next = step(state);
     expect(next.status).toBe('over');
-    expect(next.snake).toEqual(state.snake);
-    const topState = runningState({ snake: [{ x: 3, y: 0 }, { x: 3, y: 1 }], direction: 'up' });
-    expect(step(topState).status).toBe('over');
+    expect(next.hasWon).toBe(false);
+  });
+
+  it('moving across the edge into the leaving tail cell is allowed', () => {
+    const snake = [{ x: 9, y: 5 }, { x: 9, y: 4 }, { x: 0, y: 4 }, { x: 0, y: 5 }];
+    const state = runningState({ snake, direction: 'down', directionQueue: ['right'], apple: { x: 5, y: 0 } });
+    const next = step(state);
+    expect(next.status).toBe('running');
+    expect(next.snake[0]).toEqual({ x: 0, y: 5 });
   });
 
   it('dies when running into itself', () => {
@@ -78,6 +123,14 @@ describe('step', () => {
     expect(next.status).toBe('over');
     expect(next.hasWon).toBe(true);
     expect(next.score).toBe(1);
+  });
+});
+
+describe('wrapCoordinate', () => {
+  it('wraps both ways', () => {
+    expect(wrapCoordinate(-1, 17)).toBe(16);
+    expect(wrapCoordinate(17, 17)).toBe(0);
+    expect(wrapCoordinate(5, 17)).toBe(5);
   });
 });
 

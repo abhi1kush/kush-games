@@ -31,6 +31,43 @@ async function waitForSnake(page, predicate, timeoutMs = 2000) {
   }
   return false;
 }
+const SNAKE_COLUMNS = 17;
+const SNAKE_ROWS = 17;
+const OPPOSITE = { up: 'down', down: 'up', left: 'right', right: 'left' };
+const ARROW_KEY = { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' };
+/** Shortest signed distance on a wrapping axis. */
+function wrappedDistance(from, to, size) {
+  const forward = (to - from + size) % size;
+  return forward <= size / 2 ? forward : forward - size;
+}
+/** Simple autopilot: steer toward the apple (using the wrap) until `appleCount` more apples are eaten. */
+async function steerToApples(page, appleCount, timeoutMs) {
+  const board = page.getByTestId('snake-board');
+  const startScore = Number(await page.getByTestId('snake-score').innerText());
+  const deadline = Date.now() + timeoutMs;
+  let lastSteeredHead = '';
+  while (Date.now() < deadline) {
+    const [headValue, appleValue, direction, status, scoreText] = await Promise.all([
+      board.getAttribute('data-head'), board.getAttribute('data-apple'), board.getAttribute('data-direction'),
+      board.getAttribute('data-status'), page.getByTestId('snake-score').innerText()]);
+    const eaten = Number(scoreText) - startScore;
+    if (eaten >= appleCount || status !== 'running') return eaten;
+    const [headX, headY] = headValue.split(',').map(Number);
+    const [appleX, appleY] = appleValue.split(',').map(Number);
+    const distanceX = wrappedDistance(headX, appleX, SNAKE_COLUMNS);
+    const distanceY = wrappedDistance(headY, appleY, SNAKE_ROWS);
+    let wanted = distanceX !== 0 ? (distanceX > 0 ? 'right' : 'left') : (distanceY > 0 ? 'down' : 'up');
+    if (wanted === OPPOSITE[direction]) wanted = distanceY !== 0 ? (distanceY > 0 ? 'down' : 'up') : 'up';
+    if (wanted === OPPOSITE[direction]) wanted = 'left';
+    if (wanted !== direction && lastSteeredHead !== headValue) {
+      lastSteeredHead = headValue;
+      await page.keyboard.press(ARROW_KEY[wanted]);
+    }
+    await page.waitForTimeout(15);
+  }
+  return Number(await page.getByTestId('snake-score').innerText()) - startScore;
+}
+
 async function swipe(cdp, fromX, fromY, toX, toY) {
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: fromX, y: fromY }] });
   for (let stepIndex = 1; stepIndex <= 6; stepIndex++) {
@@ -142,7 +179,6 @@ async function waitForBoardChange(page, before) {
   check(await waitForSnake(page, head => head.x < beforeTurn.x), 'desktop: WASD (a) turns the snake left');
   await page.keyboard.press('s');
   await page.waitForTimeout(200);
-  await page.screenshot({ path: `${screenshotDirectory}/kush-games-snake.png` });
   await page.keyboard.press('Space');
   check(await snakeStatus(page) === 'paused' && await page.getByTestId('snake-paused').isVisible(), 'desktop: Space pauses Snake');
   const pausedHead = await snakeHead(page);
@@ -151,8 +187,27 @@ async function waitForBoardChange(page, before) {
   check(pausedHead.x === headAfterPause.x && pausedHead.y === headAfterPause.y, 'desktop: snake stays still while paused');
   await page.keyboard.press('Space');
   check(await snakeStatus(page) === 'running', 'desktop: Space resumes Snake');
+  // Pass-through edges: head left, off the left edge, and come back on the right.
   await page.keyboard.press('ArrowLeft');
-  check(await waitForSnake(page, (_head, status) => status === 'over', 8000), 'desktop: snake dies on the wall');
+  check(await waitForSnake(page, (head, status) => status === 'running' && head.x === 0, 4000), 'desktop: snake reaches the left edge');
+  check(await waitForSnake(page, (head, status) => status === 'running' && head.x === SNAKE_COLUMNS - 1, 1000),
+    'desktop: snake wraps off the left edge and reappears on the right');
+  await page.waitForTimeout(60);
+  await page.screenshot({ path: `${screenshotDirectory}/kush-games-snake.png` });
+  check(await waitForSnake(page, (head, status) => status === 'running' && head.x === SNAKE_COLUMNS - 3, 1500), 'desktop: snake keeps playing after wrapping');
+  // Wrap vertically too: go up and come back from the bottom.
+  await page.keyboard.press('ArrowUp');
+  check(await waitForSnake(page, head => head.y === 0, 4000) && await waitForSnake(page, (head, status) => status === 'running' && head.y === SNAKE_ROWS - 1, 1000),
+    'desktop: snake wraps off the top edge and reappears at the bottom');
+
+  // Game Over the only way left: eat two apples (length 5), then turn back into its own body.
+  const applesEaten = await steerToApples(page, 2, 40000);
+  check(applesEaten >= 2 && Number(await page.getByTestId('snake-score').innerText()) >= 2, `desktop: snake eats apples and scores (score=${await page.getByTestId('snake-score').innerText()})`);
+  check(Number(await page.getByTestId('snake-board').getAttribute('data-length')) >= 5, 'desktop: snake grows by one per apple');
+  const currentDirection = await page.getByTestId('snake-board').getAttribute('data-direction');
+  const leftTurn = { right: 'up', up: 'left', left: 'down', down: 'right' }[currentDirection];
+  for (const turn of [leftTurn, OPPOSITE[currentDirection], OPPOSITE[leftTurn]]) await page.keyboard.press(ARROW_KEY[turn]);
+  check(await waitForSnake(page, (_head, status) => status === 'over', 3000), 'desktop: snake dies when it runs into itself');
   check(await page.getByTestId('snake-over').isVisible() && /Score/.test(await page.getByTestId('snake-over').innerText()), 'desktop: Game Over screen shows the score');
   await page.getByTestId('snake-restart').click();
   check(await snakeStatus(page) === 'running' && Number(await page.getByTestId('snake-score').innerText()) === 0, 'desktop: Restart starts a new game');
@@ -232,6 +287,8 @@ async function waitForBoardChange(page, before) {
   let headBeforeSwipe = await snakeHead(page);
   await swipe(cdp, boardCenterX, boardCenterY, boardCenterX, boardCenterY - 90);
   check(await waitForSnake(page, (head, status) => status === 'running' && head.y < headBeforeSwipe.y), 'mobile: swipe up starts Snake and turns it up');
+  check(await waitForSnake(page, head => head.y === 0, 3000) && await waitForSnake(page, (head, status) => status === 'running' && head.y === SNAKE_ROWS - 1, 1000),
+    'mobile: snake wraps off the top and reappears at the bottom');
   headBeforeSwipe = await snakeHead(page);
   await swipe(cdp, boardCenterX, boardCenterY, boardCenterX + 90, boardCenterY);
   check(await waitForSnake(page, head => head.x > headBeforeSwipe.x), 'mobile: swipe right turns the snake right');

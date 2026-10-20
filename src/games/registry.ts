@@ -23,8 +23,8 @@ export const games: GameDefinition[] = [
   {
     id: 'snake',
     title: 'Snake',
-    tagline: 'Eat apples, grow, don\u2019t bite your tail.',
-    description: 'Guide a hungry snake around the board and gobble up red apples. Every apple makes you longer and a little faster. Hit a wall or your own tail and it\u2019s game over.',
+    tagline: 'Eat apples, wrap around the edges, don\u2019t bite your tail.',
+    description: 'Guide a hungry snake around the board and gobble up red apples. Every apple makes you longer and a little faster. The edges wrap around, so leave one side and you come back on the other. Only biting your own tail ends the game.',
     categories: ['Arcade', 'Classic Board'],
     status: 'playable',
     artwork: { gradientFrom: '#0f9b0f', gradientTo: '#023020', accentColor: '#b8ff9f', glyph: '🐍' },

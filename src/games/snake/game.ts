@@ -60,6 +60,11 @@ export function spawnApple(snake: Point[], columns: number, rows: number, random
   return freeCells[chosenIndex];
 }
 
+/** Keep a coordinate on the board by wrapping it around (works for -1 too). */
+export function wrapCoordinate(value: number, size: number): number {
+  return ((value % size) + size) % size;
+}
+
 /** A fresh game in the 'ready' state: snake in the middle facing right. */
 export function createInitialState(columns = DEFAULT_COLUMNS, rows = DEFAULT_ROWS, random: RandomSource = Math.random): SnakeState {
   const headX = Math.floor(columns / 2);
@@ -103,16 +108,17 @@ export function togglePause(state: SnakeState): SnakeState {
   return startGame(state);
 }
 
-/** Advance the game by one tick. Only moves while running. */
+/** Advance the game by one tick. Only moves while running. Only running into itself ends the game. */
 export function step(state: SnakeState, random: RandomSource = Math.random): SnakeState {
   if (state.status !== 'running') return state;
   const [nextDirection = state.direction, ...remainingQueue] = state.directionQueue;
   const offset = DIRECTION_OFFSETS[nextDirection];
   const currentHead = state.snake[0];
-  const newHead = { x: currentHead.x + offset.x, y: currentHead.y + offset.y };
-
-  const hitsWall = newHead.x < 0 || newHead.y < 0 || newHead.x >= state.columns || newHead.y >= state.rows;
-  if (hitsWall) return { ...state, direction: nextDirection, directionQueue: [], status: 'over' };
+  // The edges are pass-through: leaving one side brings the head back on the opposite side.
+  const newHead = {
+    x: wrapCoordinate(currentHead.x + offset.x, state.columns),
+    y: wrapCoordinate(currentHead.y + offset.y, state.rows),
+  };
 
   const eatsApple = state.apple !== null && isSamePoint(newHead, state.apple);
   // When not eating, the tail moves away this tick, so moving into it is allowed.
