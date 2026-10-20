@@ -2,6 +2,7 @@
 // Changes: renamed to Game2048, CSS scoped under .game-2048, readable names.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Direction, GameState, move, newGame } from './game';
+import { create2048SaveSlot, restore2048, serialize2048 } from './save';
 import './game2048.css';
 
 const BEST_SCORE_STORAGE_KEY = '2048-best';
@@ -16,12 +17,36 @@ function readBestScore(): number {
 }
 
 export default function Game2048() {
-  const [gameState, setGameState] = useState<GameState>(() => newGame());
+  const [saveSlot] = useState(create2048SaveSlot);
+  // A saved game in progress is restored directly (no pause screen needed for a turn-based game).
+  const [gameState, setGameState] = useState<GameState>(() => {
+    const saved = saveSlot.load();
+    return saved ? restore2048(saved) : newGame();
+  });
   const [bestScore, setBestScore] = useState(readBestScore);
   const boardRef = useRef<HTMLDivElement>(null);
+  /** Set by a move or Keep going; the untouched starting board isn't worth saving. */
+  const hasPlayedRef = useRef(false);
 
-  const moveTiles = useCallback((direction: Direction) => setGameState(current => move(current, direction)), []);
-  const restart = useCallback(() => setGameState(newGame()), []);
+  const moveTiles = useCallback((direction: Direction) => {
+    hasPlayedRef.current = true;
+    setGameState(current => move(current, direction));
+  }, []);
+  const keepGoing = useCallback(() => {
+    hasPlayedRef.current = true;
+    setGameState(current => ({ ...current, keepPlaying: true }));
+  }, []);
+  const restart = useCallback(() => {
+    saveSlot.clear();
+    hasPlayedRef.current = false;
+    setGameState(newGame());
+  }, [saveSlot]);
+
+  // Save after every move; a finished game is not kept.
+  useEffect(() => {
+    if (gameState.over) saveSlot.clear();
+    else if (hasPlayedRef.current) saveSlot.save(serialize2048(gameState));
+  }, [gameState, saveSlot]);
 
   useEffect(() => {
     if (gameState.score > bestScore) {
@@ -75,7 +100,7 @@ export default function Game2048() {
 
   const showWinOverlay = gameState.won && !gameState.keepPlaying;
   return (
-    <div className="game-2048" data-testid="game-2048">
+    <div className="game-2048" data-testid="game-2048" data-score={gameState.score}>
       <div className="game-2048__container">
         <header className="game-2048__header">
           <h1>2048</h1>
@@ -107,7 +132,7 @@ export default function Game2048() {
               <h2>{showWinOverlay ? 'You win!' : 'Game over!'}</h2>
               <div>
                 {showWinOverlay && (
-                  <button type="button" onClick={() => setGameState(current => ({ ...current, keepPlaying: true }))}>Keep going</button>
+                  <button type="button" onClick={keepGoing}>Keep going</button>
                 )}
                 <button type="button" onClick={restart}>Try again</button>
               </div>

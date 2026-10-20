@@ -6,6 +6,7 @@ import {
   GameStatus, setSpeed, SnakeState, SpeedSetting, speedMultiplier, startGame, step, togglePause,
 } from './game';
 import { BestScoreDetails, readBestDetails, readBestScore, readSpeedSetting, saveBestScore, saveSpeedSetting } from './settings';
+import { createSnakeSaveSlot, restoreSnake, serializeSnake } from './save';
 import { getChompsPlayed, playChomp, readMuted, saveMuted, unlockAudio } from './sound';
 import './snake.css';
 
@@ -89,11 +90,19 @@ function syncBoardAttributes(board: HTMLElement | null, previous: SnakeState | n
  * changed cells; React re-renders only when score, status, best score or mute change.
  */
 export default function Snake() {
-  const speedSettingRef = useRef<SpeedSetting>(readSpeedSetting());
+  const [saveSlot] = useState(createSnakeSaveSlot);
+  // A saved game in progress comes back paused, with its own speed setting.
+  const [initialGame] = useState(() => {
+    const saved = saveSlot.load();
+    if (saved) return { state: restoreSnake(saved), isRestored: true };
+    return { state: createInitialState(undefined, undefined, undefined, readSpeedSetting()), isRestored: false };
+  });
+  const speedSettingRef = useRef<SpeedSetting>(initialGame.state.speed);
   const [speedSetting, setSpeedSetting] = useState<SpeedSetting>(speedSettingRef.current);
-  const gameStateRef = useRef<SnakeState>(createInitialState(undefined, undefined, undefined, speedSettingRef.current));
-  const [status, setStatus] = useState<GameStatus>(gameStateRef.current.status);
-  const [score, setScore] = useState(0);
+  const gameStateRef = useRef<SnakeState>(initialGame.state);
+  const [status, setStatus] = useState<GameStatus>(initialGame.state.status);
+  const [isRestored, setIsRestored] = useState(initialGame.isRestored);
+  const [score, setScore] = useState(initialGame.state.score);
   const [tickMs, setTickMs] = useState(() => currentTickMs(gameStateRef.current));
   const [bestScore, setBestScore] = useState(readBestScore);
   const [bestDetails, setBestDetails] = useState<BestScoreDetails | null>(readBestDetails);
@@ -106,6 +115,17 @@ export default function Snake() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<CanvasBoardRenderer | null>(null);
 
+  /**
+   * Save the game in progress (or clear the slot when there is none). Writes happen at once on
+   * apples, pauses and leaving; plain ticks use the throttled write (at most ~1 per second).
+   */
+  const persistGame = useCallback((state: SnakeState, timing: 'now' | 'throttled') => {
+    const saved = serializeSnake(state);
+    if (!saved) saveSlot.clear();
+    else if (timing === 'now') saveSlot.save(saved);
+    else saveSlot.saveThrottled(saved);
+  }, [saveSlot]);
+
   /** Apply a new game state: draw the changed cells, update attributes, and React state only if it changed. */
   const commitGameState = useCallback((nextState: SnakeState) => {
     const previousState = gameStateRef.current;
@@ -113,7 +133,13 @@ export default function Snake() {
     gameStateRef.current = nextState;
     rendererRef.current?.apply(diffBoard(previousState, nextState), nextState);
     syncBoardAttributes(boardRef.current, previousState, nextState);
-    if (nextState.status !== previousState.status) setStatus(nextState.status);
+    if (nextState.status !== previousState.status) {
+      setStatus(nextState.status);
+      if (nextState.status === 'running') setIsRestored(false);
+    }
+    const isImportantChange = nextState.status !== previousState.status || nextState.score !== previousState.score;
+    if (isImportantChange) persistGame(nextState, 'now');
+    else if (nextState.status === 'running') persistGame(nextState, 'throttled');
     const nextTickMs = currentTickMs(nextState);
     if (nextTickMs !== currentTickMs(previousState)) setTickMs(nextTickMs);
     if (nextState.score !== previousState.score) {
@@ -126,7 +152,7 @@ export default function Snake() {
         }
       }
     }
-  }, []);
+  }, [persistGame]);
 
   const updateGame = useCallback((update: (current: SnakeState) => SnakeState) => {
     commitGameState(update(gameStateRef.current));
@@ -140,7 +166,9 @@ export default function Snake() {
   }, [updateGame]);
 
   const restart = useCallback(() => {
+    saveSlot.clear();
     setIsNewBestScore(false);
+    setIsRestored(false);
     const freshGame = startGame(createInitialState(undefined, undefined, undefined, speedSettingRef.current));
     const previousState = gameStateRef.current;
     gameStateRef.current = freshGame;
@@ -149,7 +177,7 @@ export default function Snake() {
     setStatus(freshGame.status);
     setScore(0);
     setTickMs(currentTickMs(freshGame));
-  }, []);
+  }, [saveSlot]);
 
   /** Pick a speed mode. Ignored mid-game; applies now on the Start screen, or at the next restart after Game Over. */
   const chooseSpeed = useCallback((speed: SpeedSetting) => {
@@ -248,7 +276,7 @@ export default function Snake() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [steerSnake, handlePrimaryAction, updateGame, toggleMute]);
 
-  // Pause when the tab is hidden (this also stops the interval).
+  // Pause when the tab is hidden (this also stops the interval and saves the game).
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.hidden) updateGame(current => (current.status === 'running' ? togglePause(current) : current));
@@ -256,6 +284,16 @@ export default function Snake() {
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [updateGame]);
+
+  // Final save when the page goes away or the player leaves the game (Back / route change).
+  useEffect(() => {
+    const saveNow = () => persistGame(gameStateRef.current, 'now');
+    window.addEventListener('pagehide', saveNow);
+    return () => {
+      window.removeEventListener('pagehide', saveNow);
+      saveNow();
+    };
+  }, [persistGame]);
 
   // Swipe anywhere in the game area. Turns fire during the move, so one gesture can make several turns.
   useEffect(() => {
@@ -354,9 +392,12 @@ export default function Snake() {
             </div>
           )}
           {status === 'paused' && (
-            <div className="snake-game__overlay" data-testid="snake-paused">
+            <div className="snake-game__overlay" data-testid="snake-paused" data-restored={isRestored ? 'true' : 'false'}>
+              {isRestored && <p className="snake-game__restored" data-testid="snake-restored">💾 Saved game restored</p>}
               <h2>Paused</h2>
-              <button type="button" className="snake-game__primary" onClick={() => updateGame(startGame)}>▶ Resume</button>
+              {isRestored && <p className="snake-game__hint">Length {gameStateRef.current.snake.length} · Score {score}</p>}
+              <button type="button" className="snake-game__primary" onClick={() => updateGame(startGame)} data-testid="snake-resume">▶ Resume</button>
+              <button type="button" className="snake-game__secondary" onClick={restart} data-testid="snake-new-game">↻ New game</button>
               <p className="snake-game__hint">Press Space to resume</p>
             </div>
           )}

@@ -17,6 +17,7 @@ Built with **React + TypeScript + Vite**. Deployed to GitHub Pages from the `gh-
 - Placeholder games show a "Coming Soon" screen
 - Hash routing, so deep links work on GitHub Pages without server rewrites
 - Card art is generated from CSS gradients + SVG patterns + a glyph — no images
+- Games in progress are saved in the browser, so a refresh doesn't lose them; their cards show a **▶ Continue** badge
 
 ## Games
 
@@ -89,6 +90,32 @@ The 2048 game was copied from [abhi1kush/2048](https://github.com/abhi1kush/2048
 
 Controls: arrow keys / WASD, or swipe on the board on mobile.
 
+## Saved games
+
+Every playable game saves its game in progress to `localStorage` and restores it after a reload, Back, or closing the tab. Settings and best scores were already saved and still are.
+
+[`src/games/persistence.ts`](src/games/persistence.ts) is the shared helper:
+
+- One versioned key per game: `kush-games:<gameId>:save:v1`, holding `{ version, savedAt, data }`.
+- Loading never throws. Corrupt JSON, a different version, or data that fails the game's own check is discarded (and removed), and a fresh game is shown. Saves from older versions are removed. Bump the version when a save's shape changes.
+- `save` writes at once, `saveThrottled` writes at most once per second (newest data wins), and `flush`/`clear` do what they say. Storage errors (full or blocked) are ignored, so the game keeps working.
+- `hasSavedGame(id)` drives the home page's **Continue** badge.
+
+| Game | What is saved | When |
+| --- | --- | --- |
+| 2048 | tiles (value, row, column), score, won, keep-playing | after every move (and *Keep going*) |
+| Snake | body, direction, apple, score, length, apples eaten, speed setting + step interval, status | on every apple and pause at once; at most once per second while moving; on `pagehide`, tab hidden, and leaving the game |
+| Blocks | board cells, current piece (type, position, rotation), next queue, 7-bag and random-generator state (so the piece order carries on), hold + can-hold, score, lines, level, timers | on every lock, line clear, hold and pause; on `pagehide`, tab hidden, and leaving the game |
+
+Restoring:
+
+- 2048 comes back as it was.
+- A Snake or Blocks game comes back **paused**, with a *Saved game restored* overlay and **Resume** / **New game** buttons.
+- A finished game is never restored. Game Over clears the save, so the next visit starts fresh.
+- *New Game* / *New game* / *Play again* clear the save and start over.
+- The Blocks test parameters (`?blocksSetup`, `?blocksSeed`) never load or write saves, so the tests stay deterministic.
+- The save logic for each game lives in its `save.ts`, with tests in `save.test.ts` (round trip, rejected bad data, and the Blocks piece order carrying on after a restore). Saving doesn't re-render React: Snake and Blocks still show 0 React commits while playing.
+
 ## Adding a game
 
 1. Create a folder with a component that has a default export, e.g. `src/games/snake/Snake.tsx`.
@@ -117,7 +144,7 @@ That's it — the rows, modal and player all read from the registry. Each game i
 ```bash
 npm install
 npm run dev        # http://localhost:5173/kush-games/
-npm test           # unit tests (2048, Snake and Blocks logic, registry, routing)
+npm test           # unit tests (2048, Snake and Blocks logic, saved games, registry, routing)
 npm run build      # type-check + production build into dist/
 ```
 

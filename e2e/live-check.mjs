@@ -310,7 +310,9 @@ async function waitForBoardChange(page, before) {
   check(applesEaten >= 2 && Number(await page.getByTestId('snake-score').innerText()) >= 20, `desktop: snake eats apples and scores (score=${await page.getByTestId('snake-score').innerText()})`);
   check(scoringResults.length >= 2 && scoringResults.every(result => result.gained === result.expected),
     `desktop: score increments match the formula in Speeding up (${scoringResults.map(result => `+${result.gained} vs ${result.expected} @${result.tickMs}ms len${result.length}`).join(', ')})`);
-  check(await board.getAttribute('data-tick-ms') === '144' && await page.getByTestId('snake-multiplier').innerText() === 'x1.0',
+  // usually 2 apples; occasionally a new apple spawns right in the snake's path and it eats a 3rd
+  const applesSoFar = Number(await board.getAttribute('data-apples'));
+  check(applesSoFar >= 2 && await board.getAttribute('data-tick-ms') === String(150 - 3 * applesSoFar) && await page.getByTestId('snake-multiplier').innerText() === 'x1.0',
     `desktop: Speeding up gets faster after 2 apples (tick ${await board.getAttribute('data-tick-ms')} ms)`);
   check(Number(await page.getByTestId('snake-board').getAttribute('data-length')) >= 5, 'desktop: snake grows by one per apple');
   const currentDirection = await page.getByTestId('snake-board').getAttribute('data-direction');
@@ -318,7 +320,7 @@ async function waitForBoardChange(page, before) {
   for (const turn of [leftTurn, OPPOSITE[currentDirection], OPPOSITE[leftTurn]]) await page.keyboard.press(ARROW_KEY[turn]);
   check(await waitForSnake(page, (_head, status) => status === 'over', 3000), 'desktop: snake dies when it runs into itself');
   const overText = await page.getByTestId('snake-over-stats').innerText();
-  check(await page.getByTestId('snake-over').isVisible() && /Length\s*5/i.test(overText) && /Speed/i.test(overText) && /Score/i.test(overText),
+  check(await page.getByTestId('snake-over').isVisible() && new RegExp(`Length\\s*${3 + Number(await board.getAttribute('data-apples'))}`, 'i').test(overText) && /Speed/i.test(overText) && /Score/i.test(overText),
     `desktop: Game Over shows length, speed and score (${overText.replace(/\s+/g, ' ')})`);
   check(/Speeding up/.test(await page.evaluate(() => localStorage.getItem('kush-games-snake-best-details'))),
     'desktop: shared best score remembers the mode it was set in');
@@ -665,6 +667,214 @@ async function stackSomePieces(page, pressKey, count) {
   await page.getByTestId('blocks-pause').tap();
   check(await blocksAttribute(page, 'status') === 'paused', 'blocks mobile: pause button pauses');
   check(pageErrors.length === 0, `blocks mobile: no page errors ${pageErrors.join('; ')}`);
+  await context.close();
+}
+
+// ---------- Saved games (persistence across reloads) ----------
+const savedGame = (page, gameId) => page.evaluate(id => {
+  const text = localStorage.getItem(`kush-games:${id}:save:v1`);
+  return text ? JSON.parse(text) : null;
+}, gameId);
+const snakeSnapshot = page => page.evaluate(() => {
+  const board = document.querySelector('[data-testid=snake-board]').dataset;
+  return { head: board.head, length: board.length, score: board.score, direction: board.direction, apple: board.apple, status: board.status };
+});
+const blocksSnapshot = page => page.evaluate(() => {
+  const board = document.querySelector('[data-testid=blocks-board]').dataset;
+  return { board: board.board, score: board.score, lines: board.lines, level: board.level, piece: board.piece, pieceX: board.pieceX,
+    pieceY: board.pieceY, rotation: board.rotation, next: board.next, hold: board.hold, locks: board.locks };
+});
+const sameValues = (first, second, keys) => keys.every(key => first[key] === second[key]);
+
+{
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const page = await context.newPage();
+  const pageErrors = [];
+  page.on('pageerror', error => pageErrors.push(String(error)));
+
+  // 2048: restored directly after a reload
+  await page.goto(`${siteUrl}#/play/2048`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('[data-testid=board] .game-2048__tile');
+  check(await savedGame(page, '2048') === null, 'save 2048: an untouched new game is not saved');
+  for (const key of ['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'ArrowLeft', 'ArrowDown']) {
+    await page.keyboard.press(key);
+    await page.waitForTimeout(90);
+  }
+  await page.waitForTimeout(250);
+  const board2048 = await boardSnapshot(page);
+  const score2048 = await page.getByTestId('game-2048').getAttribute('data-score');
+  const saved2048 = await savedGame(page, '2048');
+  check(saved2048?.version === 1 && saved2048.data.tiles.length >= 3 && String(saved2048.data.score) === score2048,
+    `save 2048: moves are saved under kush-games:2048:save:v1 (score ${score2048}, ${saved2048?.data.tiles.length} tiles)`);
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForSelector('[data-testid=board] .game-2048__tile');
+  await page.waitForTimeout(250);
+  check(await boardSnapshot(page) === board2048 && await page.getByTestId('game-2048').getAttribute('data-score') === score2048,
+    `save 2048: board and score are the same after reload (score ${score2048})`);
+  await page.getByTestId('back').click();
+  await page.waitForSelector('[data-testid=hero]');
+  check(await page.locator('[data-testid=row-play-now] [data-testid=continue-2048]').isVisible(), 'save home: 2048 card shows a Continue badge');
+  check(await page.locator('[data-testid=row-play-now] [data-testid=continue-blocks]').count() === 0, 'save home: no badge for a game without a save');
+  await page.goto(`${siteUrl}#/play/2048`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('[data-testid=board] .game-2048__tile');
+  check(await boardSnapshot(page) === board2048, 'save 2048: board is restored after Back and reopening');
+  await page.getByRole('button', { name: 'New Game' }).click();
+  check(await savedGame(page, '2048') === null && await page.locator('.game-2048__tile').count() === 2
+    && await page.getByTestId('game-2048').getAttribute('data-score') === '0', 'save 2048: New Game clears the save and starts fresh');
+
+  // Snake: a running game comes back paused with a "Saved game restored" overlay
+  await page.goto(`${siteUrl}#/play/snake`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('[data-testid=snake-start]');
+  await page.keyboard.press('Space');
+  const snakeApples = await steerToApples(page, 2, 30000);
+  await page.waitForTimeout(150);
+  const snakeBeforeReload = await snakeSnapshot(page);
+  check(snakeApples >= 2 && (await savedGame(page, 'snake'))?.data.score === Number(snakeBeforeReload.score),
+    `save snake: score changes are saved at once (score ${snakeBeforeReload.score}, length ${snakeBeforeReload.length})`);
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForSelector('[data-testid=snake-paused]');
+  const snakeAfterReload = await snakeSnapshot(page);
+  check(snakeAfterReload.status === 'paused' && await page.getByTestId('snake-restored').innerText() === '💾 Saved game restored',
+    'save snake: a running game is restored PAUSED with "Saved game restored"');
+  check(sameValues(snakeAfterReload, snakeBeforeReload, ['length', 'score', 'apple']),
+    `save snake: length, score and apple match after reload (${JSON.stringify(snakeAfterReload)})`);
+  await page.getByTestId('snake-resume').click();
+  check(await snakeStatus(page) === 'running' && await waitForSnake(page, head => `${head.x},${head.y}` !== snakeAfterReload.head),
+    'save snake: Resume continues the game');
+  await page.waitForTimeout(300);
+  await page.keyboard.press('Space');
+  const pausedSnake = await snakeSnapshot(page);
+  check(pausedSnake.status === 'paused' && (await savedGame(page, 'snake'))?.data.snake[0].x === Number(pausedSnake.head.split(',')[0]),
+    'save snake: pausing saves at once');
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForSelector('[data-testid=snake-paused]');
+  check(sameValues(await snakeSnapshot(page), pausedSnake, ['head', 'length', 'score', 'direction', 'apple', 'status']),
+    'save snake: head, direction, length, score and apple match exactly after reloading a paused game');
+  await page.keyboard.press('Space');
+  await page.waitForTimeout(400);
+  await page.getByTestId('back').click();
+  await page.waitForSelector('[data-testid=hero]');
+  check(await page.locator('[data-testid=row-play-now] [data-testid=continue-snake]').isVisible(), 'save home: Snake card shows Continue after Back');
+  await page.goto(`${siteUrl}#/play/snake`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('[data-testid=snake-game]');
+  check(await page.getByTestId('snake-restored').isVisible(), 'save snake: leaving with Back and reopening restores the game');
+  await page.getByTestId('snake-new-game').click();
+  const freshSnake = await snakeSnapshot(page);
+  const snakeSaveAfterNewGame = await savedGame(page, 'snake');
+  check(freshSnake.status === 'running' && freshSnake.length === '3' && freshSnake.score === '0'
+    && (snakeSaveAfterNewGame === null || snakeSaveAfterNewGame.data.score === 0), 'save snake: New game clears the save and starts fresh');
+
+  // Blocks: board, piece, next queue, hold and score survive a reload; the piece order carries on
+  await page.goto(`${siteUrl}#/play/blocks`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('[data-testid=blocks-start]');
+  await page.keyboard.press('Space');
+  for (const key of ['ArrowLeft', 'ArrowLeft', 'Space', 'ArrowRight', 'ArrowRight', 'ArrowUp', 'Space', 'c', 'Space', 'ArrowLeft']) {
+    await page.keyboard.press(key);
+    await page.waitForTimeout(50);
+  }
+  await page.keyboard.press('p');
+  const blocksBeforeReload = await blocksSnapshot(page);
+  const blocksCanvasBefore = await canvasFingerprint(page);
+  check(Number(blocksBeforeReload.locks) === 3 && blocksBeforeReload.hold !== '' && (await savedGame(page, 'blocks'))?.data.lockCount === 3,
+    `save blocks: locks, hold and pause are saved (${blocksBeforeReload.locks} locks, hold ${blocksBeforeReload.hold})`);
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForSelector('[data-testid=blocks-paused]');
+  await page.waitForTimeout(150);
+  const blocksAfterReload = await blocksSnapshot(page);
+  check(await blocksAttribute(page, 'status') === 'paused' && await page.getByTestId('blocks-restored').isVisible(),
+    'save blocks: the game is restored PAUSED with "Saved game restored"');
+  check(sameValues(blocksAfterReload, blocksBeforeReload, Object.keys(blocksBeforeReload)),
+    `save blocks: board, score, piece + position, next and hold match after reload (${JSON.stringify(blocksAfterReload)})`);
+  check(await canvasFingerprint(page) === blocksCanvasBefore, 'save blocks: the canvas looks the same after reload');
+  check(await page.getByTestId('blocks-score').innerText() === blocksBeforeReload.score, 'save blocks: score panel shows the restored score');
+  await page.mouse.move(0, 0);
+  await page.screenshot({ path: `${screenshotDirectory}/kush-games-restored.png` });
+  await page.getByTestId('blocks-resume').click();
+  check(await blocksAttribute(page, 'status') === 'running', 'save blocks: Resume continues the game');
+  await page.keyboard.press('Space');
+  check(await blocksAttribute(page, 'piece') === blocksBeforeReload.next, `save blocks: the next piece after reload is the saved next piece (${blocksBeforeReload.next})`);
+  // reload while running: the game is saved on pagehide
+  await page.waitForTimeout(200);
+  const runningBlocks = await blocksSnapshot(page);
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForSelector('[data-testid=blocks-paused]');
+  check(sameValues(await blocksSnapshot(page), runningBlocks, ['board', 'score', 'locks', 'next', 'hold', 'piece']),
+    'save blocks: reloading a running game keeps it (saved on pagehide) and pauses it');
+  await page.getByTestId('blocks-new-game').click();
+  const blocksSaveAfterNewGame = await savedGame(page, 'blocks');
+  check(await blocksAttribute(page, 'status') === 'running' && await blocksNumber(page, 'score') === 0 && await blocksNumber(page, 'filled-cells') === 0
+    && (blocksSaveAfterNewGame === null || (blocksSaveAfterNewGame.data.score === 0 && blocksSaveAfterNewGame.data.lockCount === 0)),
+    'save blocks: New game clears the save and starts fresh');
+  // A finished game is not restored as playable
+  for (let drop = 0; drop < 60 && await blocksAttribute(page, 'status') !== 'over'; drop++) {
+    await page.keyboard.press('Space');
+    await page.waitForTimeout(30);
+  }
+  check(await blocksAttribute(page, 'status') === 'over' && await savedGame(page, 'blocks') === null, 'save blocks: Game Over clears the save');
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForSelector('[data-testid=blocks-start]');
+  check(await blocksAttribute(page, 'status') === 'ready', 'save blocks: after Game Over a reload shows a fresh Start screen');
+  // test params ignore saves
+  await page.keyboard.press('Space');
+  await page.keyboard.press('Space');
+  await page.keyboard.press('p');
+  await page.goto(`${siteUrl}?blocksSetup=quad#/play/blocks`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('[data-testid=blocks-start]');
+  check(await blocksNumber(page, 'filled-cells') === 36, 'save blocks: ?blocksSetup ignores the saved game');
+  // corrupt saves are discarded without crashing
+  await page.evaluate(() => localStorage.setItem('kush-games:blocks:save:v1', '{"version":1,"data":{"board":"oops"}}'));
+  await page.goto(`${siteUrl}#/play/blocks`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('[data-testid=blocks-start]');
+  check(await page.evaluate(() => localStorage.getItem('kush-games:blocks:save:v1')) === null, 'save blocks: a corrupt save is discarded and a fresh game shown');
+  check(pageErrors.length === 0, `save desktop: no page errors ${pageErrors.join('; ')}`);
+  await context.close();
+}
+
+{
+  const context = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const page = await context.newPage();
+  const pageErrors = [];
+  page.on('pageerror', error => pageErrors.push(String(error)));
+  const fitsInsideBoard = (overlayTestId, boardTestId) => page.evaluate(([overlayId, boardId]) => {
+    const board = document.querySelector(`[data-testid=${boardId}]`).getBoundingClientRect();
+    const overlay = document.querySelector(`[data-testid=${overlayId}]`);
+    return [...overlay.querySelectorAll('button, p, h2')].every(element => {
+      const rect = element.getBoundingClientRect();
+      if (rect.width === 0 && rect.height === 0) return true; // hidden on small screens
+      return rect.left >= board.left - 1 && rect.right <= board.right + 1 && rect.top >= board.top - 1 && rect.bottom <= board.bottom + 1;
+    }) && overlay.scrollHeight <= overlay.clientHeight + 1;
+  }, [overlayTestId, boardTestId]);
+
+  await page.goto(`${siteUrl}#/play/blocks`, { waitUntil: 'networkidle' });
+  await page.getByTestId('blocks-start-button').tap();
+  await page.getByRole('button', { name: 'Hard drop' }).tap();
+  await page.getByRole('button', { name: 'Move left' }).tap();
+  await page.getByRole('button', { name: 'Hard drop' }).tap();
+  await page.waitForTimeout(100);
+  const mobileBlocks = await blocksSnapshot(page);
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForSelector('[data-testid=blocks-paused]');
+  check(await page.getByTestId('blocks-restored').isVisible() && sameValues(await blocksSnapshot(page), mobileBlocks, ['board', 'score', 'locks', 'next']),
+    'save mobile: Blocks is restored paused after reload');
+  check(await fitsInsideBoard('blocks-paused', 'blocks-board') && await hasNoHorizontalOverflow(page), 'save mobile: Blocks restored overlay fits at 375px');
+  await page.screenshot({ path: '/tmp/kush-games-restored-mobile.png' });
+  await page.getByTestId('blocks-resume').tap();
+  check(await blocksAttribute(page, 'status') === 'running', 'save mobile: tapping Resume continues Blocks');
+
+  await page.goto(`${siteUrl}#/play/snake`, { waitUntil: 'networkidle' });
+  await page.getByTestId('snake-start-button').tap();
+  await page.waitForTimeout(600);
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForSelector('[data-testid=snake-paused]');
+  check(await page.getByTestId('snake-restored').isVisible(), 'save mobile: Snake is restored paused after reload');
+  check(await fitsInsideBoard('snake-paused', 'snake-board') && await hasNoHorizontalOverflow(page), 'save mobile: Snake restored overlay fits at 375px');
+  await page.getByTestId('snake-resume').tap();
+  check(await snakeStatus(page) === 'running', 'save mobile: tapping Resume continues Snake');
+  await page.goto(siteUrl, { waitUntil: 'networkidle' });
+  check(await page.locator('[data-testid=row-play-now] [data-testid=continue-snake]').count() === 1
+    && await page.locator('[data-testid=row-play-now] [data-testid=continue-blocks]').count() === 1 && await hasNoHorizontalOverflow(page),
+    'save mobile: home shows Continue badges for Snake and Blocks');
+  check(pageErrors.length === 0, `save mobile: no page errors ${pageErrors.join('; ')}`);
   await context.close();
 }
 

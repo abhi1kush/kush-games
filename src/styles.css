@@ -96,6 +96,9 @@ a { color: inherit; }
 .card { position: relative; flex: 0 0 var(--card-width); aspect-ratio: 16 / 9; scroll-snap-align: start; border-radius: 4px;
   transition: transform 300ms cubic-bezier(.2,.8,.2,1), box-shadow 300ms; transform-origin: center; z-index: 1; background: var(--surface); }
 .card__cover { display: block; width: 100%; height: 100%; padding: 0; border: 0; cursor: pointer; border-radius: 4px; overflow: hidden; background: none; }
+.card__cover { position: relative; }
+.card__continue { position: absolute; left: 6px; bottom: 6px; padding: 2px 7px; border-radius: 3px; background: #e50914; color: #fff;
+  font-size: 11px; font-weight: 800; letter-spacing: 0.02em; box-shadow: 0 1px 4px rgba(0,0,0,0.5); pointer-events: none; }
 .card__details { position: absolute; left: 0; right: 0; top: 100%; background: var(--surface); padding: 10px 12px 12px; border-radius: 0 0 6px 6px;
   opacity: 0; pointer-events: none; transition: opacity 200ms; box-shadow: 0 12px 24px rgba(0,0,0,0.6); }
 .card__actions { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }

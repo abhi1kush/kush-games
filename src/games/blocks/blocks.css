@@ -17,6 +17,11 @@
 .blocks-game__overlay--over h2 { color: #ff4d5e; }
 .blocks-game__hint { font-size: 12px; color: #8c8c8c !important; }
 .blocks-game__primary { background: #fff; color: #000; border: 0; border-radius: 4px; padding: 10px 24px; font-size: 17px; font-weight: 800; cursor: pointer; }
+.blocks-game__secondary { background: rgba(255,255,255,0.12); color: #fff; border: 1px solid rgba(255,255,255,0.35); border-radius: 4px;
+  padding: 7px 16px; font-size: 14px; font-weight: 700; cursor: pointer; margin-top: 4px; }
+.blocks-game__secondary:hover { background: rgba(255,255,255,0.22); }
+.blocks-game__restored { margin: 0; padding: 4px 12px; border-radius: 999px; background: rgba(70,211,105,0.16); color: #7ef29d !important;
+  font-size: 13px; font-weight: 700; }
 .blocks-game__final { display: flex; gap: 8px; margin: 4px 0; }
 .blocks-game__final div, .blocks-game__stats div { background: rgba(255,255,255,0.07); border-radius: 6px; padding: 5px 8px; }
 .blocks-game__final dt, .blocks-game__stats dt, .blocks-game__label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: #a3a3a3; }

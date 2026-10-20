@@ -5,6 +5,7 @@ import {
 } from './game';
 import { BlocksRenderer, drawPiecePreview } from './renderer';
 import { getSoundsPlayed, playGameOver, playLineClear, playLockTick, readMuted, saveMuted, unlockAudio } from './sound';
+import { createBlocksSaveSlot, restoreBlocks, serializeBlocks } from './save';
 import { setupFromQuery } from './testSetup';
 import './blocks.css';
 
@@ -55,6 +56,7 @@ function syncBoardAttributes(element: HTMLElement | null, state: BlocksState) {
     'data-next': state.queue[0] ?? '',
     'data-hold': state.hold ?? '',
     'data-filled-cells': String(state.board.reduce((total, row) => total + row.filter(Boolean).length, 0)),
+    'data-board': state.board.map(row => row.map(cell => (cell === null ? '.' : cell === 'garbage' ? 'g' : cell)).join('')).join('/'),
   };
   for (const [name, value] of Object.entries(values)) if (element.getAttribute(name) !== value) element.setAttribute(name, value);
 }
@@ -67,12 +69,22 @@ const prefersReducedMotion = () => window.matchMedia?.('(prefers-reduced-motion:
  * runs only during the line-clear animation. React re-renders when score/lines/level/status change.
  */
 export default function Blocks() {
-  const initialOptionsRef = useRef<InitialStateOptions | undefined>(setupFromQuery(window.location.search));
-  const gameStateRef = useRef<BlocksState>(createInitialState(initialOptionsRef.current));
-  const [status, setStatus] = useState<GameStatus>('ready');
-  const [score, setScore] = useState(0);
-  const [lines, setLines] = useState(0);
-  const [level, setLevel] = useState(1);
+  // Test setups (?blocksSetup / ?blocksSeed) must be deterministic, so they never load or write saves.
+  const [initialGame] = useState(() => {
+    const testOptions = setupFromQuery(window.location.search);
+    const saveSlot = testOptions ? null : createBlocksSaveSlot();
+    const saved = saveSlot?.load();
+    const state = saved ? restoreBlocks(saved) : createInitialState(testOptions);
+    return { testOptions, saveSlot, state, isRestored: Boolean(saved) };
+  });
+  const saveSlot = initialGame.saveSlot;
+  const initialOptionsRef = useRef<InitialStateOptions | undefined>(initialGame.testOptions);
+  const gameStateRef = useRef<BlocksState>(initialGame.state);
+  const [status, setStatus] = useState<GameStatus>(initialGame.state.status);
+  const [isRestored, setIsRestored] = useState(initialGame.isRestored);
+  const [score, setScore] = useState(initialGame.state.score);
+  const [lines, setLines] = useState(initialGame.state.lines);
+  const [level, setLevel] = useState(initialGame.state.level);
   const [bestScore, setBestScore] = useState(readBestScore);
   const [isMuted, setIsMuted] = useState(readMuted);
   const isMutedRef = useRef(isMuted);
@@ -151,6 +163,13 @@ export default function Blocks() {
     }
   }, []);
 
+  /** Save the game in progress, or clear the slot when there is none (not started, or over). */
+  const persistGame = useCallback((state: BlocksState) => {
+    if (!saveSlot) return;
+    const saved = serializeBlocks(state);
+    if (saved) saveSlot.save(saved); else saveSlot.clear();
+  }, [saveSlot]);
+
   const commitGameState = useCallback((next: BlocksState) => {
     const previous = gameStateRef.current;
     if (next === previous) return;
@@ -172,14 +191,17 @@ export default function Blocks() {
     if (sounds && next !== previous) boardRef.current?.setAttribute('data-sounds', String(getSoundsPlayed()));
 
     if (next.status !== previous.status) {
-      if (next.status === 'running') lastAdvanceAtRef.current = performance.now();
+      if (next.status === 'running') { lastAdvanceAtRef.current = performance.now(); setIsRestored(false); }
       setStatus(next.status);
     }
+    // Save on each lock, line clear, hold and pause/resume (not on every move or gravity step).
+    if (next.status !== previous.status || next.lockCount !== previous.lockCount || next.clearCount !== previous.clearCount
+      || next.hold !== previous.hold || next.canHold !== previous.canHold) persistGame(next);
     if (next.score !== previous.score) setScore(next.score);
     if (next.lines !== previous.lines) setLines(next.lines);
     if (next.level !== previous.level) setLevel(next.level);
     scheduleGravity();
-  }, [drawPreviews, runClearAnimation, scheduleGravity, showClearEffects]);
+  }, [drawPreviews, persistGame, runClearAnimation, scheduleGravity, showClearEffects]);
   commitRef.current = commitGameState;
 
   /** Bring gravity up to date before applying a player action. */
@@ -199,11 +221,13 @@ export default function Blocks() {
   const startOrResume = useCallback(() => commitGameState(startGame(gameStateRef.current)), [commitGameState]);
   const pauseOrResume = useCallback(() => commitGameState(togglePause(gameStateRef.current)), [commitGameState]);
   const restart = useCallback(() => {
+    saveSlot?.clear();
+    setIsRestored(false);
     if (clearAnimationRef.current !== undefined) cancelAnimationFrame(clearAnimationRef.current);
     clearAnimationRef.current = undefined;
     gameStateRef.current = createInitialState(initialOptionsRef.current?.seed !== undefined ? { seed: initialOptionsRef.current.seed + 1 } : undefined);
     commitGameState(startGame(gameStateRef.current));
-  }, [commitGameState]);
+  }, [commitGameState, saveSlot]);
 
   const toggleMute = useCallback(() => {
     setIsMuted(wasMuted => {
@@ -310,14 +334,26 @@ export default function Blocks() {
     };
   }, [performAction, pauseOrResume, restart, startOrResume, toggleMute]);
 
-  // Auto-pause when the tab is hidden.
+  // Auto-pause when the tab is hidden (pausing also saves).
   useEffect(() => {
     const handleVisibility = () => {
-      if (document.hidden && gameStateRef.current.status === 'running') commitGameState(togglePause(gameStateRef.current));
+      if (!document.hidden) return;
+      if (gameStateRef.current.status === 'running') commitGameState(togglePause(gameStateRef.current));
+      else persistGame(gameStateRef.current);
     };
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
-  }, [commitGameState]);
+  }, [commitGameState, persistGame]);
+
+  // Final save when the page goes away or the player leaves the game (Back / route change).
+  useEffect(() => {
+    const saveNow = () => persistGame(gameStateRef.current);
+    window.addEventListener('pagehide', saveNow);
+    return () => {
+      window.removeEventListener('pagehide', saveNow);
+      saveNow();
+    };
+  }, [persistGame]);
 
   // Touch: tap = rotate, drag sideways = move by cells, drag down = soft drop, quick flick down = hard drop.
   useEffect(() => {
@@ -417,9 +453,12 @@ export default function Blocks() {
               </div>
             )}
             {status === 'paused' && (
-              <div className="blocks-game__overlay" data-testid="blocks-paused">
+              <div className="blocks-game__overlay" data-testid="blocks-paused" data-restored={isRestored ? 'true' : 'false'}>
+                {isRestored && <p className="blocks-game__restored" data-testid="blocks-restored">💾 Saved game restored</p>}
                 <h2>Paused</h2>
-                <button type="button" className="blocks-game__primary" onClick={startOrResume}>▶ Resume</button>
+                {isRestored && <p className="blocks-game__hint">Score {score} · Lines {lines} · Level {level}</p>}
+                <button type="button" className="blocks-game__primary" onClick={startOrResume} data-testid="blocks-resume">▶ Resume</button>
+                <button type="button" className="blocks-game__secondary" onClick={restart} data-testid="blocks-new-game">↻ New game</button>
                 <p className="blocks-game__hint">Press P to resume</p>
               </div>
             )}
