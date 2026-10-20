@@ -17,6 +17,12 @@ export interface SnakeState {
   directionQueue: Direction[];
   apple: Point | null;
   score: number;
+  /** Apples eaten this game (drives the speeding-up curve). */
+  applesEaten: number;
+  /** Points awarded for the most recent apple (0 before the first). */
+  lastApplePoints: number;
+  /** Speed setting for this game; fixed once the game starts. */
+  speed: SpeedSetting;
   status: GameStatus;
   /** True when the snake filled the whole board. */
   hasWon: boolean;
@@ -26,10 +32,63 @@ export const DEFAULT_COLUMNS = 17;
 export const DEFAULT_ROWS = 17;
 export const INITIAL_LENGTH = 3;
 export const MAX_QUEUED_TURNS = 3;
-export const POINTS_PER_APPLE = 1;
 export const STARTING_TICK_MS = 150;
 export const FASTEST_TICK_MS = 60;
 export const TICK_SPEEDUP_PER_APPLE_MS = 3;
+
+// ---------- Speed modes ----------
+export type SpeedMode = 'speeding-up' | 'constant';
+export type ConstantSpeed = 'slow' | 'normal' | 'fast' | 'very-fast';
+export interface SpeedSetting { mode: SpeedMode; constantSpeed: ConstantSpeed; }
+
+export const CONSTANT_SPEEDS: { id: ConstantSpeed; label: string; tickMs: number }[] = [
+  { id: 'slow', label: 'Slow', tickMs: 150 },
+  { id: 'normal', label: 'Normal', tickMs: 110 },
+  { id: 'fast', label: 'Fast', tickMs: 80 },
+  { id: 'very-fast', label: 'Very fast', tickMs: 60 },
+];
+export const DEFAULT_SPEED_SETTING: SpeedSetting = { mode: 'speeding-up', constantSpeed: 'normal' };
+
+export function constantSpeedTickMs(constantSpeed: ConstantSpeed): number {
+  return (CONSTANT_SPEEDS.find(speed => speed.id === constantSpeed) ?? CONSTANT_SPEEDS[1]).tickMs;
+}
+
+/** Milliseconds between steps for a speed setting after `applesEaten` apples. */
+export function tickIntervalFor(speed: SpeedSetting, applesEaten: number): number {
+  return speed.mode === 'constant' ? constantSpeedTickMs(speed.constantSpeed) : tickInterval(applesEaten);
+}
+
+/** The step interval in effect for a state right now. */
+export const currentTickMs = (state: SnakeState) => tickIntervalFor(state.speed, state.applesEaten);
+
+export function describeSpeedSetting(speed: SpeedSetting): string {
+  if (speed.mode === 'speeding-up') return 'Speeding up';
+  const constant = CONSTANT_SPEEDS.find(option => option.id === speed.constantSpeed) ?? CONSTANT_SPEEDS[1];
+  return `Constant · ${constant.label}`;
+}
+
+// ---------- Fair scoring ----------
+/**
+ * Every apple is worth:
+ *   points = round(BASE_APPLE_POINTS × speedMultiplier × lengthMultiplier)
+ *   speedMultiplier  = REFERENCE_TICK_MS / tickMs          (150 ms → 1×, 110 ms → 1.36×, 80 ms → 1.88×, 60 ms → 2.5×)
+ *   lengthMultiplier = 1 + (length − INITIAL_LENGTH) / 20   (length 3 → 1×, 13 → 1.5×, 23 → 2×)
+ * where tickMs is the step interval and length is the snake's length just before it eats.
+ * Both speed modes use the same formula, so the same speed and length are always worth the same.
+ */
+export const BASE_APPLE_POINTS = 10;
+export const REFERENCE_TICK_MS = 150;
+export const LENGTH_BONUS_DIVISOR = 20;
+
+export const speedMultiplier = (tickMs: number) => REFERENCE_TICK_MS / tickMs;
+export const lengthMultiplier = (length: number) => 1 + Math.max(0, length - INITIAL_LENGTH) / LENGTH_BONUS_DIVISOR;
+
+export function applePoints(tickMs: number, length: number): number {
+  return Math.round(BASE_APPLE_POINTS * speedMultiplier(tickMs) * lengthMultiplier(length));
+}
+
+/** Short label for the header, e.g. "x1.4". */
+export const formatMultiplier = (multiplier: number) => `x${multiplier.toFixed(1)}`;
 
 const DIRECTION_OFFSETS: Record<Direction, Point> = {
   up: { x: 0, y: -1 },
@@ -66,7 +125,9 @@ export function wrapCoordinate(value: number, size: number): number {
 }
 
 /** A fresh game in the 'ready' state: snake in the middle facing right. */
-export function createInitialState(columns = DEFAULT_COLUMNS, rows = DEFAULT_ROWS, random: RandomSource = Math.random): SnakeState {
+export function createInitialState(
+  columns = DEFAULT_COLUMNS, rows = DEFAULT_ROWS, random: RandomSource = Math.random, speed: SpeedSetting = DEFAULT_SPEED_SETTING,
+): SnakeState {
   const headX = Math.floor(columns / 2);
   const headY = Math.floor(rows / 2);
   const snake = Array.from({ length: INITIAL_LENGTH }, (_, segmentIndex) => ({ x: headX - segmentIndex, y: headY }));
@@ -78,6 +139,9 @@ export function createInitialState(columns = DEFAULT_COLUMNS, rows = DEFAULT_ROW
     directionQueue: [],
     apple: spawnApple(snake, columns, rows, random),
     score: 0,
+    applesEaten: 0,
+    lastApplePoints: 0,
+    speed,
     status: 'ready',
     hasWon: false,
   };
@@ -93,6 +157,12 @@ export function changeDirection(state: SnakeState, requestedDirection: Direction
   if (requestedDirection === latestDirection || isOpposite(requestedDirection, latestDirection)) return state;
   if (state.directionQueue.length >= MAX_QUEUED_TURNS) return state;
   return { ...state, directionQueue: [...state.directionQueue, requestedDirection] };
+}
+
+/** Change the speed setting; only allowed before the game starts or after it ends. */
+export function setSpeed(state: SnakeState, speed: SpeedSetting): SnakeState {
+  if (state.status === 'running' || state.status === 'paused') return state;
+  return { ...state, speed };
 }
 
 export function startGame(state: SnakeState): SnakeState {
@@ -130,20 +200,23 @@ export function step(state: SnakeState, random: RandomSource = Math.random): Sna
   const movedSnake = eatsApple ? [newHead, ...state.snake] : [newHead, ...state.snake.slice(0, -1)];
   const nextApple = eatsApple ? spawnApple(movedSnake, state.columns, state.rows, random) : state.apple;
   const filledBoard = eatsApple && nextApple === null;
+  // Points use the speed and length at the moment of eating (before growing / speeding up).
+  const pointsEarned = eatsApple ? applePoints(currentTickMs(state), state.snake.length) : 0;
   return {
     ...state,
     snake: movedSnake,
     direction: nextDirection,
     directionQueue: remainingQueue,
     apple: nextApple,
-    score: state.score + (eatsApple ? POINTS_PER_APPLE : 0),
+    score: state.score + pointsEarned,
+    applesEaten: state.applesEaten + (eatsApple ? 1 : 0),
+    lastApplePoints: eatsApple ? pointsEarned : state.lastApplePoints,
     status: filledBoard ? 'over' : 'running',
     hasWon: filledBoard,
   };
 }
 
-/** Milliseconds between steps; gets slowly faster with every apple. */
-export function tickInterval(score: number): number {
-  const applesEaten = Math.floor(score / POINTS_PER_APPLE);
+/** 'Speeding up' mode: milliseconds between steps, slowly faster with every apple. */
+export function tickInterval(applesEaten: number): number {
   return Math.max(FASTEST_TICK_MS, STARTING_TICK_MS - applesEaten * TICK_SPEEDUP_PER_APPLE_MS);
 }

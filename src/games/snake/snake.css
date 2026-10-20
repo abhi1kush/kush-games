@@ -48,3 +48,44 @@
   .snake-game__icon-button { width: 38px; }
   .snake-game__help { display: none; }
 }
+
+/* ---------- Speed mode + scoring ---------- */
+.snake-game__speed-chip { display: inline-flex; align-items: center; gap: 4px; margin-right: auto; margin-left: 10px; padding: 5px 9px;
+  border-radius: 999px; border: 1px solid rgba(125, 255, 149, 0.35); background: rgba(125, 255, 149, 0.08); color: #b8ffc4;
+  font-size: 14px; cursor: pointer; white-space: nowrap; }
+.snake-game__speed-chip:disabled { cursor: default; opacity: 0.85; }
+.snake-game__speed-chip b { font-variant-numeric: tabular-nums; }
+.snake-speed { display: flex; flex-direction: column; gap: 6px; align-items: center; margin: 4px 0 6px; max-width: 100%; }
+.snake-speed__segments { display: inline-flex; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 8px; padding: 2px; gap: 2px; max-width: 100%; }
+.snake-speed__segments button { border: 0; background: transparent; color: #d6d6d6; padding: 6px 12px; border-radius: 6px;
+  font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; display: inline-flex; flex-direction: column; align-items: center; line-height: 1.15; }
+.snake-speed__segments button small { font-size: 10px; font-weight: 600; color: #9a9a9a; }
+.snake-speed__segments button.is-selected { background: #fff; color: #000; }
+.snake-speed__segments button.is-selected small { color: #444; }
+.snake-speed__segments--small button { padding: 4px 9px; font-size: 12px; }
+.snake-speed__segments.is-inactive { opacity: 0.5; }
+.snake-game__scoring { font-size: 13px; margin: 2px 0 6px !important; }
+.snake-game__stats { display: flex; gap: 10px; margin: 4px 0 6px; }
+.snake-game__stats div { background: rgba(255,255,255,0.08); border-radius: 6px; padding: 6px 12px; min-width: 70px; }
+.snake-game__stats dt { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: #a3a3a3; }
+.snake-game__stats dd { margin: 0; font-size: 22px; font-weight: 800; color: #fff; }
+.snake-game__stats dd small { display: block; font-size: 10px; font-weight: 600; color: #a3a3a3; }
+.snake-game__best-line { font-size: 14px; }
+.snake-game__floating-points { position: absolute; left: 0; top: 0; opacity: 0; pointer-events: none; z-index: 2;
+  font-weight: 900; font-size: 18px; color: #ffe066; text-shadow: 0 1px 2px #000; will-change: transform, opacity; }
+.snake-game__overlay { overflow-y: auto; }
+
+@media (max-width: 760px), (pointer: coarse) {
+  .snake-game__title { display: none; }
+  .snake-game__speed-chip { margin-left: 0; padding: 4px 8px; font-size: 13px; }
+  .snake-game__overlay { padding: 10px; justify-content: center; }
+  .snake-game__overlay-glyph, .snake-game__intro, .snake-game__overlay .snake-game__hint { display: none; }
+  .snake-game__overlay h2 { font-size: 30px; margin: 0 0 4px; }
+  .snake-speed__segments button { padding: 5px 9px; font-size: 13px; }
+  .snake-speed__segments--small button { padding: 3px 6px; font-size: 11px; }
+  .snake-game__stats { gap: 6px; }
+  .snake-game__stats div { padding: 4px 8px; min-width: 0; }
+  .snake-game__stats dd { font-size: 18px; }
+  .snake-game__primary { padding: 8px 22px; font-size: 16px; }
+}

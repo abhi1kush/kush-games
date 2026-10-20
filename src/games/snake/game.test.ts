@@ -42,7 +42,9 @@ describe('step', () => {
     const next = step(state, firstCell);
     expect(next.snake).toHaveLength(INITIAL_LENGTH + 1);
     expect(next.snake[0]).toEqual({ x: 6, y: 5 });
-    expect(next.score).toBe(1);
+    expect(next.score).toBe(10); // 150 ms, length 3 → 10 × 1 × 1
+    expect(next.applesEaten).toBe(1);
+    expect(next.lastApplePoints).toBe(10);
     expect(next.apple).not.toBeNull();
     expect(next.snake.some(segment => segment.x === next.apple!.x && segment.y === next.apple!.y)).toBe(false);
   });
@@ -80,7 +82,7 @@ describe('step', () => {
     const state = { ...startGame(initial), snake: [{ x: 16, y: 0 }, { x: 15, y: 0 }, { x: 14, y: 0 }], apple: { x: 0, y: 0 } };
     const next = step(state, () => 0.5);
     expect(next.snake[0]).toEqual({ x: 0, y: 0 });
-    expect(next.score).toBe(1);
+    expect(next.score).toBe(10);
     expect(next.snake).toHaveLength(4);
   });
 
@@ -122,7 +124,7 @@ describe('step', () => {
     const next = step(state);
     expect(next.status).toBe('over');
     expect(next.hasWon).toBe(true);
-    expect(next.score).toBe(1);
+    expect(next.score).toBe(10);
   });
 });
 
@@ -207,7 +209,7 @@ describe('pause and speed', () => {
     expect(togglePause(togglePause(running)).status).toBe('running');
   });
 
-  it('speeds up slowly with score, down to a floor', () => {
+  it('speeds up slowly with apples eaten, down to a floor', () => {
     expect(tickInterval(0)).toBe(STARTING_TICK_MS);
     expect(tickInterval(5)).toBeLessThan(tickInterval(0));
     expect(tickInterval(1000)).toBe(FASTEST_TICK_MS);

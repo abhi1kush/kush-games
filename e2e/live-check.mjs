@@ -42,16 +42,29 @@ function wrappedDistance(from, to, size) {
   return forward <= size / 2 ? forward : forward - size;
 }
 /** Simple autopilot: steer toward the apple (using the wrap) until `appleCount` more apples are eaten. */
+/** The documented scoring formula, re-implemented independently for the checks. */
+const expectedApplePoints = (tickMs, length) => Math.round(10 * (150 / tickMs) * (1 + (length - 3) / 20));
+const scoringResults = [];
+
 async function steerToApples(page, appleCount, timeoutMs) {
   const board = page.getByTestId('snake-board');
-  const startScore = Number(await page.getByTestId('snake-score').innerText());
+  const startApples = Number(await board.getAttribute('data-apples'));
   const deadline = Date.now() + timeoutMs;
   let lastSteeredHead = '';
+  let previous = null; // { score, length, tickMs, apples } seen on the previous poll
   while (Date.now() < deadline) {
-    const [headValue, appleValue, direction, status, scoreText] = await Promise.all([
-      board.getAttribute('data-head'), board.getAttribute('data-apple'), board.getAttribute('data-direction'),
-      board.getAttribute('data-status'), page.getByTestId('snake-score').innerText()]);
-    const eaten = Number(scoreText) - startScore;
+    const [headValue, appleValue, direction, status, scoreText, lengthText, tickText, applesText] = await page.evaluate(() => {
+      const element = document.querySelector('[data-testid=snake-board]');
+      return ['head', 'apple', 'direction', 'status', 'score', 'length', 'tickMs', 'apples'].map(name => element.dataset[name]);
+    });
+    const current = { score: Number(scoreText), length: Number(lengthText), tickMs: Number(tickText), apples: Number(applesText) };
+    if (previous && current.apples === previous.apples + 1) {
+      // score increment must match the formula using the speed + length from just before eating
+      scoringResults.push({ gained: current.score - previous.score, expected: expectedApplePoints(previous.tickMs, previous.length),
+        tickMs: previous.tickMs, length: previous.length, tickAfter: current.tickMs });
+    }
+    previous = current;
+    const eaten = current.apples - startApples;
     if (eaten >= appleCount || status !== 'running') return eaten;
     const [headX, headY] = headValue.split(',').map(Number);
     const [appleX, appleY] = appleValue.split(',').map(Number);
@@ -66,7 +79,22 @@ async function steerToApples(page, appleCount, timeoutMs) {
     }
     await page.waitForTimeout(15);
   }
-  return Number(await page.getByTestId('snake-score').innerText()) - startScore;
+  return Number(await board.getAttribute('data-apples')) - startApples;
+}
+
+/** Median time between snake steps, measured from data-head changes in the page. */
+async function measureStepInterval(page, durationMs) {
+  return page.evaluate(duration => new Promise(resolve => {
+    const board = document.querySelector('[data-testid=snake-board]');
+    const times = [];
+    const observer = new MutationObserver(() => times.push(performance.now()));
+    observer.observe(board, { attributes: true, attributeFilter: ['data-head'] });
+    setTimeout(() => {
+      observer.disconnect();
+      const gaps = times.slice(1).map((time, index) => time - times[index]).sort((first, second) => first - second);
+      resolve(gaps.length ? Math.round(gaps[Math.floor(gaps.length / 2)]) : null);
+    }, duration);
+  }), durationMs);
 }
 
 /** Sample canvas pixels at the centre of the head cell, the first body cell and an empty cell. */
@@ -190,9 +218,34 @@ async function waitForBoardChange(page, before) {
   await page.waitForSelector('[data-testid=snake-start]');
   check(page.url().endsWith('#/play/snake'), 'desktop: Snake opens on #/play/snake from the modal');
   check(await page.getByTestId('snake-best').innerText() === '7', 'desktop: Snake high score is read from localStorage');
+  const board = page.getByTestId('snake-board');
+  const startPicker = page.locator('[data-testid=snake-start] [data-testid=snake-speed-picker]');
+  check(await startPicker.isVisible(), 'desktop: Start screen shows the speed mode toggle');
+  check(await board.getAttribute('data-speed-mode') === 'speeding-up' && await board.getAttribute('data-tick-ms') === '150'
+    && await page.getByTestId('snake-multiplier').innerText() === 'x1.0', 'desktop: default mode is Speeding up at 150 ms (x1.0)');
+  await startPicker.getByRole('radio', { name: /Constant/ }).click();
+  check(await board.getAttribute('data-speed-mode') === 'constant' && await board.getAttribute('data-tick-ms') === '110'
+    && await page.getByTestId('snake-multiplier').innerText() === 'x1.4', 'desktop: choosing Constant uses Normal (110 ms, x1.4)');
+  await startPicker.getByRole('radio', { name: /Very fast/ }).click();
+  check(await board.getAttribute('data-tick-ms') === '60' && await page.getByTestId('snake-multiplier').innerText() === 'x2.5',
+    'desktop: Very fast is 60 ms (x2.5)');
+  check(JSON.parse(await page.evaluate(() => localStorage.getItem('kush-games-snake-speed'))).constantSpeed === 'very-fast', 'desktop: speed choice is saved');
+  await startPicker.getByRole('radio', { name: /^Fast/ }).click();
+  await page.mouse.move(0, 0);
+  await page.screenshot({ path: `${screenshotDirectory}/kush-games-snake-start.png` });
+  const chipSettings = [];
+  for (let click = 0; click < 5; click++) {
+    await page.getByTestId('snake-speed-chip').click();
+    chipSettings.push(`${await board.getAttribute('data-speed-mode')}:${await board.getAttribute('data-tick-ms')}`);
+  }
+  check(chipSettings.join(' ') === 'constant:60 speeding-up:150 constant:150 constant:110 constant:80',
+    `desktop: header speed chip cycles the modes (${chipSettings.join(' ')})`);
+  await startPicker.getByRole('radio', { name: /Speeding up/ }).click();
+  check(await board.getAttribute('data-speed-mode') === 'speeding-up', 'desktop: back to Speeding up for the main run');
   await page.keyboard.press('Space');
   const runningHead = await snakeHead(page);
   check(await snakeStatus(page) === 'running', 'desktop: Space starts Snake');
+  check(await page.getByTestId('snake-speed-chip').isDisabled(), 'desktop: speed chip is disabled while playing');
   check(await waitForSnake(page, head => head.x > runningHead.x), 'desktop: snake moves right on its own');
   let beforeTurn = await snakeHead(page);
   await page.keyboard.press('ArrowUp');
@@ -247,15 +300,39 @@ async function waitForBoardChange(page, before) {
   await page.getByTestId('snake-mute').click();
   check(await page.getByTestId('snake-mute').getAttribute('aria-pressed') === 'false'
     && await page.evaluate(() => localStorage.getItem('kush-games-snake-muted')) === 'false', 'desktop: mute button turns sound back on');
-  check(applesEaten >= 2 && Number(await page.getByTestId('snake-score').innerText()) >= 2, `desktop: snake eats apples and scores (score=${await page.getByTestId('snake-score').innerText()})`);
+  check(applesEaten >= 2 && Number(await page.getByTestId('snake-score').innerText()) >= 20, `desktop: snake eats apples and scores (score=${await page.getByTestId('snake-score').innerText()})`);
+  check(scoringResults.length >= 2 && scoringResults.every(result => result.gained === result.expected),
+    `desktop: score increments match the formula in Speeding up (${scoringResults.map(result => `+${result.gained} vs ${result.expected} @${result.tickMs}ms len${result.length}`).join(', ')})`);
+  check(await board.getAttribute('data-tick-ms') === '144' && await page.getByTestId('snake-multiplier').innerText() === 'x1.0',
+    `desktop: Speeding up gets faster after 2 apples (tick ${await board.getAttribute('data-tick-ms')} ms)`);
   check(Number(await page.getByTestId('snake-board').getAttribute('data-length')) >= 5, 'desktop: snake grows by one per apple');
   const currentDirection = await page.getByTestId('snake-board').getAttribute('data-direction');
   const leftTurn = { right: 'up', up: 'left', left: 'down', down: 'right' }[currentDirection];
   for (const turn of [leftTurn, OPPOSITE[currentDirection], OPPOSITE[leftTurn]]) await page.keyboard.press(ARROW_KEY[turn]);
   check(await waitForSnake(page, (_head, status) => status === 'over', 3000), 'desktop: snake dies when it runs into itself');
-  check(await page.getByTestId('snake-over').isVisible() && /Score/.test(await page.getByTestId('snake-over').innerText()), 'desktop: Game Over screen shows the score');
+  const overText = await page.getByTestId('snake-over-stats').innerText();
+  check(await page.getByTestId('snake-over').isVisible() && /Length\s*5/i.test(overText) && /Speed/i.test(overText) && /Score/i.test(overText),
+    `desktop: Game Over shows length, speed and score (${overText.replace(/\s+/g, ' ')})`);
+  check(/Speeding up/.test(await page.evaluate(() => localStorage.getItem('kush-games-snake-best-details'))),
+    'desktop: shared best score remembers the mode it was set in');
+  // Switch to Constant · Fast on the Game Over screen; it applies at restart.
+  const overPicker = page.locator('[data-testid=snake-over] [data-testid=snake-speed-picker]');
+  await overPicker.getByRole('radio', { name: /^Fast/ }).click();
+  check(await board.getAttribute('data-speed-mode') === 'speeding-up', 'desktop: mode change on Game Over waits for restart');
   await page.getByTestId('snake-restart').click();
   check(await snakeStatus(page) === 'running' && Number(await page.getByTestId('snake-score').innerText()) === 0, 'desktop: Restart starts a new game');
+  check(await board.getAttribute('data-speed-mode') === 'constant' && await board.getAttribute('data-tick-ms') === '80'
+    && await page.getByTestId('snake-multiplier').innerText() === 'x1.9', 'desktop: restart uses Constant · Fast (80 ms, x1.9)');
+  const intervalBeforeEating = await measureStepInterval(page, 1000);
+  scoringResults.length = 0;
+  const constantApples = await steerToApples(page, 2, 30000);
+  const intervalAfterEating = await measureStepInterval(page, 1000);
+  check(constantApples >= 2 && await board.getAttribute('data-tick-ms') === '80'
+    && Math.abs(intervalBeforeEating - 80) <= 15 && Math.abs(intervalAfterEating - 80) <= 15,
+    `desktop: Constant mode keeps the step interval fixed after eating (${intervalBeforeEating} ms before, ${intervalAfterEating} ms after)`);
+  check(scoringResults.length >= 2 && scoringResults.every(result => result.gained === result.expected && result.tickAfter === 80),
+    `desktop: score increments match the formula in Constant mode (${scoringResults.map(result => `+${result.gained} vs ${result.expected} @${result.tickMs}ms len${result.length}`).join(', ')})`);
+  check(await page.getByTestId('snake-floating-points').innerText() === `+${scoringResults.at(-1)?.gained}`, 'desktop: floating +N shows the last apple\'s points');
   // Performance sanity: 5 s of straight play (edges wrap, so it can't die).
   const cdpDesktop = await context.newCDPSession(page);
   const performance = await measureSnake(page, cdpDesktop, 5);
@@ -336,6 +413,18 @@ async function waitForBoardChange(page, before) {
     return { buttonsRight: lastButton.right, headerRight: header.getBoundingClientRect().right };
   });
   check(headerBox.buttonsRight <= headerBox.headerRight + 1, `mobile: score + mute + pause buttons fit in the header (${Math.round(headerBox.buttonsRight)} <= ${Math.round(headerBox.headerRight)})`);
+  const startFit = await page.evaluate(() => {
+    const boardRect = document.querySelector('[data-testid=snake-board]').getBoundingClientRect();
+    const inside = element => { const rect = element.getBoundingClientRect();
+      return rect.left >= boardRect.left - 1 && rect.right <= boardRect.right + 1 && rect.top >= boardRect.top - 1 && rect.bottom <= boardRect.bottom + 1; };
+    const overlay = document.querySelector('[data-testid=snake-start]');
+    return { picker: inside(overlay.querySelector('[data-testid=snake-speed-picker]')), startButton: inside(overlay.querySelector('[data-testid=snake-start-button]')),
+      overlayScrolls: overlay.scrollHeight > overlay.clientHeight + 1 };
+  });
+  check(startFit.picker && startFit.startButton && !startFit.overlayScrolls, `mobile: Start screen speed toggle and Start button fit on the board (${JSON.stringify(startFit)})`);
+  await page.locator('[data-testid=snake-start] [data-testid=snake-speed-picker]').getByRole('radio', { name: /Constant/ }).tap();
+  check(await page.getByTestId('snake-board').getAttribute('data-tick-ms') === '110', 'mobile: tapping Constant switches to 110 ms');
+  await page.locator('[data-testid=snake-start] [data-testid=snake-speed-picker]').getByRole('radio', { name: /Speeding up/ }).tap();
   const canvasSize = await page.getByTestId('snake-canvas').evaluate(canvas => ({ pixels: canvas.width, css: canvas.clientWidth }));
   check(canvasSize.pixels === Math.round(canvasSize.css * 2), `mobile: canvas is sized for devicePixelRatio 2 (${canvasSize.pixels}px for ${canvasSize.css}px)`);
   const dpadBox = await page.locator('.snake-game__dpad').boundingBox();
