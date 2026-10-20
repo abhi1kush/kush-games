@@ -221,18 +221,25 @@ async function waitForBoardChange(page, before) {
   const board = page.getByTestId('snake-board');
   const startPicker = page.locator('[data-testid=snake-start] [data-testid=snake-speed-picker]');
   check(await startPicker.isVisible(), 'desktop: Start screen shows the speed mode toggle');
-  check(await board.getAttribute('data-speed-mode') === 'speeding-up' && await board.getAttribute('data-tick-ms') === '150'
-    && await page.getByTestId('snake-multiplier').innerText() === 'x1.0', 'desktop: default mode is Speeding up at 150 ms (x1.0)');
-  await startPicker.getByRole('radio', { name: /Constant/ }).click();
+  check(await page.evaluate(() => localStorage.getItem('kush-games-snake-speed')) === null, 'desktop: fresh localStorage (no saved speed)');
+  check(await board.getAttribute('data-speed-mode') === 'constant' && await board.getAttribute('data-tick-ms') === '150'
+    && await page.getByTestId('snake-multiplier').innerText() === 'x1.0', 'desktop: default mode is Constant · Slow at 150 ms (x1.0)');
+  check(await startPicker.getByRole('radio', { name: /Constant/ }).getAttribute('aria-checked') === 'true'
+    && await startPicker.getByRole('radio', { name: /^Slow/ }).getAttribute('aria-checked') === 'true'
+    && await startPicker.getByRole('radio', { name: /Speeding up/ }).getAttribute('aria-checked') === 'false',
+    'desktop: Start screen shows Constant · Slow selected');
+  await page.mouse.move(0, 0);
+  await page.screenshot({ path: `${screenshotDirectory}/kush-games-snake-start.png` });
+  await startPicker.getByRole('radio', { name: /Speeding up/ }).click();
+  check(await board.getAttribute('data-speed-mode') === 'speeding-up' && await board.getAttribute('data-tick-ms') === '150', 'desktop: choosing Speeding up works');
+  await startPicker.getByRole('radio', { name: /Normal/ }).click();
   check(await board.getAttribute('data-speed-mode') === 'constant' && await board.getAttribute('data-tick-ms') === '110'
-    && await page.getByTestId('snake-multiplier').innerText() === 'x1.4', 'desktop: choosing Constant uses Normal (110 ms, x1.4)');
+    && await page.getByTestId('snake-multiplier').innerText() === 'x1.4', 'desktop: choosing Normal uses 110 ms (x1.4)');
   await startPicker.getByRole('radio', { name: /Very fast/ }).click();
   check(await board.getAttribute('data-tick-ms') === '60' && await page.getByTestId('snake-multiplier').innerText() === 'x2.5',
     'desktop: Very fast is 60 ms (x2.5)');
   check(JSON.parse(await page.evaluate(() => localStorage.getItem('kush-games-snake-speed'))).constantSpeed === 'very-fast', 'desktop: speed choice is saved');
   await startPicker.getByRole('radio', { name: /^Fast/ }).click();
-  await page.mouse.move(0, 0);
-  await page.screenshot({ path: `${screenshotDirectory}/kush-games-snake-start.png` });
   const chipSettings = [];
   for (let click = 0; click < 5; click++) {
     await page.getByTestId('snake-speed-chip').click();
@@ -422,9 +429,16 @@ async function waitForBoardChange(page, before) {
       overlayScrolls: overlay.scrollHeight > overlay.clientHeight + 1 };
   });
   check(startFit.picker && startFit.startButton && !startFit.overlayScrolls, `mobile: Start screen speed toggle and Start button fit on the board (${JSON.stringify(startFit)})`);
-  await page.locator('[data-testid=snake-start] [data-testid=snake-speed-picker]').getByRole('radio', { name: /Constant/ }).tap();
-  check(await page.getByTestId('snake-board').getAttribute('data-tick-ms') === '110', 'mobile: tapping Constant switches to 110 ms');
-  await page.locator('[data-testid=snake-start] [data-testid=snake-speed-picker]').getByRole('radio', { name: /Speeding up/ }).tap();
+  const mobilePicker = page.locator('[data-testid=snake-start] [data-testid=snake-speed-picker]');
+  check(await page.getByTestId('snake-board').getAttribute('data-speed-mode') === 'constant' && await page.getByTestId('snake-board').getAttribute('data-tick-ms') === '150'
+    && await mobilePicker.getByRole('radio', { name: /^Slow/ }).getAttribute('aria-checked') === 'true'
+    && await page.getByTestId('snake-multiplier').innerText() === 'x1.0', 'mobile: fresh start defaults to Constant · Slow (150 ms, x1.0)');
+  await mobilePicker.getByRole('radio', { name: /Normal/ }).tap();
+  check(await page.getByTestId('snake-board').getAttribute('data-tick-ms') === '110', 'mobile: tapping Normal switches to 110 ms');
+  await mobilePicker.getByRole('radio', { name: /Speeding up/ }).tap();
+  await page.reload();
+  await page.waitForSelector('[data-testid=snake-start]');
+  check(await page.getByTestId('snake-board').getAttribute('data-speed-mode') === 'speeding-up', 'mobile: a saved Speeding up choice is kept after reload');
   const canvasSize = await page.getByTestId('snake-canvas').evaluate(canvas => ({ pixels: canvas.width, css: canvas.clientWidth }));
   check(canvasSize.pixels === Math.round(canvasSize.css * 2), `mobile: canvas is sized for devicePixelRatio 2 (${canvasSize.pixels}px for ${canvasSize.css}px)`);
   const dpadBox = await page.locator('.snake-game__dpad').boundingBox();

@@ -47,7 +47,8 @@ export const CONSTANT_SPEEDS: { id: ConstantSpeed; label: string; tickMs: number
   { id: 'fast', label: 'Fast', tickMs: 80 },
   { id: 'very-fast', label: 'Very fast', tickMs: 60 },
 ];
-export const DEFAULT_SPEED_SETTING: SpeedSetting = { mode: 'speeding-up', constantSpeed: 'normal' };
+/** Used only when nothing is saved: Constant · Slow (150 ms, x1.0). */
+export const DEFAULT_SPEED_SETTING: SpeedSetting = { mode: 'constant', constantSpeed: 'slow' };
 
 export function constantSpeedTickMs(constantSpeed: ConstantSpeed): number {
   return (CONSTANT_SPEEDS.find(speed => speed.id === constantSpeed) ?? CONSTANT_SPEEDS[1]).tickMs;

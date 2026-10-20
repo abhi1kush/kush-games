@@ -40,12 +40,12 @@ Built with **React + TypeScript + Vite**. Deployed to GitHub Pages from the `gh-
 
 #### Speed modes and scoring
 
-Pick the speed on the Start or Game Over screen (or with the ⚡/⏱ chip in the header before a game). It can't be changed mid-game; a change made on the Game Over screen applies when you restart. The choice is saved.
+Pick the speed on the Start or Game Over screen (or with the ⚡/⏱ chip in the header before a game). It can't be changed mid-game; a change made on the Game Over screen applies when you restart. The choice is saved. With nothing saved, the default is Constant · Slow (150 ms, x1.0); a saved choice is always kept.
 
 | Mode | Step interval |
 | --- | --- |
-| ⚡ Speeding up (default) | 150 ms, 3 ms faster per apple, never below 60 ms |
-| ⏱ Constant · Slow / Normal / Fast / Very fast | 150 / 110 / 80 / 60 ms |
+| ⏱ Constant · Slow / Normal / Fast / Very fast | 150 / 110 / 80 / 60 ms (default: **Constant · Slow**) |
+| ⚡ Speeding up | 150 ms, 3 ms faster per apple, never below 60 ms |
 
 Both modes use the same formula, so the same speed and length are always worth the same:
 
