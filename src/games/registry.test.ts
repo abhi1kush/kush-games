@@ -12,11 +12,11 @@ describe('game registry', () => {
     games.filter(game => game.status === 'playable').forEach(game => expect(game.component).toBeDefined());
   });
 
-  it('features 2048 and has 8-10 coming soon placeholders', () => {
+  it('features 2048 and keeps several coming soon placeholders', () => {
     expect(featuredGame.id).toBe('2048');
     expect(featuredGame.status).toBe('playable');
     const placeholderCount = games.filter(game => game.status === 'coming-soon').length;
-    expect(placeholderCount).toBeGreaterThanOrEqual(8);
+    expect(placeholderCount).toBeGreaterThanOrEqual(6);
     expect(placeholderCount).toBeLessThanOrEqual(10);
   });
 
@@ -26,11 +26,12 @@ describe('game registry', () => {
     const puzzleRow = buildHomeRows().find(row => row.title === 'Puzzle')!;
     expect(puzzleRow.games[0].id).toBe('2048');
     const playNowIds = buildHomeRows().find(row => row.title === 'Play Now')!.games.map(game => game.id);
-    expect(playNowIds).toEqual(['2048', 'snake']);
+    expect(playNowIds).toEqual(['2048', 'snake', 'blocks']);
     const arcadeRow = buildHomeRows().find(row => row.title === 'Arcade')!;
     expect(arcadeRow.games[0].id).toBe('snake');
     const comingSoonIds = buildHomeRows().find(row => row.title === 'Coming Soon')!.games.map(game => game.id);
     expect(comingSoonIds).not.toContain('snake');
+    expect(comingSoonIds).not.toContain('blocks');
   });
 
   it('finds games by id', () => {

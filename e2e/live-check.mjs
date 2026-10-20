@@ -202,9 +202,9 @@ async function waitForBoardChange(page, before) {
   await page.waitForSelector('[data-testid=player]', { state: 'detached' });
   check(true, 'desktop: Back returns to home');
 
-  await page.goto(`${siteUrl}#/play/blocks`);
+  await page.goto(`${siteUrl}#/play/minesweeper`);
   await page.waitForSelector('[data-testid=coming-soon]');
-  check(/Blocks/.test(await page.locator('[data-testid=coming-soon] h1').innerText()), 'desktop: placeholder game shows Coming Soon screen');
+  check(/Minesweeper/.test(await page.locator('[data-testid=coming-soon] h1').innerText()), 'desktop: placeholder game shows Coming Soon screen');
 
   // Snake
   await page.goto(siteUrl, { waitUntil: 'networkidle' });
@@ -468,6 +468,203 @@ async function waitForBoardChange(page, before) {
   await page.getByTestId('snake-mute').tap();
   check(await page.getByTestId('snake-mute').getAttribute('aria-pressed') === 'true', 'mobile: mute button toggles');
   check(pageErrors.length === 0, `mobile: no page errors ${pageErrors.join('; ')}`);
+  await context.close();
+}
+
+// ---------- Blocks ----------
+const blocksAttribute = (page, name) => page.getByTestId('blocks-board').getAttribute(`data-${name}`);
+const blocksNumber = async (page, name) => Number(await blocksAttribute(page, name));
+const canvasFingerprint = page => page.getByTestId('blocks-canvas').evaluate(canvas => {
+  const text = canvas.toDataURL();
+  let hash = 0;
+  for (let index = 0; index < text.length; index += 7) hash = (hash * 31 + text.charCodeAt(index)) | 0;
+  return hash;
+});
+async function waitForBlocks(page, predicate, timeoutMs = 2000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await predicate()) return true;
+    await page.waitForTimeout(30);
+  }
+  return false;
+}
+/** Hard-drop a few pieces at different columns so the board has a stack. */
+async function stackSomePieces(page, pressKey, count) {
+  for (let pieceIndex = 0; pieceIndex < count; pieceIndex++) {
+    const shift = (pieceIndex % 5) - 2;
+    for (let step = 0; step < Math.abs(shift) * 2; step++) await pressKey(shift < 0 ? 'left' : 'right');
+    if (pieceIndex % 2 === 1) await pressKey('rotate');
+    await pressKey('hardDrop');
+    await page.waitForTimeout(60);
+  }
+}
+
+{
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  await context.addInitScript(reactCommitCounterScript);
+  const page = await context.newPage();
+  const pageErrors = [];
+  page.on('pageerror', error => pageErrors.push(String(error)));
+  await page.goto(siteUrl, { waitUntil: 'networkidle' });
+  const playNowIds = await page.locator('[data-testid=row-play-now] .card').evaluateAll(cards => cards.map(card => card.dataset.testid));
+  check(playNowIds.includes('card-blocks') && await page.locator('[data-testid=row-coming-soon] [data-testid=card-blocks]').count() === 0,
+    `blocks desktop: Blocks is in Play Now and not Coming Soon (${playNowIds.join(', ')})`);
+  check(await page.locator('[data-testid=row-puzzle] [data-testid=card-blocks]').count() === 1
+    && await page.locator('[data-testid=row-arcade] [data-testid=card-blocks]').count() === 1, 'blocks desktop: Blocks is in Puzzle and Arcade rows');
+  await page.goto(`${siteUrl}?blocksSeed=11#/play/blocks`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('[data-testid=blocks-start]');
+  check(await page.getByTestId('blocks-canvas').count() === 1, 'blocks desktop: board is a single canvas');
+  await page.keyboard.press('Space');
+  check(await blocksAttribute(page, 'status') === 'running' && (await blocksAttribute(page, 'piece')) !== '', 'blocks desktop: Space starts the game and a piece spawns');
+  if (await blocksAttribute(page, 'piece') === 'O') { await page.keyboard.press('Space'); await page.waitForTimeout(50); }
+  const startY = await blocksNumber(page, 'piece-y');
+  check(await waitForBlocks(page, async () => await blocksNumber(page, 'piece-y') > startY, 1500), 'blocks desktop: pieces fall by gravity');
+  const fingerprintBefore = await canvasFingerprint(page);
+  const startX = await blocksNumber(page, 'piece-x');
+  await page.keyboard.press('ArrowLeft');
+  check(await blocksNumber(page, 'piece-x') === startX - 1, 'blocks desktop: ArrowLeft moves one column left');
+  check(await canvasFingerprint(page) !== fingerprintBefore, 'blocks desktop: the canvas changes when the piece moves');
+  await page.keyboard.press('d');
+  check(await blocksNumber(page, 'piece-x') === startX, 'blocks desktop: D moves one column right');
+  const rotationBefore = await blocksNumber(page, 'rotation');
+  await page.keyboard.press('ArrowUp');
+  check(await blocksNumber(page, 'rotation') === (rotationBefore + 1) % 4, 'blocks desktop: ArrowUp rotates clockwise');
+  await page.keyboard.down('ArrowLeft');
+  await page.waitForTimeout(450);
+  await page.keyboard.up('ArrowLeft');
+  check(await blocksNumber(page, 'piece-x') <= startX - 3, `blocks desktop: holding ArrowLeft auto-repeats (x ${startX} → ${await blocksNumber(page, 'piece-x')})`);
+  const scoreBeforeSoftDrop = await blocksNumber(page, 'score');
+  await page.keyboard.press('ArrowDown');
+  check(await blocksNumber(page, 'score') === scoreBeforeSoftDrop + 1, 'blocks desktop: soft drop scores 1 point');
+  const pieceBeforeHold = await blocksAttribute(page, 'piece');
+  await page.keyboard.press('c');
+  check(await blocksAttribute(page, 'hold') === pieceBeforeHold, 'blocks desktop: C holds the piece');
+  const locksBefore = await blocksNumber(page, 'locks');
+  const scoreBeforeHardDrop = await blocksNumber(page, 'score');
+  await page.keyboard.press('Space');
+  check(await blocksNumber(page, 'locks') === locksBefore + 1 && await blocksNumber(page, 'filled-cells') === 4
+    && await blocksNumber(page, 'score') > scoreBeforeHardDrop, 'blocks desktop: Space hard-drops and locks the piece');
+  check(Number(await blocksAttribute(page, 'sounds') ?? 0) >= 1, 'blocks desktop: lock plays a sound');
+  const desktopKeys = { left: 'ArrowLeft', right: 'ArrowRight', rotate: 'ArrowUp', hardDrop: 'Space' };
+  await stackSomePieces(page, key => page.keyboard.press(desktopKeys[key]), 7);
+  check(await blocksNumber(page, 'filled-cells') >= 20, `blocks desktop: pieces stack up (${await blocksNumber(page, 'filled-cells')} cells)`);
+  await page.waitForTimeout(900);
+  await page.screenshot({ path: `${screenshotDirectory}/kush-games-blocks.png` });
+  await page.keyboard.press('p');
+  check(await blocksAttribute(page, 'status') === 'paused' && await page.getByTestId('blocks-paused').isVisible(), 'blocks desktop: P pauses');
+  const pausedY = await blocksNumber(page, 'piece-y');
+  await page.waitForTimeout(1000);
+  check(await blocksNumber(page, 'piece-y') === pausedY, 'blocks desktop: nothing falls while paused');
+  await page.keyboard.press('p');
+  check(await blocksAttribute(page, 'status') === 'running', 'blocks desktop: P resumes');
+  await page.getByTestId('blocks-mute').click();
+  check(await page.getByTestId('blocks-mute').getAttribute('aria-pressed') === 'true'
+    && await page.evaluate(() => localStorage.getItem('kush-games-blocks-muted')) === 'true', 'blocks desktop: mute toggles and is saved');
+  const soundsWhileMuted = Number(await blocksAttribute(page, 'sounds') ?? 0);
+  await page.keyboard.press('Space');
+  await page.waitForTimeout(80);
+  check(Number(await blocksAttribute(page, 'sounds') ?? 0) === soundsWhileMuted, 'blocks desktop: no sound while muted');
+  await page.getByTestId('blocks-mute').click();
+  check(await page.getByTestId('blocks-mute').getAttribute('aria-pressed') === 'false', 'blocks desktop: unmute');
+  // idle falling: no React re-renders
+  const cdp = await context.newCDPSession(page);
+  const performance = await measureSnake(page, cdp, 5, '[data-testid=blocks-game]');
+  console.log(`INFO blocks desktop 5 s idle falling: ${JSON.stringify(performance)}`);
+  check(performance.reactCommits === 0 && performance.elementOrTextMutations === 0,
+    `blocks desktop: 0 React re-renders while idle-falling (${performance.reactCommits} commits, ${performance.elementOrTextMutations} element changes)`);
+  check(await hasNoHorizontalOverflow(page), 'blocks desktop: no horizontal overflow');
+
+  // Line clear (test-only setup: bottom 4 rows full except column 0, an I piece first)
+  await page.goto(`${siteUrl}?blocksSetup=quad#/play/blocks`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('[data-testid=blocks-start]');
+  check(await blocksNumber(page, 'filled-cells') === 36, 'blocks desktop: test setup has 4 nearly-full rows');
+  await page.keyboard.press('Space');
+  check(await blocksAttribute(page, 'piece') === 'I', 'blocks desktop: test setup starts with an I piece');
+  await page.keyboard.press('ArrowUp');
+  for (let step = 0; step < 6; step++) await page.keyboard.press('ArrowLeft');
+  const soundsBeforeClear = Number(await blocksAttribute(page, 'sounds') ?? 0);
+  await page.keyboard.press('Space');
+  check(await blocksAttribute(page, 'clearing') === 'true' && await blocksAttribute(page, 'last-clear') === '4',
+    'blocks desktop: a 4-line clear starts the clear animation');
+  await page.waitForTimeout(100);
+  await page.screenshot({ path: '/tmp/kush-games-blocks-clear.png' });
+  check(await page.getByTestId('blocks-clear-label').innerText() === 'BLOCKS!', 'blocks desktop: 4 lines show "BLOCKS!"');
+  check(await page.getByTestId('blocks-frame').getAttribute('data-shakes') === '1', 'blocks desktop: 4 lines shake the board');
+  check(Number(await blocksAttribute(page, 'sounds') ?? 0) === soundsBeforeClear + 1, 'blocks desktop: line clear plays the chime');
+  check(await waitForBlocks(page, async () => await blocksAttribute(page, 'clearing') === 'false', 1000), 'blocks desktop: rows collapse after the animation');
+  check(await blocksNumber(page, 'filled-cells') === 0 && await blocksNumber(page, 'lines') === 4
+    && await blocksNumber(page, 'score') === 800 + 2 * 17 && await page.getByTestId('blocks-lines').innerText() === '4',
+    `blocks desktop: board is empty, 4 lines, score 834 (${await blocksNumber(page, 'score')})`);
+  check(await blocksAttribute(page, 'piece') === 'O', 'blocks desktop: next piece spawns after the clear');
+  check(pageErrors.length === 0, `blocks desktop: no page errors ${pageErrors.join('; ')}`);
+  await context.close();
+}
+
+{
+  const context = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const page = await context.newPage();
+  const pageErrors = [];
+  page.on('pageerror', error => pageErrors.push(String(error)));
+  await page.goto(`${siteUrl}?blocksSeed=21#/play/blocks`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('[data-testid=blocks-start]');
+  check(await hasNoHorizontalOverflow(page), 'blocks mobile: no horizontal overflow');
+  const layout = await page.evaluate(() => {
+    const box = selector => document.querySelector(selector).getBoundingClientRect();
+    const board = box('[data-testid=blocks-board]'), side = box('.blocks-game__side'), controls = box('.blocks-game__controls');
+    return { boardLeft: board.left, sideRight: side.right, controlsLeft: controls.left, controlsRight: controls.right, controlsBottom: controls.bottom, boardWidth: board.width };
+  });
+  check(layout.boardLeft >= 0 && layout.sideRight <= 375 && layout.controlsLeft >= 0 && layout.controlsRight <= 375 && layout.controlsBottom <= 812,
+    `blocks mobile: board, side panel and buttons fit at 375px (${JSON.stringify(layout)})`);
+  await page.getByTestId('blocks-start-button').tap();
+  check(await blocksAttribute(page, 'status') === 'running', 'blocks mobile: Start button starts');
+  if (await blocksAttribute(page, 'piece') === 'O') { await page.getByRole('button', { name: 'Hard drop' }).tap(); await page.waitForTimeout(50); }
+  const tapButton = async name => { await page.getByRole('button', { name, exact: true }).tap(); await page.waitForTimeout(40); };
+  let pieceX = await blocksNumber(page, 'piece-x');
+  await tapButton('Move left');
+  check(await blocksNumber(page, 'piece-x') === pieceX - 1, 'blocks mobile: ◀ button moves left');
+  await tapButton('Move right');
+  check(await blocksNumber(page, 'piece-x') === pieceX, 'blocks mobile: ▶ button moves right');
+  let rotation = await blocksNumber(page, 'rotation');
+  await tapButton('Rotate');
+  check(await blocksNumber(page, 'rotation') === (rotation + 1) % 4, 'blocks mobile: ⟳ button rotates');
+  const yBeforeSoft = await blocksNumber(page, 'piece-y');
+  await tapButton('Soft drop');
+  check(await blocksNumber(page, 'piece-y') >= yBeforeSoft + 1 && await blocksNumber(page, 'score') >= 1, 'blocks mobile: ▼ button soft-drops');
+  let locks = await blocksNumber(page, 'locks');
+  await tapButton('Hard drop');
+  check(await blocksNumber(page, 'locks') === locks + 1, 'blocks mobile: ⤓ button hard-drops');
+  // gestures
+  const cdp = await context.newCDPSession(page);
+  const boardBox = await page.getByTestId('blocks-board').boundingBox();
+  const cell = boardBox.width / 10;
+  const centerX = boardBox.x + boardBox.width / 2;
+  const centerY = boardBox.y + boardBox.height * 0.4;
+  const touch = async (points, delayMs) => {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [points[0]] });
+    for (const point of points.slice(1)) { await page.waitForTimeout(delayMs); await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [point] }); }
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await page.waitForTimeout(60);
+  };
+  if (await blocksAttribute(page, 'piece') === 'O') { await tapButton('Hard drop'); }
+  rotation = await blocksNumber(page, 'rotation');
+  await touch([{ x: centerX, y: centerY }], 0);
+  check(await blocksNumber(page, 'rotation') === (rotation + 1) % 4, 'blocks mobile: tap on the board rotates');
+  pieceX = await blocksNumber(page, 'piece-x');
+  await touch([{ x: centerX, y: centerY }, { x: centerX + cell * 0.6, y: centerY }, { x: centerX + cell * 1.2, y: centerY }, { x: centerX + cell * 2.3, y: centerY }], 30);
+  check(await blocksNumber(page, 'piece-x') === pieceX + 2, `blocks mobile: dragging right moves by cells (${pieceX} → ${await blocksNumber(page, 'piece-x')})`);
+  locks = await blocksNumber(page, 'locks');
+  await touch([{ x: centerX, y: centerY - 60 }, { x: centerX, y: centerY - 20 }, { x: centerX, y: centerY + 40 }], 20);
+  check(await blocksNumber(page, 'locks') === locks + 1, 'blocks mobile: quick flick down hard-drops');
+  const mobileButtons = { left: 'Move left', right: 'Move right', rotate: 'Rotate', hardDrop: 'Hard drop' };
+  await stackSomePieces(page, key => tapButton(mobileButtons[key]), 6);
+  await page.waitForTimeout(700);
+  await page.screenshot({ path: `${screenshotDirectory}/kush-games-blocks-mobile.png` });
+  check(await hasNoHorizontalOverflow(page), 'blocks mobile: still no overflow mid-game');
+  await page.getByTestId('blocks-mute').tap();
+  check(await page.getByTestId('blocks-mute').getAttribute('aria-pressed') === 'true', 'blocks mobile: mute button toggles');
+  await page.getByTestId('blocks-pause').tap();
+  check(await blocksAttribute(page, 'status') === 'paused', 'blocks mobile: pause button pauses');
+  check(pageErrors.length === 0, `blocks mobile: no page errors ${pageErrors.join('; ')}`);
   await context.close();
 }
 

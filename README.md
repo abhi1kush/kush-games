@@ -24,7 +24,8 @@ Built with **React + TypeScript + Vite**. Deployed to GitHub Pages from the `gh-
 | --- | --- |
 | 2048 | ✅ Playable |
 | Snake | ✅ Playable |
-| Blocks (Tetris-like), Minesweeper, Sudoku, Chess, Tic-Tac-Toe, Memory Match, Flappy Flight, Breakout | 🕒 Coming soon |
+| Blocks | ✅ Playable |
+| Minesweeper, Sudoku, Chess, Tic-Tac-Toe, Memory Match, Flappy Flight, Breakout | 🕒 Coming soon |
 
 ### Snake
 
@@ -60,6 +61,22 @@ The speed and length are taken just before the apple is eaten. Examples: 150 ms 
 Controls: arrow keys / WASD to steer, Space (or P) to pause and resume, M to mute, Space or Enter to restart. On phones, swipe anywhere on the game or use the on-screen D-pad. The game pauses on its own when the tab is hidden.
 
 Measure rendering cost with `node e2e/perf-snake.mjs [url]`: it plays for 5 s and reports React commits, DOM mutations and main-thread time.
+
+### Blocks
+
+`src/games/blocks/` has a falling-blocks puzzle game: random shapes drop into a 10×20 well, and every full horizontal row is cleared with a flash and a sound.
+
+- `game.ts`: pure logic with no React or timers. It covers the 7 shapes (I, O, T, S, Z, J, L) with a seeded 7-bag randomiser, gravity, moves, soft and hard drop, clockwise rotation with simple wall kicks, the ghost piece, a 5-piece next queue, hold (once per piece), a 500 ms lock delay (moving or rotating resets it, up to 15 times), line clears, scoring, levels, pause and game over (a piece can't spawn, or locks above the top). `advanceTime(state, ms)` is the only clock; `msUntilNextEvent` tells the component when to wake up next.
+- `game.test.ts`: unit tests for rotation, kicks, walls, the ghost, drop scoring, the lock delay and its resets, gravity, game over, single and 4-line clears, levels, the 7-bag, hold and pause.
+- `renderer.ts`: draws on one `<canvas>`. The grid and one sprite per colour are drawn once per size and cached; a frame is only drawn when something changes. Cleared rows flash white and then shrink and fade over 280 ms (the only time `requestAnimationFrame` runs).
+- `sound.ts`: Web Audio sounds made on the fly (no audio files): a lock tick, a rising chime that grows with the number of lines, a chord for 4 lines, and a low game-over tone. The `AudioContext` is created on the first key press or tap. 🔊/🔇 mute is saved in `localStorage` (`kush-games-blocks-muted`).
+- `Blocks.tsx` / `blocks.css`: the state lives in a ref and a single `setTimeout` drives gravity. React only re-renders when the score, lines, level or status changes. A 4-line clear shows **BLOCKS!** and shakes the board (no shake with `prefers-reduced-motion`). The best score is saved in `localStorage` (`kush-games-blocks-best`). The game pauses on its own when the tab is hidden.
+
+Scoring: 100 / 300 / 500 / 800 × level for 1 / 2 / 3 / 4 lines, plus 1 point per soft-dropped cell and 2 per hard-dropped cell. The level goes up every 10 lines, and gravity gets faster: `max(80, 800 × 0.85^(level − 1))` ms per row.
+
+Controls: ←/→ or A/D to move (hold to repeat), ↑/W to rotate, ↓/S soft drop, Space hard drop, C/Shift hold, P pause, M mute. On phones: tap the board to rotate, drag left/right to move by cells, drag down to soft drop, flick down to hard drop, or use the ◀ ⟳ ▶ ▼ ⤓ ⇄ buttons.
+
+For tests, `?blocksSeed=N` fixes the piece order and `?blocksSetup=quad` starts with the bottom 4 rows full except one column and an I piece first (e.g. `…/kush-games/?blocksSetup=quad#/play/blocks`).
 
 ### Where 2048 came from
 
@@ -100,7 +117,7 @@ That's it — the rows, modal and player all read from the registry. Each game i
 ```bash
 npm install
 npm run dev        # http://localhost:5173/kush-games/
-npm test           # unit tests (2048 + Snake logic, registry, routing)
+npm test           # unit tests (2048, Snake and Blocks logic, registry, routing)
 npm run build      # type-check + production build into dist/
 ```
 

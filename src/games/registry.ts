@@ -35,13 +35,14 @@ export const games: GameDefinition[] = [
   {
     id: 'blocks',
     title: 'Blocks',
-    tagline: 'Stack falling blocks. Clear lines.',
-    description: 'A Tetris-like falling block puzzle: rotate and drop pieces to complete full lines before the stack reaches the top.',
+    tagline: 'Stack falling shapes. Clear full rows.',
+    description: 'Seven shapes fall one at a time. Move and rotate them to fill whole rows, which flash and vanish. Clear four at once for a big bonus. Every 10 lines the level goes up and the shapes fall faster.',
     categories: ['Puzzle', 'Arcade'],
-    status: 'coming-soon',
+    status: 'playable',
     artwork: { gradientFrom: '#6a11cb', gradientTo: '#2575fc', accentColor: '#ffe066', glyph: '▦' },
-    controls: 'Arrow keys to move, Up to rotate',
+    controls: 'Arrows / WASD, ↑ rotate, Space hard drop, C hold; tap, swipe or buttons on mobile',
     releaseYear: 2026,
+    component: lazy(() => import('./blocks/Blocks')),
   },
   {
     id: 'minesweeper',

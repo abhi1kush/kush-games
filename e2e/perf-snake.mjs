@@ -5,14 +5,14 @@ import { chromium } from 'playwright-core';
 const siteUrl = process.argv[2] ?? 'https://abhi1kush.github.io/kush-games/';
 const seconds = Number(process.argv[3] ?? 5);
 
-export async function measureSnake(page, cdp, durationSeconds) {
-  await page.evaluate(() => {
+export async function measureSnake(page, cdp, durationSeconds, rootSelector = '[data-testid=snake-game]') {
+  await page.evaluate(selector => {
     window.__snakeMutations = { attributes: 0, structure: 0 };
     new MutationObserver(records => records.forEach(record => {
       if (record.type === 'attributes') window.__snakeMutations.attributes++; else window.__snakeMutations.structure++;
     }))
-      .observe(document.querySelector('[data-testid=snake-game]'), { subtree: true, childList: true, attributes: true, characterData: true });
-  });
+      .observe(document.querySelector(selector), { subtree: true, childList: true, attributes: true, characterData: true });
+  }, rootSelector);
   await cdp.send('Performance.enable');
   const metricsOf = async () => Object.fromEntries((await cdp.send('Performance.getMetrics')).metrics.map(metric => [metric.name, metric.value]));
   const before = await metricsOf();
