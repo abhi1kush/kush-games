@@ -25,6 +25,12 @@ describe('game registry', () => {
     expect(rowTitles).toEqual(['Play Now', 'Puzzle', 'Arcade', 'Strategy', 'Classic Board', 'Coming Soon']);
     const puzzleRow = buildHomeRows().find(row => row.title === 'Puzzle')!;
     expect(puzzleRow.games[0].id).toBe('2048');
+    const playNowIds = buildHomeRows().find(row => row.title === 'Play Now')!.games.map(game => game.id);
+    expect(playNowIds).toEqual(['2048', 'snake']);
+    const arcadeRow = buildHomeRows().find(row => row.title === 'Arcade')!;
+    expect(arcadeRow.games[0].id).toBe('snake');
+    const comingSoonIds = buildHomeRows().find(row => row.title === 'Coming Soon')!.games.map(game => game.id);
+    expect(comingSoonIds).not.toContain('snake');
   });
 
   it('finds games by id', () => {

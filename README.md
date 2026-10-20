@@ -23,7 +23,18 @@ Built with **React + TypeScript + Vite**. Deployed to GitHub Pages from the `gh-
 | Game | Status |
 | --- | --- |
 | 2048 | ✅ Playable |
-| Snake, Blocks (Tetris-like), Minesweeper, Sudoku, Chess, Tic-Tac-Toe, Memory Match, Flappy Flight, Breakout | 🕒 Coming soon |
+| Snake | ✅ Playable |
+| Blocks (Tetris-like), Minesweeper, Sudoku, Chess, Tic-Tac-Toe, Memory Match, Flappy Flight, Breakout | 🕒 Coming soon |
+
+### Snake
+
+`src/games/snake/` has a Snake game written for Kush Games:
+
+- `game.ts`: pure logic with no React or timers. It covers state, `step`, `changeDirection` (instant reverses are ignored and quick turns are queued, up to 3), `spawnApple` (never on the snake), pause/resume, and `tickInterval` (starts at 150 ms per step, 3 ms faster per apple, never below 60 ms).
+- `game.test.ts`: unit tests for movement, growing, scoring, dying on walls or on itself, the queued turns, apple placement and speed.
+- `Snake.tsx` / `snake.css`: the dark SVG board with a drawn red apple, plus Start, Paused and Game Over screens. The high score is saved in `localStorage` (`kush-games-snake-best`).
+
+Controls: arrow keys / WASD to steer, Space (or P) to pause and resume, Space or Enter to restart. On phones, swipe anywhere on the game or use the on-screen D-pad. The game pauses on its own when the tab is hidden.
 
 ### Where 2048 came from
 
@@ -64,7 +75,7 @@ That's it — the rows, modal and player all read from the registry. Each game i
 ```bash
 npm install
 npm run dev        # http://localhost:5173/kush-games/
-npm test           # unit tests (2048 logic, registry, routing)
+npm test           # unit tests (2048 + Snake logic, registry, routing)
 npm run build      # type-check + production build into dist/
 ```
 
