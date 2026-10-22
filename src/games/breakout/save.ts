@@ -8,4 +8,4 @@ export function parseBreakoutSave(data: unknown): SavedBreakout | null {
   return { level: data.level, score: data.score, lives: data.lives, bricks: data.bricks as number[] };
 }
 
-export const createBreakoutSaveSlot = () => createSaveSlot({ gameId: 'breakout', version: 1, parse: parseBreakoutSave, throttleMs: 1500 });
+export const createBreakoutSaveSlot = () => createSaveSlot({ gameId: 'breakout', version: 1, parse: parseBreakoutSave });

@@ -25,24 +25,28 @@ export const RenderSlot = {
   wideSeconds: 27, length: 28,
 } as const;
 export enum Phase { Serving = 0, Playing = 1, LevelCleared = 2, GameOver = 3 }
-export const Events = { wall: 1, paddle: 2, brickHit: 4, brickBroken: 8, steelHit: 16, powerUp: 32, lifeLost: 64, levelCleared: 128, gameOver: 256 } as const;
+export const Events = { wall: 1, paddle: 2, brickHit: 4, brickBroken: 8, steelHit: 16, powerUp: 32, lifeLost: 64, levelCleared: 128, gameOver: 256, hitch: 512, freeRelaunch: 1024 } as const;
 export const POWER_UP_LABELS = ['W', 'M', 'S', '+'] as const;
 export const POWER_UP_COLORS = ['#4cc9f0', '#f72585', '#90be6d', '#ffd166'] as const;
 
+export interface MemoryViews { render: Float32Array; bricks: Uint8Array; }
+
 /**
- * Typed-array views straight onto wasm memory (no copying, no allocation per frame).
- * Recreated only if the memory grows (which detaches the old buffer).
+ * Typed-array views straight onto wasm memory (no copying). The same object is returned every frame (no allocation);
+ * its views are recreated only if the memory grew, which detaches the old buffer.
  */
-export function createMemoryViews(memory: WebAssembly.Memory, game: Breakout) {
+export function createMemoryViews(memory: WebAssembly.Memory, game: Breakout): () => MemoryViews {
   let buffer = memory.buffer;
-  let render = new Float32Array(buffer, game.render_pointer(), RenderSlot.length);
-  let bricks = new Uint8Array(buffer, game.bricks_pointer(), BRICK_COLUMNS * BRICK_ROWS);
+  const views: MemoryViews = {
+    render: new Float32Array(buffer, game.render_pointer(), RenderSlot.length),
+    bricks: new Uint8Array(buffer, game.bricks_pointer(), BRICK_COLUMNS * BRICK_ROWS),
+  };
   return () => {
     if (memory.buffer !== buffer) {
       buffer = memory.buffer;
-      render = new Float32Array(buffer, game.render_pointer(), RenderSlot.length);
-      bricks = new Uint8Array(buffer, game.bricks_pointer(), BRICK_COLUMNS * BRICK_ROWS);
+      views.render = new Float32Array(buffer, game.render_pointer(), RenderSlot.length);
+      views.bricks = new Uint8Array(buffer, game.bricks_pointer(), BRICK_COLUMNS * BRICK_ROWS);
     }
-    return { render, bricks };
+    return views;
   };
 }

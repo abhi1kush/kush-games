@@ -10,6 +10,9 @@ export class Breakout {
     advance(seconds: number): number;
     bricks(): Uint8Array;
     bricks_pointer(): number;
+    debug_power_up(kind: number): void;
+    debug_set_lives(lives: number): void;
+    debug_start_level(level: number): void;
     launch(): void;
     level(): number;
     lives(): number;
@@ -38,6 +41,9 @@ export interface InitOutput {
     readonly breakout_advance: (a: number, b: number) => number;
     readonly breakout_bricks: (a: number, b: number) => void;
     readonly breakout_bricks_pointer: (a: number) => number;
+    readonly breakout_debug_power_up: (a: number, b: number) => void;
+    readonly breakout_debug_set_lives: (a: number, b: number) => void;
+    readonly breakout_debug_start_level: (a: number, b: number) => void;
     readonly breakout_launch: (a: number) => void;
     readonly breakout_level: (a: number) => number;
     readonly breakout_lives: (a: number) => number;

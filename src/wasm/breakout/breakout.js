@@ -43,6 +43,24 @@ export class Breakout {
         const ret = wasm.breakout_bricks_pointer(this.__wbg_ptr);
         return ret >>> 0;
     }
+    /**
+     * @param {number} kind
+     */
+    debug_power_up(kind) {
+        wasm.breakout_debug_power_up(this.__wbg_ptr, kind);
+    }
+    /**
+     * @param {number} lives
+     */
+    debug_set_lives(lives) {
+        wasm.breakout_debug_set_lives(this.__wbg_ptr, lives);
+    }
+    /**
+     * @param {number} level
+     */
+    debug_start_level(level) {
+        wasm.breakout_debug_start_level(this.__wbg_ptr, level);
+    }
     launch() {
         wasm.breakout_launch(this.__wbg_ptr);
     }

@@ -153,14 +153,16 @@ The UI is React + TypeScript; the rules, physics and AI are Rust crates in `wasm
 
 | Crate | `.wasm` raw | gzipped |
 | --- | --- | --- |
-| breakout | 24.4 KB | 11.6 KB |
+| breakout | 26.5 KB | 12.4 KB |
 | connect_four | 26.0 KB | 12.4 KB |
 | solitaire | 25.7 KB | 11.8 KB |
 | checkers | 31.1 KB | 14.6 KB |
 
 Size settings: `opt-level = "z"`, `lto`, `codegen-units = 1`, `panic = "abort"`, `strip`, then `wasm-opt -Oz`; `wasm-bindgen` without default features. Float formatting (pulled in by `f32::clamp`'s panic message) and libm `sin`/`cos` were avoided by hand (≈ 30 KB saved in Breakout).
 
-- **Breakout** — fixed 1/120 s physics step in Rust, driven by a `requestAnimationFrame` loop; JS draws one `<canvas>` straight from a `Float32Array` view of wasm memory (no per-frame allocation; bricks are cached on an offscreen canvas and redrawn only when one changes). Mouse/finger or ←/→, Space/tap to launch, P pause. Levels add rows, multi-hit and steel bricks and a faster ball. Power-ups (1 in 9 bricks): wide paddle, multi-ball, slower ball, extra life. Pauses when the tab is hidden; a refreshed game comes back paused.
+- **Breakout** — fixed 1/120 s physics step in Rust, driven by a `requestAnimationFrame` loop; JS draws from a `Float32Array` view of wasm memory (no per-frame allocation). Two stacked canvases: the bricks layer is redrawn only for bricks that changed; the top canvas clears only the rectangles it drew last frame. Mouse/finger (native passive pointer listeners straight into the wasm paddle target) or ←/→, Space/tap to launch, P pause. Levels add rows, multi-hit and steel bricks and a faster ball. Power-ups (1 in 9 bricks): wide paddle, multi-ball, slower ball, extra life. Pauses when the tab is hidden; a refreshed game comes back paused.
+  - **Phone hiccups:** a frame simulates at most 50 ms (slower frames play in slight slow motion); a gap over 100 ms (GC, a notification, a busy phone) is dropped — the game freezes instead of the ball jumping — and a ball lost within 0.3 s after such a freeze is served again without costing a life ("The screen froze for a moment — ball back, no life lost"). The ball moves in sub-steps of at most 3 units (half its radius), so it can't pass through the paddle or a brick at any speed; it never goes exactly vertical or flat, gets nudged if it bounces 8 s without touching a breakable brick, and is moved out if it ends up overlapping a brick.
+  - **No work in the rally:** saving happens only when play stops (pause, tab hidden, leaving, a life lost, a level cleared); sounds are rate-limited (≤ 4 overlapping) and the audio context is created on the first touch. `node e2e/perf-breakout.mjs <url> --assert` plays ~80 s at 375 px with 4× and 6× CPU throttling and checks frame times, storage writes, React commits, ball jumps and that six simulated 300 ms freezes cost no life.
 - **Connect Four** — bitboards; negamax with alpha-beta, a transposition table, threat-first move ordering and iterative deepening under a node budget. Easy (shallow and a bit random), Medium (depth 5 with noise), Hard (as deep as 160 000 nodes allow — about 30–50 ms on a desktop, roughly 4× that on a mid-range phone). The search runs in a Web Worker. 2-player pass-and-play, drop animation, highlighted four, win/draw tally, undo.
 - **Solitaire** — Klondike with a seeded (mulberry32) deal, Draw 1 / Draw 3, drag-and-drop or tap a card to send it to its best spot, safe cards go to the foundations by themselves, undo (replays the action list), hint, timer, moves, Windows-style score and a CSS win cascade. Seven columns fit a 375 px screen.
 - **Checkers** — English draughts: compulsory captures, multi-jumps, crowning ends the move, draw after 40 moves each without a capture or man move. Negamax alpha-beta with a transposition table and capture extension, in a Web Worker; Easy/Medium/Hard (Hard: 120 000-node budget, ≈ 50 ms desktop). Legal moves are highlighted, pieces that must capture are ringed, moves animate along their path.
@@ -232,7 +234,7 @@ Every playable game saves its game in progress to `localStorage` and restores it
 | Arrow Out | level number, arrows that have left (in order), lives, mistakes, hints | after every tap, undo and hint; after a win the next level is saved |
 | Color Trails | level number, every drawn path, moves, last color drawn, hints | after every drag, undo and hint; after a win the next level is saved |
 | Flappy Wings | bird position and speed, pipes, score, distance, random seed | at most once per second while flying; at once on pause, `pagehide`, tab hidden and leaving |
-| Breakout | level, score, lives, each brick's remaining hits | on brick hits (at most every 1.5 s), at once on a lost life, level clear, pause, `pagehide` and tab hidden |
+| Breakout | level, score, lives, each brick's remaining hits | only when play stops: a lost life, level clear, pause, `pagehide`, tab hidden and leaving the game (never during a rally) |
 | Connect Four | moves played, opponent, difficulty, who started (tally kept separately) | after every move |
 | Solitaire | deal seed, Draw 1/3, the list of actions (3 bytes each), time | after every action; time on `pagehide` / tab hidden |
 | Checkers | moves played (as legal-move indexes), opponent, difficulty (tally kept separately) | after every move |

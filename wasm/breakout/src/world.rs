@@ -1,5 +1,12 @@
 //! Breakout physics: a fixed 1/120 s timestep, circle-vs-rectangle collisions, levels and power-ups.
 //! Coordinates are in a 480 × 640 world (y grows downwards).
+//!
+//! Frame pacing (phones stall now and then: GC, a notification, a slow storage write):
+//! - each frame simulates at most MAX_FRAME_SECONDS; a slower frame plays in slight slow motion instead of jumping;
+//! - a gap longer than HITCH_SECONDS is a hitch: only one normal frame is simulated and the rest is dropped, so time
+//!   freezes instead of the ball teleporting, and for HITCH_GRACE_SECONDS afterwards a ball lost off the bottom is
+//!   served again for free;
+//! - the ball moves in sub-steps shorter than half its radius, so it can't pass through the paddle or a brick.
 
 pub const WORLD_WIDTH: f32 = 480.0;
 pub const WORLD_HEIGHT: f32 = 640.0;
@@ -25,6 +32,18 @@ pub const MAX_LIVES: u32 = 5;
 const POWER_UP_FALL_SPEED: f32 = 150.0;
 const WIDE_SECONDS: f32 = 15.0;
 const MAX_BOUNCE_ANGLE: f32 = 1.05; // radians (~60°) at the paddle's edge
+/// Longest frame simulated in full (20 fps); slower frames play in slow motion.
+pub const MAX_FRAME_SECONDS: f32 = 0.05;
+/// A frame gap longer than this is a hitch (the page froze): drop it.
+pub const HITCH_SECONDS: f32 = 0.1;
+/// After a hitch, a ball lost within this much play time is served again without costing a life.
+pub const HITCH_GRACE_SECONDS: f32 = 0.3;
+/// Longest distance the ball moves in one collision sub-step (half its radius).
+pub const MAX_SUBSTEP_DISTANCE: f32 = BALL_RADIUS * 0.5;
+/// The ball always keeps a little sideways speed (no endless vertical bounces).
+const MIN_HORIZONTAL_SHARE: f32 = 0.06;
+/// Seconds without touching a breakable brick before the ball's angle is nudged (e.g. bouncing between steel bricks).
+const STALL_SECONDS: f32 = 8.0;
 
 /// `value` limited to `low..=high` (f32::clamp would pull float formatting into the wasm for its panic message).
 pub fn clamp_between(value: f32, low: f32, high: f32) -> f32 { value.max(low).min(high) }
@@ -47,6 +66,10 @@ pub mod events {
     pub const LIFE_LOST: u32 = 64;
     pub const LEVEL_CLEARED: u32 = 128;
     pub const GAME_OVER: u32 = 256;
+    /// The frame gap was a hitch and was dropped.
+    pub const HITCH: u32 = 512;
+    /// A ball was lost right after a hitch: served again, no life lost.
+    pub const FREE_RELAUNCH: u32 = 1024;
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -80,6 +103,10 @@ pub struct World {
     pub ball_speed: f32,
     accumulator: f32,
     random_state: u32,
+    /// Play time left in which a lost ball is forgiven (set by a hitch).
+    pub hitch_grace_seconds: f32,
+    /// Play time since the ball last hit a breakable brick (for the stall nudge).
+    pub seconds_since_progress: f32,
 }
 
 pub fn brick_rect(index: usize) -> (f32, f32, f32, f32) {
@@ -134,7 +161,7 @@ impl World {
             paddle_x: WORLD_WIDTH / 2.0, paddle_width: PADDLE_WIDTH, wide_seconds_left: 0.0, paddle_target: None, paddle_direction: 0.0,
             balls: Vec::with_capacity(MAX_BALLS), power_ups: Vec::with_capacity(MAX_POWER_UPS),
             bricks: [0; BRICK_COLUMNS * BRICK_ROWS], bricks_version: 0, ball_speed: level_speed(1), accumulator: 0.0,
-            random_state: seed | 1,
+            random_state: seed | 1, hitch_grace_seconds: 0.0, seconds_since_progress: 0.0,
         };
         world.start_level(1);
         world
@@ -159,6 +186,8 @@ impl World {
         self.wide_seconds_left = 0.0;
         self.balls.push(Ball { x: self.paddle_x, y: PADDLE_Y - BALL_RADIUS - 1.0, velocity_x: 0.0, velocity_y: 0.0 });
         self.accumulator = 0.0;
+        self.hitch_grace_seconds = 0.0;
+        self.seconds_since_progress = 0.0;
     }
 
     pub fn launch(&mut self) {
@@ -173,10 +202,23 @@ impl World {
 
     pub fn breakable_left(&self) -> usize { self.bricks.iter().filter(|&&hits| hits > 0 && hits != STEEL).count() }
 
-    /// Run whole fixed steps for `seconds` of real time (capped so a long pause doesn't fast-forward). Returns events.
+    /// Run whole fixed steps for `seconds` of real time since the last frame. Returns events.
+    /// A gap over HITCH_SECONDS is dropped (only one 60 Hz frame is played) and opens a short grace period;
+    /// otherwise at most MAX_FRAME_SECONDS are simulated, so the ball never jumps far in one frame.
     pub fn advance(&mut self, seconds: f32) -> u32 {
-        self.accumulator = (self.accumulator + clamp_between(seconds, 0.0, 0.1)).min(0.1);
         let mut events = 0;
+        // NaN or negative (clock quirks) count as no time
+        let seconds = if seconds > 0.0 { seconds } else { 0.0 };
+        let frame_seconds = if seconds > HITCH_SECONDS {
+            if self.phase == Phase::Playing {
+                events |= events::HITCH;
+                self.hitch_grace_seconds = HITCH_GRACE_SECONDS;
+            }
+            1.0 / 60.0
+        } else {
+            seconds.min(MAX_FRAME_SECONDS)
+        };
+        self.accumulator = (self.accumulator + frame_seconds).min(MAX_FRAME_SECONDS);
         while self.accumulator >= STEP_SECONDS {
             self.accumulator -= STEP_SECONDS;
             events |= self.step();
@@ -215,7 +257,19 @@ impl World {
             if self.balls[index].y - BALL_RADIUS > WORLD_HEIGHT { self.balls.swap_remove(index); } else { index += 1; }
         }
         events |= self.step_power_ups();
-        if self.balls.is_empty() {
+        self.hitch_grace_seconds = (self.hitch_grace_seconds - STEP_SECONDS).max(0.0);
+        self.seconds_since_progress += STEP_SECONDS;
+        if self.balls.is_empty() && self.hitch_grace_seconds > 0.0 {
+            // the page froze just before this: the player never had a fair chance, so serve again for free
+            let wide_seconds_left = self.wide_seconds_left;
+            let paddle_width = self.paddle_width;
+            let ball_speed = self.ball_speed;
+            self.serve();
+            self.wide_seconds_left = wide_seconds_left;
+            self.paddle_width = paddle_width;
+            self.ball_speed = ball_speed;
+            events |= events::FREE_RELAUNCH;
+        } else if self.balls.is_empty() {
             events |= events::LIFE_LOST;
             self.lives = self.lives.saturating_sub(1);
             if self.lives == 0 { self.phase = Phase::GameOver; events |= events::GAME_OVER; } else { self.serve(); }
@@ -227,39 +281,133 @@ impl World {
         events
     }
 
+    /// Move one ball through one fixed step in sub-steps of at most MAX_SUBSTEP_DISTANCE (continuous enough that it
+    /// can't skip over the paddle or a brick at any speed), bouncing off walls, the paddle and bricks.
     fn step_ball(&mut self, index: usize) -> u32 {
         let mut events = 0;
         let mut ball = self.balls[index];
-        ball.x += ball.velocity_x * STEP_SECONDS;
-        ball.y += ball.velocity_y * STEP_SECONDS;
-        // walls
+        let speed = (ball.velocity_x * ball.velocity_x + ball.velocity_y * ball.velocity_y).sqrt();
+        let substeps = ((speed * STEP_SECONDS / MAX_SUBSTEP_DISTANCE) as usize + 1).min(64);
+        let substep_seconds = STEP_SECONDS / substeps as f32;
+        for _ in 0..substeps {
+            let previous_x = ball.x;
+            let previous_y = ball.y;
+            ball.x += ball.velocity_x * substep_seconds;
+            ball.y += ball.velocity_y * substep_seconds;
+            events |= self.collide_walls(&mut ball);
+            events |= self.collide_paddle(&mut ball, previous_x, previous_y);
+            let brick_events = self.collide_bricks(&mut ball);
+            if brick_events != 0 {
+                events |= brick_events;
+                self.push_out_of_bricks(&mut ball);
+                self.collide_walls(&mut ball);
+            }
+            if ball.y - BALL_RADIUS > WORLD_HEIGHT { break; }
+        }
+        if events & (events::BRICK_HIT | events::BRICK_BROKEN) != 0 { self.seconds_since_progress = 0.0; }
+        self.keep_ball_angle_playable(&mut ball, events);
+        self.balls[index] = ball;
+        events
+    }
+
+    fn collide_walls(&self, ball: &mut Ball) -> u32 {
+        let mut events = 0;
         if ball.x < BALL_RADIUS { ball.x = BALL_RADIUS; ball.velocity_x = ball.velocity_x.abs(); events |= events::WALL; }
         if ball.x > WORLD_WIDTH - BALL_RADIUS { ball.x = WORLD_WIDTH - BALL_RADIUS; ball.velocity_x = -ball.velocity_x.abs(); events |= events::WALL; }
         if ball.y < BALL_RADIUS { ball.y = BALL_RADIUS; ball.velocity_y = ball.velocity_y.abs(); events |= events::WALL; }
-        // paddle: only while moving down and not already below the paddle's middle
+        events
+    }
+
+    /// Paddle: a falling ball that crossed the paddle's top edge during this sub-step (swept test), or that overlaps
+    /// the paddle's upper half (the paddle moved into it), bounces up at an angle set by where it hit.
+    fn collide_paddle(&mut self, ball: &mut Ball, previous_x: f32, previous_y: f32) -> u32 {
+        if ball.velocity_y <= 0.0 { return 0; }
         let half = self.paddle_width / 2.0;
-        if ball.velocity_y > 0.0 && ball.y + BALL_RADIUS >= PADDLE_Y && ball.y < PADDLE_Y + PADDLE_HEIGHT / 2.0
-            && ball.x >= self.paddle_x - half - BALL_RADIUS && ball.x <= self.paddle_x + half + BALL_RADIUS {
-            let offset = clamp_between((ball.x - self.paddle_x) / half, -1.0, 1.0);
-            let angle = offset * MAX_BOUNCE_ANGLE;
-            self.ball_speed = (self.ball_speed * 1.012).min(level_speed(self.level) * 1.3);
-            let (sine, cosine) = sine_cosine(angle);
-            ball.velocity_x = self.ball_speed * sine;
-            ball.velocity_y = -self.ball_speed * cosine;
-            ball.y = PADDLE_Y - BALL_RADIUS;
-            events |= events::PADDLE;
+        let reach = half + BALL_RADIUS;
+        let previous_bottom = previous_y + BALL_RADIUS;
+        let bottom = ball.y + BALL_RADIUS;
+        let mut hit_x = None;
+        if previous_bottom <= PADDLE_Y && bottom >= PADDLE_Y {
+            let fraction = if bottom > previous_bottom { (PADDLE_Y - previous_bottom) / (bottom - previous_bottom) } else { 0.0 };
+            let crossing_x = previous_x + (ball.x - previous_x) * fraction;
+            if (crossing_x - self.paddle_x).abs() <= reach { hit_x = Some(crossing_x); }
+        } else if bottom >= PADDLE_Y && ball.y < PADDLE_Y + PADDLE_HEIGHT / 2.0 && (ball.x - self.paddle_x).abs() <= reach {
+            hit_x = Some(ball.x);
         }
-        events |= self.collide_bricks(&mut ball);
-        // never let the ball go (almost) horizontal, or it can bounce between the walls forever
-        let minimum_vertical = self.ball_speed * 0.22;
+        let Some(hit_x) = hit_x else { return 0 };
+        let offset = clamp_between((hit_x - self.paddle_x) / half, -1.0, 1.0);
+        let angle = offset * MAX_BOUNCE_ANGLE;
+        self.ball_speed = (self.ball_speed * 1.012).min(level_speed(self.level) * 1.3);
+        let (sine, cosine) = sine_cosine(angle);
+        ball.x = hit_x;
+        ball.velocity_x = self.ball_speed * sine;
+        ball.velocity_y = -self.ball_speed * cosine;
+        ball.y = PADDLE_Y - BALL_RADIUS;
+        events::PADDLE
+    }
+
+    fn overlaps_a_brick(&self, x: f32, y: f32) -> bool {
+        // only the bricks around (x, y) can touch the ball
+        let first_column = ((x - BALL_RADIUS - BRICKS_LEFT) / (BRICK_WIDTH + BRICK_GAP)).floor().max(0.0) as usize;
+        let last_column = ((x + BALL_RADIUS - BRICKS_LEFT) / (BRICK_WIDTH + BRICK_GAP)).floor();
+        let first_row = ((y - BALL_RADIUS - BRICKS_TOP) / (BRICK_HEIGHT + BRICK_GAP)).floor().max(0.0) as usize;
+        let last_row = ((y + BALL_RADIUS - BRICKS_TOP) / (BRICK_HEIGHT + BRICK_GAP)).floor();
+        if last_column < 0.0 || last_row < 0.0 { return false; }
+        for row in first_row..=(last_row as usize).min(BRICK_ROWS - 1) {
+            for column in first_column..=(last_column as usize).min(BRICK_COLUMNS - 1) {
+                let index = row * BRICK_COLUMNS + column;
+                if self.bricks[index] == 0 { continue; }
+                let (left, top, right, bottom) = brick_rect(index);
+                let distance_x = x - clamp_between(x, left, right);
+                let distance_y = y - clamp_between(y, top, bottom);
+                if distance_x * distance_x + distance_y * distance_y < (BALL_RADIUS - 0.01) * (BALL_RADIUS - 0.01) { return true; }
+            }
+        }
+        false
+    }
+
+    /// After a bounce the ball may still touch a brick (a tight corner between two bricks): move it the shortest
+    /// distance that frees it, preferring its new direction of travel. No bounce, no score.
+    fn push_out_of_bricks(&self, ball: &mut Ball) {
+        if !self.overlaps_a_brick(ball.x, ball.y) { return; }
+        let speed = (ball.velocity_x * ball.velocity_x + ball.velocity_y * ball.velocity_y).sqrt().max(0.001);
+        let directions = [(ball.velocity_x / speed, ball.velocity_y / speed), (0.0, 1.0), (0.0, -1.0), (-1.0, 0.0), (1.0, 0.0)];
+        for half_units in 1..=80 {
+            let distance = half_units as f32 * 0.5;
+            for (direction_x, direction_y) in directions {
+                let x = ball.x + direction_x * distance;
+                let y = ball.y + direction_y * distance;
+                if !self.overlaps_a_brick(x, y) { ball.x = x; ball.y = y; return; }
+            }
+        }
+    }
+
+    /// Keep the ball from going (almost) flat or (exactly) vertical, and nudge it if it has bounced for a long time
+    /// without touching a breakable brick (e.g. between steel bricks and a wall).
+    fn keep_ball_angle_playable(&mut self, ball: &mut Ball, events: u32) {
+        let speed = (ball.velocity_x * ball.velocity_x + ball.velocity_y * ball.velocity_y).sqrt();
+        if speed < 1.0 { return; }
+        let minimum_vertical = speed * 0.22;
         if ball.velocity_y.abs() < minimum_vertical {
             let sign = if ball.velocity_y < 0.0 { -1.0 } else { 1.0 };
             ball.velocity_y = sign * minimum_vertical;
-            let horizontal = (self.ball_speed * self.ball_speed - minimum_vertical * minimum_vertical).sqrt();
-            ball.velocity_x = horizontal * ball.velocity_x.signum();
+            ball.velocity_x = (speed * speed - minimum_vertical * minimum_vertical).sqrt() * ball.velocity_x.signum();
         }
-        self.balls[index] = ball;
-        events
+        let minimum_horizontal = speed * MIN_HORIZONTAL_SHARE;
+        if ball.velocity_x.abs() < minimum_horizontal {
+            let sign = if ball.velocity_x != 0.0 { ball.velocity_x.signum() } else if self.random() & 1 == 0 { -1.0 } else { 1.0 };
+            ball.velocity_x = sign * minimum_horizontal;
+            ball.velocity_y = (speed * speed - minimum_horizontal * minimum_horizontal).sqrt() * ball.velocity_y.signum();
+        }
+        if self.seconds_since_progress > STALL_SECONDS && events & (events::WALL | events::STEEL_HIT | events::PADDLE) != 0 {
+            let turn = (8.0 + (self.random() % 9) as f32) * (core::f32::consts::PI / 180.0) * if self.random() & 1 == 0 { -1.0 } else { 1.0 };
+            let (sine, cosine) = sine_cosine(turn);
+            let velocity_x = ball.velocity_x * cosine - ball.velocity_y * sine;
+            let velocity_y = ball.velocity_x * sine + ball.velocity_y * cosine;
+            ball.velocity_x = velocity_x;
+            ball.velocity_y = velocity_y;
+            self.seconds_since_progress = STALL_SECONDS - 2.0; // nudge again in 2 s if still stuck
+        }
     }
 
     /// Bounce off the brick the ball overlaps most (one per step, so the ball never flips twice).

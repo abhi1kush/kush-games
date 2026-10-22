@@ -95,6 +95,15 @@ impl Breakout {
         restored
     }
 
+    // ---- test hooks (used by e2e/perf-breakout.mjs through ?breakoutTest; harmless in normal play) ----
+    pub fn debug_start_level(&mut self, level: u32) { self.world.start_level(level); self.fill_render(); }
+    pub fn debug_power_up(&mut self, kind: u32) {
+        let kind = match kind { 0 => PowerUpKind::Wide, 1 => PowerUpKind::MultiBall, 2 => PowerUpKind::Slow, _ => PowerUpKind::ExtraLife };
+        self.world.apply_power_up(kind);
+        self.fill_render();
+    }
+    pub fn debug_set_lives(&mut self, lives: u32) { self.world.lives = lives.clamp(1, MAX_LIVES); self.fill_render(); }
+
     pub fn level(&self) -> u32 { self.world.level }
     pub fn score(&self) -> u32 { self.world.score }
     pub fn lives(&self) -> u32 { self.world.lives }
