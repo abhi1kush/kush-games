@@ -140,6 +140,18 @@ export const games: GameDefinition[] = [
     component: lazy(() => import('./arrowout/ArrowOut')),
   },
   {
+    id: 'color-trails',
+    title: 'Color Trails',
+    tagline: 'Link every pair of dots. Fill the whole board.',
+    description: 'Drag to join each pair of same-colored dots with a path. Paths can\u2019t cross, and every square has to be filled. Each puzzle has exactly one solution; boards grow, colors multiply and the paths wind further as you go.',
+    categories: ['Puzzle'],
+    status: 'playable',
+    artwork: { gradientFrom: '#120a2e', gradientTo: '#3a1460', accentColor: '#f6c90e', glyph: '⦿' },
+    controls: 'Drag from a dot; U undo, H hint, R restart, L levels',
+    releaseYear: 2026,
+    component: lazy(() => import('./colortrails/ColorTrails')),
+  },
+  {
     id: 'connect-four',
     title: 'Connect Four',
     tagline: 'Drop discs. Line up four.',

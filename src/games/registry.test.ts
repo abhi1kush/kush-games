@@ -24,7 +24,7 @@ describe('game registry', () => {
 
   it('builds one All games grid with genre filters and a Coming Soon grid (each game shown once)', () => {
     const { playableGames, comingSoonGames, genres } = buildHomeSections();
-    expect(playableGames.map(game => game.id)).toEqual(['2048', 'snake', 'blocks', 'minesweeper', 'sudoku', 'chess', 'tic-tac-toe', 'memory-match', 'flappy-wings', 'arrow-out']);
+    expect(playableGames.map(game => game.id)).toEqual(['2048', 'snake', 'blocks', 'minesweeper', 'sudoku', 'chess', 'tic-tac-toe', 'memory-match', 'flappy-wings', 'arrow-out', 'color-trails']);
     expect(comingSoonGames.map(game => game.id)).toEqual(['breakout', 'connect-four', 'solitaire', 'checkers']);
     expect(genres.map(entry => entry.genre)).toEqual(['Puzzle', 'Arcade', 'Strategy', 'Classic Board']);
     expect(genres.find(entry => entry.genre === 'Puzzle')!.count).toBe(playableGames.filter(game => game.categories.includes('Puzzle')).length);

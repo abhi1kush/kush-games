@@ -34,6 +34,7 @@ Built with **React + TypeScript + Vite**. Deployed to GitHub Pages from the `gh-
 | Memory Match | ✅ Playable |
 | Flappy Wings | ✅ Playable |
 | Arrow Out | ✅ Playable |
+| Color Trails | ✅ Playable |
 | Breakout, Connect Four, Solitaire, Checkers | 🕒 Coming soon |
 
 ### Snake
@@ -133,9 +134,19 @@ For tests, `?blocksSeed=N` fixes the piece order and `?blocksSetup=quad` starts 
 - **Drawing:** one SVG. Each arrow's line runs along its path and on past the board edge, with a dash exactly as long as the arrow. Sliding the dash with `stroke-dashoffset` (Web Animations API) moves the arrow along its own path while the arrowhead slides straight on, so React doesn't re-render per frame (about 2 commits per tap). A wide invisible stroke over each arrow's cells is its tap target.
 - Saved (save version 3; saves from older generators are dropped, the cleared-level progress is kept): the level number and the order arrows left (replayed and checked on load), lives, mistakes and hints. The highest level cleared is kept in `kush-games-arrow-out-progress`. Keys: `U` undo, `H` hint, `R` restart, `N` next level, `M` mute. Browser test: `node e2e/arrow-out.mjs [url]`.
 
+### Color Trails
+
+A connect-the-dots path puzzle in the style of the "same color / connect two dots" Android games. Drag from a dot to its twin of the same color; paths go up, down, left and right, can't cross, and every square must be filled.
+
+- **Rules:** drawing over another color's path cuts it (it grows back if you back off within the same drag); dragging back over your own path shortens it; you can't draw through another color's dot. A *move* is counted each time you start drawing a different color than last time (like Flow), so a perfect solve is one move per color.
+- **Stars:** 3 = perfect (moves = colors, no hints), 2 = up to half as many extra moves (or hints used), 1 otherwise. Undo (`U`), Hint (`H`, lays one correct path), Restart (`R`), level select (`L` or tap the level name) for cleared levels.
+- **Levels:** 100 generated boards are bundled in `src/games/colortrails/levels.json` (12.6 KB, ≈4 KB gzipped). Each one fills the whole board and has exactly one solution, proven by an exact solver. They are generated at build time with `npx vite-node scripts/generate-color-trails.ts [from] [to] [outFile]` (seeded per level, so reruns give the same boards), then `scripts/merge-color-trails.ts` orders them by measured hardness (levels 1–12 within each board size; from level 13 on strictly by hardness, so now and then a harder board is a size smaller than the one before). Levels 101+ replay the hardest 50 (levels 51–100) mirrored/turned with colors reshuffled.
+- **Difficulty:** boards grow 5×5 → 6×6 → 7×7 → 8×8/9×9 → 10×12 (≈ 30px cells on a 375×667 phone). For each level the generator keeps the candidate closest to a rising hardness target, from: share of the board solvable by forced moves alone, solver guesses, average path length and bends, how far paths wander from the direct route, and short (≤ 3 cell) pairs. `npx vite-node scripts/color-trails-metrics.ts 1 5 10 20 30 40 60` prints the table.
+- **Colors:** a color-blind friendlier palette, and every color also has its own small symbol inside its dots.
+
 ### Shared sound setting
 
-The newer games (Minesweeper, Sudoku, Tic-Tac-Toe, Memory Match, Flappy Wings and Arrow Out) share `src/games/sharedSound.tsx`: generated Web Audio sounds and one 🔊/🔇 button saved as `kush-games-muted` (`M` toggles). Snake, Blocks and Chess keep their own mute settings.
+The newer games (Minesweeper, Sudoku, Tic-Tac-Toe, Memory Match, Flappy Wings, Arrow Out and Color Trails) share `src/games/sharedSound.tsx`: generated Web Audio sounds and one 🔊/🔇 button saved as `kush-games-muted` (`M` toggles). Snake, Blocks and Chess keep their own mute settings.
 
 ### Chess
 
@@ -188,6 +199,7 @@ Every playable game saves its game in progress to `localStorage` and restores it
 | Tic-Tac-Toe | board, who started, opponent, difficulty (the tally is kept separately) | after every move |
 | Memory Match | card faces, matched cards, open card, moves, time | after every flip; on `pagehide`, tab hidden and leaving |
 | Arrow Out | level number, arrows that have left (in order), lives, mistakes, hints | after every tap, undo and hint; after a win the next level is saved |
+| Color Trails | level number, every drawn path, moves, last color drawn, hints | after every drag, undo and hint; after a win the next level is saved |
 | Flappy Wings | bird position and speed, pipes, score, distance, random seed | at most once per second while flying; at once on pause, `pagehide`, tab hidden and leaving |
 | Blocks | board cells, current piece (type, position, rotation), next queue, 7-bag and random-generator state (so the piece order carries on), hold + can-hold, score, lines, level, timers | on every lock, line clear, hold and pause; on `pagehide`, tab hidden, and leaving the game |
 

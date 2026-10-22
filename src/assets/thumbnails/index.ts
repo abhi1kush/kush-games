@@ -9,6 +9,7 @@ import thumbTicTacToe from './tic-tac-toe.svg';
 import thumbMemoryMatch from './memory-match.svg';
 import thumbFlappyWings from './flappy-wings.svg';
 import thumbArrowOut from './arrow-out.svg';
+import thumbColorTrails from './color-trails.svg';
 import thumbBreakout from './breakout.svg';
 import thumbConnectFour from './connect-four.svg';
 import thumbSolitaire from './solitaire.svg';
@@ -25,6 +26,7 @@ export const THUMBNAILS: Record<string, string> = {
   'memory-match': thumbMemoryMatch,
   'flappy-wings': thumbFlappyWings,
   'arrow-out': thumbArrowOut,
+  'color-trails': thumbColorTrails,
   'breakout': thumbBreakout,
   'connect-four': thumbConnectFour,
   'solitaire': thumbSolitaire,
