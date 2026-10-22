@@ -128,6 +128,18 @@ export const games: GameDefinition[] = [
     releaseYear: 2026,
   },
   {
+    id: 'arrow-out',
+    title: 'Arrow Out',
+    tagline: 'Tap the arrows out — in the right order.',
+    description: 'A board packed with arrows. Tap one and it slides off the board the way it points, but only if nothing is in its way. Tap a blocked arrow and you lose a life. Clear every arrow to finish the level; boards grow as you go.',
+    categories: ['Puzzle'],
+    status: 'playable',
+    artwork: { gradientFrom: '#0f2027', gradientTo: '#2c5364', accentColor: '#ffd166', glyph: '⇄' },
+    controls: 'Tap or click an arrow; U undo, H hint, R restart',
+    releaseYear: 2026,
+    component: lazy(() => import('./arrowout/ArrowOut')),
+  },
+  {
     id: 'connect-four',
     title: 'Connect Four',
     tagline: 'Drop discs. Line up four.',

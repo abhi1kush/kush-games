@@ -32,6 +32,7 @@ Built with **React + TypeScript + Vite**. Deployed to GitHub Pages from the `gh-
 | Tic-Tac-Toe (vs computer or 2 players) | ✅ Playable |
 | Memory Match | ✅ Playable |
 | Flappy Wings | ✅ Playable |
+| Arrow Out | ✅ Playable |
 | Breakout, Connect Four, Solitaire, Checkers | 🕒 Coming soon |
 
 ### Snake
@@ -119,9 +120,18 @@ For tests, `?blocksSeed=N` fixes the piece order and `?blocksSetup=quad` starts 
 - `FlappyWings.tsx` runs a `requestAnimationFrame` loop with a **fixed 1/120 s timestep** (accumulator), so speed is the same at 60 Hz or 144 Hz. The sky, pipes, ground and bird are drawn once into offscreen canvases. React only re-renders when the score or status changes, and the loop sleeps while paused or after the crash.
 - Space / ↑ / click / tap to flap, `P` or the button to pause; switching tabs pauses. Score and best (`kush-games-flappy-best`). Flap, score and hit sounds.
 
+### Arrow Out
+
+`src/games/arrowout/` — our own take on the "tap away" arrow puzzle.
+
+- A board is packed with straight arrows (1–4 cells long). Tap an arrow and it slides off the board the way it points, but only if every cell between its head and the edge is empty. Tapping a blocked arrow bumps it into the first arrow in the way and **costs one of 3 lives**; losing all three fails the level (*Try again*). **Undo** puts the last escaped arrow back (lost lives stay lost), **Hint** highlights an arrow that can escape now, **Restart** resets the level. Clearing the board shows stars (lives left) and *Next level*.
+- `game.ts` generates every level from its number (same board every time). Arrows are placed one by one, and a new arrow is only accepted if its own path to the edge is clear of the arrows already placed, so removing them in reverse order always works: **every level can be cleared**. Boards grow from 4×4 to 9×12 and arrows get longer as levels go up. Removing an arrow never blocks another, so a level can never become stuck.
+- Arrows are SVG buttons moved with the Web Animations API (slide out, bump, return on undo), so a tap costs about 2 React commits and no re-render happens during the animation.
+- Saved: the level number and the order arrows left (replayed and checked on load), lives, mistakes and hints; the highest level cleared is kept in `kush-games-arrow-out-progress`. Keys: `U` undo, `H` hint, `R` restart, `N` next level, `M` mute. Browser test: `node e2e/arrow-out.mjs [url]`.
+
 ### Shared sound setting
 
-The five newer games share `src/games/sharedSound.tsx`: generated Web Audio sounds and one 🔊/🔇 button saved as `kush-games-muted` (`M` toggles). Snake, Blocks and Chess keep their own mute settings.
+The newer games (Minesweeper, Sudoku, Tic-Tac-Toe, Memory Match, Flappy Wings and Arrow Out) share `src/games/sharedSound.tsx`: generated Web Audio sounds and one 🔊/🔇 button saved as `kush-games-muted` (`M` toggles). Snake, Blocks and Chess keep their own mute settings.
 
 ### Chess
 
@@ -173,6 +183,7 @@ Every playable game saves its game in progress to `localStorage` and restores it
 | Sudoku | puzzle, solution, numbers, notes, undo history, mistakes, hints, time | as soon as a puzzle is made, after every change; on `pagehide`, tab hidden and leaving |
 | Tic-Tac-Toe | board, who started, opponent, difficulty (the tally is kept separately) | after every move |
 | Memory Match | card faces, matched cards, open card, moves, time | after every flip; on `pagehide`, tab hidden and leaving |
+| Arrow Out | level number, arrows that have left (in order), lives, mistakes, hints | after every tap, undo and hint; after a win the next level is saved |
 | Flappy Wings | bird position and speed, pipes, score, distance, random seed | at most once per second while flying; at once on pause, `pagehide`, tab hidden and leaving |
 | Blocks | board cells, current piece (type, position, rotation), next queue, 7-bag and random-generator state (so the piece order carries on), hold + can-hold, score, lines, level, timers | on every lock, line clear, hold and pause; on `pagehide`, tab hidden, and leaving the game |
 
