@@ -38,7 +38,7 @@ describe('game registry', () => {
   });
 
   it('every playable game has a save version for the Continue badge', () => {
-    games.filter(game => game.status === 'playable').forEach(game => expect(SAVE_VERSIONS[game.id]).toBe(1));
+    games.filter(game => game.status === 'playable').forEach(game => expect(SAVE_VERSIONS[game.id]).toBeGreaterThanOrEqual(1));
   });
 
   it('finds games by id', () => {

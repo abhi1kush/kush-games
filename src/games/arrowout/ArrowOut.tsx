@@ -3,7 +3,7 @@ import type { MouseEvent as ReactMouseEvent } from 'react';
 import { readStoredJson, saveStoredJson } from '../random';
 import { MuteButton, unlockAudio, useSharedMute } from '../sharedSound';
 import {
-  Arrow, arrowCells, ArrowGameState, arrowsLeft, DIRECTION_STEPS, exitPath, findHint, LIVES_PER_LEVEL, startLevel, tapArrow, undoLast,
+  Arrow, ArrowGameState, arrowsLeft, DIRECTION_STEPS, exitPath, findHint, LIVES_PER_LEVEL, startLevel, tapArrow, undoLast,
 } from './game';
 import { createArrowSaveSlot, MAX_LEVEL, restoreArrowGame, serializeArrowGame } from './save';
 import { playBlockedSound, playFailSound, playHintSound, playLevelClearSound, playSlideSound } from './sound';
@@ -11,37 +11,20 @@ import '../shared.css';
 import './arrowout.css';
 
 const PROGRESS_STORAGE_KEY = 'kush-games-arrow-out-progress';
-const ARROW_COLORS = ['#ff6b6b', '#ffd166', '#06d6a0', '#4cc9f0', '#b388ff', '#ff9f43', '#f78fb3', '#7bed9f'];
 
 interface Progress { highestCleared: number; }
 
 /** Feedback animations, each with a token so the same one can play again. */
 interface Effect { arrowId: number; token: number; cells: number; }
 
-/** SVG for one arrow, drawn pointing right in a length×1 box and turned to its direction. */
-function ArrowShape({ arrow, color }: { arrow: Arrow; color: string }) {
-  const long = arrow.length * 100;
-  const isVertical = arrow.direction === 'up' || arrow.direction === 'down';
-  const turn = {
-    right: '',
-    left: `translate(${long},100) rotate(180)`,
-    down: `translate(100,0) rotate(90)`,
-    up: `translate(0,${long}) rotate(-90)`,
-  }[arrow.direction];
-  return (
-    <svg viewBox={`0 0 ${isVertical ? 100 : long} ${isVertical ? long : 100}`} width="100%" height="100%" aria-hidden="true">
-      <g transform={turn}>
-        <rect x="8" y="8" width={long - 16} height="84" rx="22" fill="rgba(255,255,255,0.06)" />
-        <line x1="26" y1="50" x2={long - 44} y2="50" stroke={color} strokeWidth="22" strokeLinecap="round" />
-        <polygon points={`${long - 12},50 ${long - 52},16 ${long - 52},84`} fill={color} stroke={color} strokeWidth="8" strokeLinejoin="round" />
-      </g>
-    </svg>
-  );
-}
+/** SVG units per board cell. */
+const UNIT = 10;
+const BOARD_MARGIN = 3;
+const centerOf = (cell: { row: number; column: number }) => ({ x: cell.column * UNIT + UNIT / 2, y: cell.row * UNIT + UNIT / 2 });
 
 interface ArrowPieceProps {
   arrow: Arrow;
-  /** Cells from the head to just past the board edge (how far it slides out). */
+  /** Free cells from the head to the board edge (how far the head travels before the body follows it out). */
   exitCells: number;
   isLeaving: boolean;
   isHint: boolean;
@@ -51,65 +34,91 @@ interface ArrowPieceProps {
   onLeft: (arrowId: number) => void;
 }
 
-/** One arrow. Moves only with transform animations (Web Animations API), so React doesn't re-render while it moves. */
+/**
+ * One winding arrow. The line is drawn along its path plus a straight run past the board edge, with a dash
+ * exactly as long as the arrow. Sliding the dash forward (stroke-dashoffset) moves the arrow along its own trail
+ * like a train, while the arrowhead slides straight ahead. Both run as Web Animations, so React does nothing per frame.
+ */
 const ArrowPiece = memo(function ArrowPiece({ arrow, exitCells, isLeaving, isHint, bump, flash, returnToken, onLeft }: ArrowPieceProps) {
-  const elementRef = useRef<HTMLButtonElement>(null);
-  const cells = arrowCells(arrow);
-  const top = Math.min(...cells.map(cell => cell.row));
-  const left = Math.min(...cells.map(cell => cell.column));
-  const isVertical = arrow.direction === 'up' || arrow.direction === 'down';
+  const groupRef = useRef<SVGGElement>(null);
+  const lineRef = useRef<SVGPathElement>(null);
+  const glowRef = useRef<SVGPathElement>(null);
+  const headRef = useRef<SVGPolygonElement>(null);
   const { rowStep, columnStep } = DIRECTION_STEPS[arrow.direction];
-  const cellSize = () => {
-    const element = elementRef.current;
-    if (!element) return 40;
-    return (isVertical ? element.offsetHeight : element.offsetWidth) / arrow.length;
+  const bodyLength = (arrow.cells.length - 1) * UNIT;
+  /** Distance the head moves until the whole arrow is off the board. */
+  const travel = (exitCells + arrow.cells.length + 1) * UNIT;
+  const points = arrow.cells.map(centerOf);
+  const head = points[points.length - 1];
+  const exitPoint = { x: head.x + columnStep * travel, y: head.y + rowStep * travel };
+  const trackPath = `M${points.map(point => `${point.x} ${point.y}`).join('L')}L${exitPoint.x} ${exitPoint.y}`;
+  const bodyPath = `M${points.map(point => `${point.x} ${point.y}`).join('L')}`;
+  const dash = `${bodyLength} ${bodyLength + travel + UNIT * 2}`;
+  // arrowhead triangle: tip ahead of the head's centre, base across the line
+  const tipX = head.x + columnStep * 4.2, tipY = head.y + rowStep * 4.2;
+  const baseX = head.x - columnStep * 0.6, baseY = head.y - rowStep * 0.6;
+  const headPoints = `${tipX},${tipY} ${baseX + rowStep * 2.8},${baseY + columnStep * 2.8} ${baseX - rowStep * 2.8},${baseY - columnStep * 2.8}`;
+  const hitPath = `${bodyPath}L${head.x + columnStep * 3} ${head.y + rowStep * 3}`;
+
+  /** Move the arrow `distance` units along its track (keyframes of distances). */
+  const moveAlongTrack = (distances: number[], timing: KeyframeAnimationOptions) => {
+    const lineFrames = distances.map(distance => ({ strokeDashoffset: `${-distance}` }));
+    const headFrames = distances.map(distance => ({ transform: `translate(${columnStep * distance}px, ${rowStep * distance}px)` }));
+    return [lineRef.current?.animate(lineFrames, timing), glowRef.current?.animate(lineFrames, timing), headRef.current?.animate(headFrames, timing)]
+      .filter((animation): animation is Animation => !!animation);
   };
-  const offset = (cellCount: number) => `translate(${columnStep * cellCount * cellSize()}px, ${rowStep * cellCount * cellSize()}px)`;
 
   useLayoutEffect(() => {
-    if (!isLeaving || !elementRef.current) return;
-    const distance = exitCells + arrow.length;
-    const animation = elementRef.current.animate(
-      [{ transform: 'translate(0, 0)', opacity: 1 }, { transform: offset(distance * 0.75), opacity: 1, offset: 0.7 }, { transform: offset(distance), opacity: 0 }],
-      { duration: 160 + distance * 35, easing: 'cubic-bezier(0.5, 0, 0.9, 0.6)', fill: 'forwards' },
-    );
-    animation.onfinish = () => onLeft(arrow.id);
+    if (!isLeaving) return;
+    const animations = moveAlongTrack([0, travel], { duration: 220 + (travel / UNIT) * 32, easing: 'cubic-bezier(0.45, 0, 0.85, 0.5)', fill: 'forwards' });
+    if (animations[0]) animations[0].onfinish = () => onLeft(arrow.id);
     // undo or restart during the slide snaps the arrow back
-    return () => { animation.onfinish = null; animation.cancel(); };
+    return () => animations.forEach(animation => { animation.onfinish = null; animation.cancel(); });
   }, [isLeaving]);
 
   useEffect(() => {
-    if (!bump || !elementRef.current) return;
-    const reach = bump.cells + 0.22;
-    elementRef.current.animate(
-      [{ transform: 'translate(0, 0)' }, { transform: offset(reach), offset: 0.35 }, { transform: offset(reach - 0.12), offset: 0.5 }, { transform: 'translate(0, 0)', offset: 0.75 },
-        { transform: `translate(${rowStep ? 4 : 0}px, ${columnStep ? 4 : 0}px)`, offset: 0.85 }, { transform: 'translate(0, 0)' }],
-      { duration: 160 + bump.cells * 40 + 160, easing: 'ease-out' },
+    if (!bump) return;
+    const reach = (bump.cells + 0.35) * UNIT;
+    moveAlongTrack([0, reach, reach * 0.8, 0, 0], { duration: 260 + bump.cells * 45, easing: 'ease-out' });
+    groupRef.current?.animate(
+      [{ transform: 'translate(0, 0)' }, { transform: `translate(${rowStep * 1.2}px, ${columnStep * 1.2}px)`, offset: 0.7 },
+        { transform: `translate(${-rowStep * 1.2}px, ${-columnStep * 1.2}px)`, offset: 0.8 }, { transform: `translate(${rowStep * 0.8}px, ${columnStep * 0.8}px)`, offset: 0.9 },
+        { transform: 'translate(0, 0)' }],
+      { duration: 360 + bump.cells * 45 },
     );
+    flashRed(lineRef.current, headRef.current, 420 + bump.cells * 45, 0);
   }, [bump?.token]);
 
   useEffect(() => {
-    if (!flash || !elementRef.current) return;
-    elementRef.current.animate([{ transform: 'scale(1)' }, { transform: 'scale(0.9)', offset: 0.3 }, { transform: 'scale(1)' }], { duration: 260, delay: 90 + flash.cells * 40 });
+    if (!flash) return;
+    flashRed(lineRef.current, headRef.current, 380, 80 + flash.cells * 45);
   }, [flash?.token]);
 
   useEffect(() => {
-    if (!returnToken || !elementRef.current) return;
-    elementRef.current.animate([{ transform: offset(1.5), opacity: 0 }, { transform: 'translate(0, 0)', opacity: 1 }], { duration: 220, easing: 'ease-out' });
+    if (!returnToken) return;
+    moveAlongTrack([travel, 0], { duration: 360, easing: 'cubic-bezier(0.15, 0.5, 0.55, 1)' });
   }, [returnToken]);
 
   return (
-    <button ref={elementRef} type="button" className={`arrow-piece${isHint ? ' is-hint' : ''}${isLeaving ? ' is-leaving' : ''}${bump ? ' was-blocked' : ''}`}
-      data-arrow-id={arrow.id} data-row={arrow.headRow} data-column={arrow.headColumn} data-direction={arrow.direction} data-length={arrow.length}
-      aria-label={`Arrow pointing ${arrow.direction}`} disabled={isLeaving}
-      style={{
-        top: `calc(var(--arrow-cell) * ${top})`, left: `calc(var(--arrow-cell) * ${left})`,
-        width: `calc(var(--arrow-cell) * ${isVertical ? 1 : arrow.length})`, height: `calc(var(--arrow-cell) * ${isVertical ? arrow.length : 1})`,
-      }}>
-      <ArrowShape arrow={arrow} color={ARROW_COLORS[arrow.id % ARROW_COLORS.length]} />
-    </button>
+    <g ref={groupRef} className={`arrow-piece${isHint ? ' is-hint' : ''}${isLeaving ? ' is-leaving' : ''}`} data-arrow-id={arrow.id}
+      data-cells={arrow.cells.map(cell => `${cell.row},${cell.column}`).join(';')} data-direction={arrow.direction}
+      role="button" aria-label={`Arrow pointing ${arrow.direction}, ${arrow.cells.length} cells long`}>
+      <path ref={glowRef} className="arrow-glow" d={trackPath} strokeDasharray={dash} />
+      <path ref={lineRef} className="arrow-line" d={trackPath} strokeDasharray={dash} />
+      <polygon ref={headRef} className="arrow-head" points={headPoints} />
+      {!isLeaving && <path className="arrow-hit" d={hitPath} />}
+    </g>
   );
 });
+
+/** Briefly turn an arrow red (it was blocked, or it was in the way). */
+function flashRed(line: SVGPathElement | null, head: SVGPolygonElement | null, duration: number, delay: number) {
+  if (!line || !head) return;
+  const lineColor = getComputedStyle(line).stroke;
+  const headColor = getComputedStyle(head).fill;
+  line.animate([{ stroke: '#ff4d5e' }, { stroke: '#ff4d5e', offset: 0.6 }, { stroke: lineColor }], { duration, delay });
+  head.animate([{ fill: '#ff4d5e' }, { fill: '#ff4d5e', offset: 0.6 }, { fill: headColor }], { duration, delay });
+}
 
 function loadInitialGame(saveSlot: ReturnType<typeof createArrowSaveSlot>, progress: Progress) {
   const saved = saveSlot.load();
@@ -233,14 +242,18 @@ export default function ArrowOut() {
   }, [hint, restart, showLevel, toggleMute, undo]);
 
   const handleBoardClick = (event: ReactMouseEvent) => {
-    const piece = (event.target as HTMLElement).closest('[data-arrow-id]') as HTMLElement | null;
-    if (piece) tap(Number(piece.dataset.arrowId));
+    const piece = (event.target as Element).closest('[data-arrow-id]') as SVGGElement | null;
+    if (piece) tap(Number(piece.getAttribute('data-arrow-id')));
   };
 
   const { level } = game;
   const removed = useMemo(() => new Set(game.removedIds), [game.removedIds]);
-  const exitCellsById = useMemo(() => level.arrows.map(arrow => exitPath(arrow, level.rows, level.columns).length + 1), [level]);
-  const visibleArrows = level.arrows.filter(arrow => !removed.has(arrow.id) || leavingIds.includes(arrow.id));
+  const exitCellsById = useMemo(() => level.arrows.map(arrow => exitPath(arrow, level.rows, level.columns).length), [level]);
+  // arrows sliding out are drawn last, so they pass over the others
+  const orderedArrows = [
+    ...level.arrows.filter(arrow => !removed.has(arrow.id)),
+    ...leavingIds.map(arrowId => level.arrows[arrowId]),
+  ];
   const highestPlayable = Math.min(MAX_LEVEL, progress.highestCleared + 1);
   const starCount = game.livesLeft;
 
@@ -266,13 +279,16 @@ export default function ArrowOut() {
       </div>
       {wasRestored && <p className="game-restored" data-testid="restored">💾 Saved level restored</p>}
       <div className="arrow-board-wrap">
-        <div className={`arrow-board${game.status !== 'playing' ? ' is-over' : ''}`} data-testid="arrow-board" onClick={handleBoardClick}
+        <div className={`arrow-board${game.status !== 'playing' ? ' is-over' : ''}`} data-testid="arrow-board"
           style={{ ['--arrow-columns' as string]: level.columns, ['--arrow-rows' as string]: level.rows }}>
-          {visibleArrows.map(arrow => (
-            <ArrowPiece key={`${level.number}-${arrow.id}`} arrow={arrow} exitCells={exitCellsById[arrow.id]} isLeaving={removed.has(arrow.id)} isHint={hintId === arrow.id}
-              bump={bump?.arrowId === arrow.id ? bump : null} flash={flash?.arrowId === arrow.id ? flash : null}
-              returnToken={returned?.arrowId === arrow.id ? returned.token : 0} onLeft={handleLeft} />
-          ))}
+          <svg className="arrow-svg" viewBox={`${-BOARD_MARGIN} ${-BOARD_MARGIN} ${level.columns * UNIT + BOARD_MARGIN * 2} ${level.rows * UNIT + BOARD_MARGIN * 2}`}
+            onClick={handleBoardClick} data-testid="arrow-svg">
+            {orderedArrows.map(arrow => (
+              <ArrowPiece key={`${level.number}-${arrow.id}`} arrow={arrow} exitCells={exitCellsById[arrow.id]} isLeaving={removed.has(arrow.id)} isHint={hintId === arrow.id}
+                bump={bump?.arrowId === arrow.id ? bump : null} flash={flash?.arrowId === arrow.id ? flash : null}
+                returnToken={returned?.arrowId === arrow.id ? returned.token : 0} onLeft={handleLeft} />
+            ))}
+          </svg>
         </div>
         {game.status === 'won' && (
           <div className="arrow-overlay arrow-overlay--won" data-testid="arrow-won">

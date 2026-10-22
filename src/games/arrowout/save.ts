@@ -2,6 +2,8 @@ import { createSaveSlot, isInteger, isRecord } from '../persistence';
 import { ArrowGameState, canEscape, LIVES_PER_LEVEL, startLevel } from './game';
 
 export const MAX_LEVEL = 999;
+/** Version 2: winding arrows (version 1 saves were for straight arrows and are discarded). */
+export const ARROW_SAVE_VERSION = 2;
 
 export interface SavedArrowGame {
   levelNumber: number;
@@ -33,4 +35,4 @@ export function restoreArrowGame(data: unknown): ArrowGameState | null {
 
 export const parseArrowSave = (data: unknown): SavedArrowGame | null => (restoreArrowGame(data) ? (data as SavedArrowGame) : null);
 
-export const createArrowSaveSlot = () => createSaveSlot({ gameId: 'arrow-out', version: 1, parse: parseArrowSave });
+export const createArrowSaveSlot = () => createSaveSlot({ gameId: 'arrow-out', version: ARROW_SAVE_VERSION, parse: parseArrowSave });

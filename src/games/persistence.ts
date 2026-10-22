@@ -38,7 +38,7 @@ export interface SaveSlot<Data> {
 /** Saves for the current versions; the home page uses this to show "Continue" badges. */
 export const SAVE_VERSIONS: Record<string, number> = {
   '2048': 1, snake: 1, blocks: 1, chess: 1, minesweeper: 1, sudoku: 1, 'tic-tac-toe': 1, 'memory-match': 1, 'flappy-wings': 1,
-  'arrow-out': 1,
+  'arrow-out': 2,
 };
 
 export const saveKey = (gameId: string, version: number) => `kush-games:${gameId}:save:v${version}`;

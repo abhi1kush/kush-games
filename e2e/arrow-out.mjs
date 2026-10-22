@@ -1,5 +1,5 @@
 // Arrow Out smoke test at 1280px and 375px, with screenshots.
-// (arrows are tapped with force: the hint pulse keeps an arrow "moving", which Playwright would otherwise wait out)
+// Arrows are winding SVG paths, so taps go to the centre of a chosen cell of the arrow (its head by default).
 // Usage: node e2e/arrow-out.mjs [siteUrl] [screenshotDirectory]
 import { chromium } from 'playwright-core';
 import { reactCommitCounterScript } from './perf-snake.mjs';
@@ -15,7 +15,7 @@ const check = (condition, message) => {
 const pageErrors = [];
 const noOverflow = page => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
 const gameData = (page, name) => page.getByTestId('arrow-out').getAttribute(`data-${name}`);
-const SAVE_KEY = 'kush-games:arrow-out:save:v1';
+const SAVE_KEY = 'kush-games:arrow-out:save:v2';
 
 /** Which arrows on the board can escape right now, worked out from the data-* attributes. */
 const classifyArrows = page => page.evaluate(() => {
@@ -23,27 +23,38 @@ const classifyArrows = page => page.evaluate(() => {
   const rows = Number(root.dataset.rows), columns = Number(root.dataset.columns);
   const steps = { up: [-1, 0], down: [1, 0], left: [0, -1], right: [0, 1] };
   const pieces = [...document.querySelectorAll('.arrow-piece:not(.is-leaving)')].map(element => ({
-    id: Number(element.dataset.arrowId), row: Number(element.dataset.row), column: Number(element.dataset.column),
-    direction: element.dataset.direction, length: Number(element.dataset.length),
+    id: Number(element.dataset.arrowId), direction: element.dataset.direction,
+    cells: element.dataset.cells.split(';').map(pair => pair.split(',').map(Number)),
   }));
   const occupied = new Map();
+  for (const piece of pieces) for (const [row, column] of piece.cells) occupied.set(`${row},${column}`, piece.id);
+  const free = [], blocked = [], lengths = {};
   for (const piece of pieces) {
     const [rowStep, columnStep] = steps[piece.direction];
-    for (let offset = 0; offset < piece.length; offset++) occupied.set(`${piece.row - rowStep * offset},${piece.column - columnStep * offset}`, piece.id);
-  }
-  const free = [], blocked = [];
-  for (const piece of pieces) {
-    const [rowStep, columnStep] = steps[piece.direction];
-    let row = piece.row + rowStep, column = piece.column + columnStep, isBlocked = false;
+    const [headRow, headColumn] = piece.cells[piece.cells.length - 1];
+    let row = headRow + rowStep, column = headColumn + columnStep, isBlocked = false;
     while (row >= 0 && row < rows && column >= 0 && column < columns) {
       if (occupied.has(`${row},${column}`)) { isBlocked = true; break; }
       row += rowStep; column += columnStep;
     }
     (isBlocked ? blocked : free).push(piece.id);
+    lengths[piece.id] = piece.cells.length;
   }
-  return { free, blocked };
+  return { free, blocked, lengths, coveredCells: occupied.size, totalCells: rows * columns };
 });
-const tapArrow = (page, arrowId, isTouch = false) => (isTouch ? page.locator(`[data-arrow-id="${arrowId}"]`).tap({ force: true }) : page.locator(`[data-arrow-id="${arrowId}"]`).click({ force: true }));
+/** Tap the centre of one of the arrow's cells (default: a middle body cell, to prove the whole arrow is tappable). */
+async function tapArrow(page, arrowId, isTouch = false, cellChoice = 'middle') {
+  const point = await page.evaluate(([id, choice]) => {
+    const root = document.querySelector('[data-testid=arrow-out]');
+    const columns = Number(root.dataset.columns), rows = Number(root.dataset.rows);
+    const box = document.querySelector('[data-testid=arrow-svg]').getBoundingClientRect();
+    const cellSize = box.width / (columns + 0.6);
+    const cells = document.querySelector(`[data-arrow-id="${id}"]`).dataset.cells.split(';').map(pair => pair.split(',').map(Number));
+    const [row, column] = choice === 'head' ? cells[cells.length - 1] : cells[Math.floor(cells.length / 2)];
+    return { x: box.left + (0.3 + column + 0.5) * cellSize, y: box.top + (0.3 + row + 0.5) * (box.height / (rows + 0.6)) };
+  }, [arrowId, cellChoice]);
+  if (isTouch) await page.touchscreen.tap(point.x, point.y); else await page.mouse.click(point.x, point.y);
+}
 async function clearLevel(page) {
   for (let guard = 0; guard < 200 && await gameData(page, 'status') === 'playing'; guard++) {
     const { free } = await classifyArrows(page);
@@ -65,7 +76,9 @@ check(await page.locator('[data-testid=row-play-now] [data-testid=card-arrow-out
   && await page.locator('[data-testid=row-puzzle] [data-testid=card-arrow-out]').count() === 1, 'hub: Arrow Out card is in Play Now and the Puzzle row');
 await page.goto(`${siteUrl}#/play/arrow-out`, { waitUntil: 'networkidle' });
 await page.waitForSelector('[data-testid=arrow-out]');
-check(await gameData(page, 'level') === '1' && await gameData(page, 'status') === 'playing' && await page.locator('.arrow-piece').count() > 3, 'arrow: level 1 starts with a packed board');
+const levelOneStats = await classifyArrows(page);
+check(await gameData(page, 'level') === '1' && await gameData(page, 'status') === 'playing' && levelOneStats.coveredCells / levelOneStats.totalCells >= 0.9,
+  `arrow: level 1 starts with a packed 5×5 board (${levelOneStats.coveredCells}/${levelOneStats.totalCells} cells)`);
 
 // Level 1: blocked tap, escape, undo, hint
 let arrowsAtStart = Number(await gameData(page, 'arrows-left'));
@@ -75,6 +88,7 @@ if (blocked.length) {
   await tapArrow(page, blocked[0]);
   check(await gameData(page, 'lives') === '2' && Number(await gameData(page, 'arrows-left')) === arrowsAtStart
     && await page.locator(`[data-arrow-id="${blocked[0]}"]`).count() === 1, 'arrow: a blocked arrow stays put and costs a life');
+  await page.waitForTimeout(500);
 } else check(true, 'arrow: (level 1 has no blocked arrow; blocked tap checked on level 2)');
 const commitsBefore = await page.evaluate(() => window.__reactCommits);
 await tapArrow(page, free[0]);
@@ -109,11 +123,18 @@ for (let tap = 0; tap < 3; tap++) await tapArrow(page, blocked[0]);
 check(await gameData(page, 'status') === 'failed' && await page.getByTestId('arrow-failed').isVisible(), 'arrow: three blocked taps fail the level');
 await page.getByTestId('arrow-retry').click();
 check(await gameData(page, 'status') === 'playing' && await gameData(page, 'lives') === '3', 'arrow: Try again restarts the level with full lives');
-({ free } = await classifyArrows(page));
-await tapArrow(page, free[0]);
-await page.getByTestId('arrow-hint').click();
-await page.waitForTimeout(700);
-await page.screenshot({ path: `${screenshotDirectory}/kush-games-arrow.png` });
+// a mid-size level (pretend 9 levels are done): screenshot while the longest free arrow slides out in gold
+await page.evaluate(key => { localStorage.setItem('kush-games-arrow-out-progress', JSON.stringify({ highestCleared: 9 })); localStorage.removeItem(key); }, SAVE_KEY);
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForSelector('[data-testid=arrow-out]');
+const midStats = await classifyArrows(page);
+check(await gameData(page, 'level') === '10' && midStats.coveredCells / midStats.totalCells >= 0.9 && Math.max(...Object.values(midStats.lengths)) >= 8,
+  `arrow: level 10 is a packed ${await gameData(page, 'columns')}×${await gameData(page, 'rows')} board with long winding arrows (${midStats.coveredCells}/${midStats.totalCells} cells, ${Object.keys(midStats.lengths).length} arrows)`);
+const longestFree = [...midStats.free].sort((first, second) => midStats.lengths[second] - midStats.lengths[first])[0];
+await tapArrow(page, longestFree);
+await page.waitForTimeout(260);
+check(await page.locator(`[data-arrow-id="${longestFree}"].is-leaving`).count() === 1, 'arrow: the tapped arrow turns gold and slides out along its path');
+await page.screenshot({ path: `${screenshotDirectory}/kush-games-arrow-bent.png` });
 check(await noOverflow(page), 'arrow: no horizontal overflow on desktop');
 await page.getByTestId('back').click();
 await page.waitForSelector('[data-testid=row-play-now]');
@@ -127,23 +148,28 @@ phone.on('pageerror', error => pageErrors.push(`mobile: ${error}`));
 await phone.goto(`${siteUrl}#/play/arrow-out`, { waitUntil: 'networkidle' });
 await phone.waitForSelector('[data-testid=arrow-out]');
 check(await noOverflow(phone), 'mobile: level 1 has no horizontal overflow');
-// jump to a big late level (9×12) by pretending 29 levels are done
+// jump to a big late level (12×16) by pretending 29 levels are done
 await phone.evaluate(key => { localStorage.setItem('kush-games-arrow-out-progress', JSON.stringify({ highestCleared: 29 })); localStorage.removeItem(key); }, SAVE_KEY);
 await phone.reload({ waitUntil: 'networkidle' });
 await phone.waitForSelector('[data-testid=arrow-out]');
 const boardBox = await phone.getByTestId('arrow-board').boundingBox();
-check(await gameData(phone, 'level') === '30' && await gameData(phone, 'columns') === '9' && await noOverflow(phone)
-  && boardBox.x >= 0 && boardBox.x + boardBox.width <= 375, `mobile: level 30 (9×${await gameData(phone, 'rows')}) fits the screen (${boardBox.width.toFixed(0)}px wide)`);
-const firstPieceBox = await phone.locator('.arrow-piece').first().boundingBox();
-check(Math.min(firstPieceBox.width, firstPieceBox.height) >= 26, `mobile: arrows stay tappable (${Math.min(firstPieceBox.width, firstPieceBox.height).toFixed(0)}px)`);
+check(await gameData(phone, 'level') === '30' && await gameData(phone, 'columns') === '12' && await noOverflow(phone)
+  && boardBox.x >= 0 && boardBox.x + boardBox.width <= 375, `mobile: level 30 (${await gameData(phone, 'columns')}×${await gameData(phone, 'rows')}) fits the screen (${boardBox.width.toFixed(0)}px wide)`);
+const phoneCellSize = boardBox.width / (12 + 0.6);
+check(phoneCellSize >= 22, `mobile: cells stay tappable (${phoneCellSize.toFixed(1)}px)`);
 const mobileStart = Number(await gameData(phone, 'arrows-left'));
 ({ free, blocked } = await classifyArrows(phone));
 await tapArrow(phone, free[0], true);
-await tapArrow(phone, free[1], true);
 await tapArrow(phone, blocked[0], true);
-check(Number(await gameData(phone, 'arrows-left')) === mobileStart - 2 && await gameData(phone, 'lives') === '2', 'mobile: taps send free arrows out and a blocked tap costs a life');
-await phone.waitForTimeout(700);
-await phone.screenshot({ path: `${screenshotDirectory}/kush-games-arrow-mobile.png` });
+check(Number(await gameData(phone, 'arrows-left')) === mobileStart - 1 && await gameData(phone, 'lives') === '2', 'mobile: taps send a free arrow out and a blocked tap costs a life');
+await phone.waitForTimeout(900);
+({ free } = await classifyArrows(phone));
+const phoneLengths = (await classifyArrows(phone)).lengths;
+const longestPhoneFree = [...free].sort((first, second) => phoneLengths[second] - phoneLengths[first])[0];
+await tapArrow(phone, longestPhoneFree, true);
+await phone.waitForTimeout(240);
+await phone.screenshot({ path: `${screenshotDirectory}/kush-games-arrow-bent-mobile.png` });
+check(await noOverflow(phone), 'mobile: still no horizontal overflow while an arrow slides out');
 await mobile.close();
 await browser.close();
 

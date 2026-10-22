@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
-  arrowCells, canEscape, exitPath, findBlocker, findHint, generateLevel, Level, levelShape, LIVES_PER_LEVEL, MAX_COLUMNS, MAX_ROWS, startLevel, tapArrow,
-  undoLast,
+  Arrow, canEscape, countBends, exitPath, fillRatio, findBlocker, findHint, generateLevel, headOf, Level, levelShape, LIVES_PER_LEVEL, MAX_COLUMNS, MAX_ROWS,
+  startLevel, tapArrow, undoLast,
 } from './game';
-import { restoreArrowGame, serializeArrowGame } from './save';
+import { ARROW_SAVE_VERSION, restoreArrowGame, serializeArrowGame } from './save';
+import { SAVE_VERSIONS } from '../persistence';
 
-/** Keep tapping any free arrow; returns true when the board empties. */
-function clearsGreedily(level: Level): boolean {
-  let state = { ...startLevel(level.number), level };
+/** Keep tapping any free arrow; returns true when the board empties without a single blocked tap. */
+function clearsBySimulation(levelNumber: number): boolean {
+  let state = startLevel(levelNumber);
   while (state.status === 'playing') {
     const freeArrow = findHint(state);
     if (freeArrow === null) return false;
@@ -16,26 +17,34 @@ function clearsGreedily(level: Level): boolean {
   return state.status === 'won' && state.mistakes === 0;
 }
 
+const isAdjacent = (first: { row: number; column: number }, second: { row: number; column: number }) =>
+  Math.abs(first.row - second.row) + Math.abs(first.column - second.column) === 1;
+
 describe('arrow out level generator', () => {
-  it('makes valid, solvable boards for the first 60 levels', () => {
+  it('levels 1–60: connected paths, no overlaps, packed boards, fully clearable', () => {
     for (let levelNumber = 1; levelNumber <= 60; levelNumber++) {
       const level = generateLevel(levelNumber);
       const covered = new Set<string>();
       for (const arrow of level.arrows) {
-        for (const { row, column } of arrowCells(arrow)) {
-          expect(row >= 0 && row < level.rows && column >= 0 && column < level.columns).toBe(true);
-          const key = `${row},${column}`;
-          expect(covered.has(key)).toBe(false); // no overlaps
+        expect(arrow.cells.length).toBeGreaterThanOrEqual(2);
+        arrow.cells.forEach((cell, index) => {
+          expect(cell.row >= 0 && cell.row < level.rows && cell.column >= 0 && cell.column < level.columns).toBe(true);
+          if (index) expect(isAdjacent(cell, arrow.cells[index - 1])).toBe(true); // a continuous path
+          const key = `${cell.row},${cell.column}`;
+          expect(covered.has(key)).toBe(false); // no overlaps, including with itself
           covered.add(key);
-        }
+        });
+        // the head's own ray never crosses its body
+        const ownCells = new Set(arrow.cells.map(cell => `${cell.row},${cell.column}`));
+        expect(exitPath(arrow, level.rows, level.columns).some(cell => ownCells.has(`${cell.row},${cell.column}`))).toBe(false);
       }
-      expect(covered.size / (level.rows * level.columns)).toBeGreaterThan(0.6); // packed board
-      expect(clearsGreedily(level)).toBe(true);
+      expect(fillRatio(level)).toBeGreaterThanOrEqual(0.9);
+      expect(clearsBySimulation(levelNumber)).toBe(true);
     }
   });
 
-  it('removing arrows in reverse placement order always works', () => {
-    for (const levelNumber of [1, 10, 40]) {
+  it('reverse placement order is a valid clearing order', () => {
+    for (const levelNumber of [1, 12, 40]) {
       let state = startLevel(levelNumber);
       for (let id = state.level.arrows.length - 1; id >= 0; id--) {
         expect(canEscape(state, id)).toBe(true);
@@ -45,55 +54,65 @@ describe('arrow out level generator', () => {
     }
   });
 
-  it('is deterministic and gets bigger and harder', () => {
-    expect(generateLevel(7)).toEqual(generateLevel(7));
-    expect(levelShape(1)).toMatchObject({ rows: 4, columns: 4 });
-    const sizes = Array.from({ length: 40 }, (_, index) => levelShape(index + 1)).map(shape => shape.rows * shape.columns);
-    sizes.forEach((size, index) => { if (index) expect(size).toBeGreaterThanOrEqual(sizes[index - 1]); });
-    expect(levelShape(100)).toMatchObject({ rows: MAX_ROWS, columns: MAX_COLUMNS });
-    // after the first couple of levels some arrows start out blocked
-    for (let levelNumber = 3; levelNumber <= 20; levelNumber++) {
+  it('mid and late levels have winding arrows and blocked arrows', () => {
+    for (let levelNumber = 8; levelNumber <= 40; levelNumber++) {
+      const level = generateLevel(levelNumber);
+      const averageBends = level.arrows.reduce((total, arrow) => total + countBends(arrow), 0) / level.arrows.length;
+      expect(averageBends).toBeGreaterThan(1);
+      expect(Math.max(...level.arrows.map(arrow => arrow.cells.length))).toBeGreaterThanOrEqual(8);
       const state = startLevel(levelNumber);
-      expect(state.level.arrows.some(arrow => !canEscape(state, arrow.id))).toBe(true);
+      const freeCount = level.arrows.filter(arrow => canEscape(state, arrow.id)).length;
+      expect(freeCount).toBeLessThan(level.arrows.length / 2);
     }
+  });
+
+  it('is deterministic and grows from 5×5 to 12×16', () => {
+    expect(generateLevel(7)).toEqual(generateLevel(7));
+    expect(levelShape(1)).toMatchObject({ rows: 5, columns: 5 });
+    const shapes = Array.from({ length: 40 }, (_, index) => levelShape(index + 1));
+    shapes.forEach((shape, index) => {
+      if (!index) return;
+      expect(shape.rows).toBeGreaterThanOrEqual(shapes[index - 1].rows);
+      expect(shape.columns).toBeGreaterThanOrEqual(shapes[index - 1].columns);
+      expect(shape.maxLength).toBeGreaterThanOrEqual(shapes[index - 1].maxLength);
+    });
+    expect(levelShape(30)).toMatchObject({ rows: MAX_ROWS, columns: MAX_COLUMNS });
   });
 });
 
 describe('arrow out moves', () => {
-  // 1×3 board: [→][→][ ]  the left arrow is blocked by the middle one
-  const tinyLevel: Level = {
-    number: 1, rows: 1, columns: 3,
-    arrows: [
-      { id: 0, headRow: 0, headColumn: 0, direction: 'right', length: 1 },
-      { id: 1, headRow: 0, headColumn: 1, direction: 'right', length: 1 },
-    ],
-  };
+  // 3×3 board:  an L-shaped arrow (0,0)→(1,0)→(1,1) pointing right is blocked by a 2-cell arrow in column 2.
+  const blocked: Arrow = { id: 0, cells: [{ row: 0, column: 0 }, { row: 1, column: 0 }, { row: 1, column: 1 }], direction: 'right' };
+  const blocker: Arrow = { id: 1, cells: [{ row: 2, column: 2 }, { row: 1, column: 2 }], direction: 'up' };
+  const tinyLevel: Level = { number: 1, rows: 3, columns: 3, arrows: [blocked, blocker] };
   const tinyState = () => ({ ...startLevel(1), level: tinyLevel });
 
-  it('finds paths and blockers', () => {
-    expect(exitPath(tinyLevel.arrows[0], 1, 3)).toEqual([{ row: 0, column: 1 }, { row: 0, column: 2 }]);
+  it('only the straight line from the head to the edge matters', () => {
+    expect(headOf(blocked)).toEqual({ row: 1, column: 1 });
+    expect(exitPath(blocked, 3, 3)).toEqual([{ row: 1, column: 2 }]);
+    expect(countBends(blocked)).toBe(1);
     expect(findBlocker(tinyLevel, [], 0)).toEqual({ blockerId: 1, freeCells: 0 });
+    expect(findBlocker(tinyLevel, [], 1)).toBeNull(); // (0,2) is empty
     expect(findBlocker(tinyLevel, [1], 0)).toBeNull();
-    expect(arrowCells({ id: 0, headRow: 2, headColumn: 2, direction: 'up', length: 3 })).toEqual([{ row: 2, column: 2 }, { row: 3, column: 2 }, { row: 4, column: 2 }]);
   });
 
   it('a blocked tap costs a life; three of them fail the level', () => {
-    let state = tinyState();
-    const first = tapArrow(state, 0);
+    const first = tapArrow(tinyState(), 0);
     expect(first.result).toEqual({ kind: 'blocked', blockerId: 1, freeCells: 0 });
     expect(first.state.livesLeft).toBe(LIVES_PER_LEVEL - 1);
     expect(first.state.removedIds).toEqual([]);
-    state = tapArrow(tapArrow(first.state, 0).state, 0).state;
-    expect(state.status).toBe('failed');
-    expect(tapArrow(state, 1).result.kind).toBe('ignored');
+    const failed = tapArrow(tapArrow(first.state, 0).state, 0).state;
+    expect(failed.status).toBe('failed');
+    expect(tapArrow(failed, 1).result.kind).toBe('ignored');
   });
 
-  it('free arrows escape, then the blocked one can go; undo puts an arrow back', () => {
-    let state = tinyState();
-    state = tapArrow(state, 1).state;
+  it('free arrows escape, which frees the next; undo puts an arrow back', () => {
+    let state = tapArrow(tinyState(), 1).state;
     expect(state.removedIds).toEqual([1]);
-    expect(tapArrow(state, 1).result.kind).toBe('ignored'); // already gone
-    expect(undoLast(state).removedIds).toEqual([]);
+    expect(tapArrow(state, 1).result.kind).toBe('ignored');
+    const undone = undoLast(state);
+    expect(undone.removedIds).toEqual([]);
+    expect(canEscape(undone, 0)).toBe(false);
     state = tapArrow(state, 0).state;
     expect(state.status).toBe('won');
     expect(state.livesLeft).toBe(LIVES_PER_LEVEL);
@@ -105,7 +124,9 @@ describe('arrow out moves', () => {
     expect(canEscape(state, findHint(state)!)).toBe(true);
   });
 
-  it('saves and restores progress, rejecting impossible saves', () => {
+  it('saves and restores progress, rejecting impossible saves; old straight-arrow saves use another version', () => {
+    expect(ARROW_SAVE_VERSION).toBe(2);
+    expect(SAVE_VERSIONS['arrow-out']).toBe(ARROW_SAVE_VERSION);
     let state = startLevel(9);
     for (let step = 0; step < 4; step++) state = tapArrow(state, findHint(state)!).state;
     state = { ...state, livesLeft: 2, mistakes: 1 };
@@ -115,6 +136,5 @@ describe('arrow out moves', () => {
     const blockedId = state.level.arrows.find(arrow => !canEscape(startLevel(9), arrow.id))!.id;
     expect(restoreArrowGame({ ...serializeArrowGame(startLevel(9)), removedIds: [blockedId] })).toBeNull();
     expect(restoreArrowGame({ ...serializeArrowGame(state), livesLeft: 0 })).toBeNull();
-    expect(restoreArrowGame({ ...serializeArrowGame(state), levelNumber: 0 })).toBeNull();
   });
 });

@@ -5,18 +5,26 @@
 .arrow-lives { color: #ff4d6d; letter-spacing: 2px; font-size: 20px; line-height: 22px; }
 .arrow-lives .is-lost { color: #444; }
 .arrow-board-wrap { position: relative; }
-.arrow-board { --arrow-cell: clamp(26px, min(calc((100vw - 36px) / var(--arrow-columns)), calc((100vh - 300px) / var(--arrow-rows))), 56px);
-  position: relative; width: calc(var(--arrow-cell) * var(--arrow-columns)); height: calc(var(--arrow-cell) * var(--arrow-rows));
-  box-sizing: content-box; padding: 6px; border-radius: 12px; overflow: hidden; touch-action: manipulation; -webkit-user-select: none; user-select: none;
-  background-color: #151a24; background-image: radial-gradient(circle, rgba(255,255,255,0.13) 1.5px, transparent 2px);
-  background-size: var(--arrow-cell) var(--arrow-cell); background-position: 6px 6px; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08); }
-.arrow-board > .arrow-piece { margin: 6px; }
-.arrow-piece { position: absolute; padding: 0; border: 0; background: none; cursor: pointer; will-change: transform; -webkit-tap-highlight-color: transparent; }
-.arrow-piece:disabled { cursor: default; }
-.arrow-piece:focus-visible { outline: 2px solid #fff; outline-offset: -2px; border-radius: 10px; }
-.arrow-piece svg { display: block; overflow: visible; }
-.arrow-piece.is-hint { animation: arrow-hint 0.9s ease-in-out infinite; z-index: 1; filter: drop-shadow(0 0 6px #fff); }
-.arrow-board.is-over .arrow-piece:not(.is-leaving) { opacity: 0.45; }
+.arrow-board { --arrow-cell: clamp(22px, min(calc((100vw - 28px) / (var(--arrow-columns) + 0.6)), calc((100vh - 290px) / (var(--arrow-rows) + 0.6))), 46px);
+  width: calc(var(--arrow-cell) * (var(--arrow-columns) + 0.6)); height: calc(var(--arrow-cell) * (var(--arrow-rows) + 0.6));
+  border-radius: 14px; background: radial-gradient(120% 90% at 50% 0%, #142a5c 0%, #0b1638 55%, #08102a 100%);
+  box-shadow: inset 0 0 0 1px rgba(124,196,255,0.12), 0 10px 30px rgba(0,0,0,0.45); touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+.arrow-svg { display: block; width: 100%; height: 100%; overflow: hidden; -webkit-tap-highlight-color: transparent; }
+.arrow-line { fill: none; stroke: #8fd0ff; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.arrow-glow { fill: none; stroke: #4aa8ff; stroke-width: 4.2; stroke-opacity: 0.16; stroke-linecap: round; stroke-linejoin: round; }
+.arrow-head { fill: #8fd0ff; stroke: #8fd0ff; stroke-width: 0.6; stroke-linejoin: round; }
+.arrow-hit { fill: none; stroke: transparent; stroke-width: 9.5; stroke-linecap: square; stroke-linejoin: miter; pointer-events: stroke; cursor: pointer; }
+.arrow-piece { outline: none; }
+.arrow-piece:hover .arrow-line { stroke: #c4e6ff; }
+.arrow-piece:hover .arrow-glow { stroke-opacity: 0.3; }
+.arrow-piece.is-hint .arrow-line, .arrow-piece.is-hint .arrow-head { stroke: #ffffff; fill: #ffffff; }
+.arrow-piece.is-hint .arrow-line { fill: none; }
+.arrow-piece.is-hint .arrow-glow { stroke: #ffffff; animation: arrow-hint 0.9s ease-in-out infinite; }
+.arrow-piece.is-leaving { pointer-events: none; }
+.arrow-piece.is-leaving .arrow-line { stroke: #ffd36b; stroke-width: 1.8; }
+.arrow-piece.is-leaving .arrow-head { fill: #ffd36b; stroke: #ffd36b; }
+.arrow-piece.is-leaving .arrow-glow { stroke: #ff9f1c; stroke-opacity: 0.5; stroke-width: 5; }
+.arrow-board.is-over .arrow-piece:not(.is-leaving) { opacity: 0.4; }
 .arrow-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center;
   background: rgba(8,10,16,0.82); border-radius: 12px; padding: 16px; overflow: hidden; animation: arrow-fade 260ms ease-out; }
 .arrow-overlay p { margin: 0; }
@@ -33,7 +41,7 @@
 .arrow-confetti i:nth-child(9) { left: 68%; background: #06d6a0; animation-delay: 0.2s; } .arrow-confetti i:nth-child(10) { left: 76%; background: #4cc9f0; animation-delay: 0.4s; }
 .arrow-confetti i:nth-child(11) { left: 84%; background: #f78fb3; animation-delay: 0.12s; } .arrow-confetti i:nth-child(12) { left: 91%; animation-delay: 0.28s; }
 .arrow-confetti i:nth-child(13) { left: 32%; background: #7bed9f; animation-delay: 0.5s; } .arrow-confetti i:nth-child(14) { left: 72%; background: #b388ff; animation-delay: 0.45s; }
-@keyframes arrow-hint { 50% { transform: scale(1.1); } }
+@keyframes arrow-hint { 0%, 100% { stroke-opacity: 0.15; } 50% { stroke-opacity: 0.6; } }
 @keyframes arrow-fade { from { opacity: 0; } }
 @keyframes arrow-pop { from { transform: scale(0.3); opacity: 0; } }
 @keyframes arrow-confetti { to { transform: translateY(420px) rotate(540deg); opacity: 0.2; } }
