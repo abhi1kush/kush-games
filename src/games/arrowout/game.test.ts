@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
-  Arrow, canEscape, countBends, exitPath, fillRatio, findBlocker, findHint, generateLevel, headOf, Level, levelShape, LIVES_PER_LEVEL, MAX_COLUMNS, MAX_ROWS,
+  Arrow, canEscape, clearingOrder, countBends, exitPath, fillRatio, findBlocker, findHint, generateLevel, headOf, Level, levelShape, LIVES_PER_LEVEL, MAX_COLUMNS, MAX_ROWS,
   startLevel, tapArrow, undoLast,
 } from './game';
+import { LevelMetrics, measureLevel } from './metrics';
 import { ARROW_SAVE_VERSION, restoreArrowGame, serializeArrowGame } from './save';
 import { SAVE_VERSIONS } from '../persistence';
 
@@ -59,11 +60,47 @@ describe('arrow out level generator', () => {
       const level = generateLevel(levelNumber);
       const averageBends = level.arrows.reduce((total, arrow) => total + countBends(arrow), 0) / level.arrows.length;
       expect(averageBends).toBeGreaterThan(1);
-      expect(Math.max(...level.arrows.map(arrow => arrow.cells.length))).toBeGreaterThanOrEqual(8);
+      expect(Math.max(...level.arrows.map(arrow => arrow.cells.length))).toBeGreaterThanOrEqual(6);
       const state = startLevel(levelNumber);
       const freeCount = level.arrows.filter(arrow => canEscape(state, arrow.id)).length;
       expect(freeCount).toBeLessThan(level.arrows.length / 2);
     }
+  });
+
+  it('difficulty rises with level, not just board size', () => {
+    const metricsByLevel = Array.from({ length: 60 }, (_, index) => measureLevel(generateLevel(index + 1)));
+    const average = (from: number, to: number, pick: (metrics: LevelMetrics) => number) =>
+      metricsByLevel.slice(from - 1, to).reduce((total, metrics) => total + pick(metrics), 0) / (to - from + 1);
+    const earlyFree = average(1, 10, metrics => metrics.initialFreeRatio);
+    const lateFree = average(21, 40, metrics => metrics.initialFreeRatio);
+    expect(lateFree).toBeLessThan(earlyFree * 0.5);
+    expect(lateFree).toBeLessThanOrEqual(0.13);
+    expect(average(41, 60, metrics => metrics.initialFreeRatio)).toBeLessThanOrEqual(0.13);
+    expect(average(21, 40, metrics => metrics.averageFreeRatio)).toBeLessThan(average(1, 10, metrics => metrics.averageFreeRatio) * 0.7);
+    expect(average(21, 40, metrics => metrics.dependencyDepth)).toBeGreaterThan(average(1, 10, metrics => metrics.dependencyDepth) * 2);
+    expect(average(21, 60, metrics => metrics.dependencyDepth)).toBeGreaterThanOrEqual(average(11, 20, metrics => metrics.dependencyDepth));
+    metricsByLevel.slice(20).forEach(metrics => {
+      expect(metrics.initialFreeRatio).toBeLessThanOrEqual(0.2);
+      expect(metrics.directionShare).toBeLessThanOrEqual(0.4);
+      expect(metrics.laneRuns / metrics.arrowCount).toBeLessThanOrEqual(0.2);
+      expect(metrics.crossBlockShare).toBeGreaterThanOrEqual(0.55);
+    });
+    expect(average(21, 60, metrics => metrics.directionShare)).toBeLessThanOrEqual(0.35);
+  });
+
+  it('measures a hand-made level', () => {
+    // arrow 0 points right into arrow 1 (pointing up, free); arrow 2 points right into arrow 1's tail
+    const level: Level = { number: 1, rows: 3, columns: 3, arrows: [
+      { id: 0, cells: [{ row: 1, column: 0 }, { row: 1, column: 1 }], direction: 'right' },
+      { id: 1, cells: [{ row: 2, column: 2 }, { row: 1, column: 2 }], direction: 'up' },
+      { id: 2, cells: [{ row: 2, column: 0 }, { row: 2, column: 1 }], direction: 'right' },
+    ] };
+    const metrics = measureLevel(level);
+    expect(metrics.initialFreeRatio).toBeCloseTo(1 / 3); // only arrow 1 is free
+    expect(metrics.dependencyDepth).toBe(2); // round 1: arrow 1; round 2: arrows 0 and 2
+    expect(metrics.crossBlockShare).toBe(1);
+    expect(metrics.laneRuns).toBe(0);
+    expect(clearingOrder(level)).toEqual([1, 0, 2]);
   });
 
   it('is deterministic and grows from 5×5 to 12×16', () => {
@@ -125,7 +162,7 @@ describe('arrow out moves', () => {
   });
 
   it('saves and restores progress, rejecting impossible saves; old straight-arrow saves use another version', () => {
-    expect(ARROW_SAVE_VERSION).toBe(2);
+    expect(ARROW_SAVE_VERSION).toBe(3);
     expect(SAVE_VERSIONS['arrow-out']).toBe(ARROW_SAVE_VERSION);
     let state = startLevel(9);
     for (let step = 0; step < 4; step++) state = tapArrow(state, findHint(state)!).state;

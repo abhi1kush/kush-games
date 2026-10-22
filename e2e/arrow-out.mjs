@@ -15,7 +15,7 @@ const check = (condition, message) => {
 const pageErrors = [];
 const noOverflow = page => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
 const gameData = (page, name) => page.getByTestId('arrow-out').getAttribute(`data-${name}`);
-const SAVE_KEY = 'kush-games:arrow-out:save:v2';
+const SAVE_KEY = 'kush-games:arrow-out:save:v3';
 
 /** Which arrows on the board can escape right now, worked out from the data-* attributes. */
 const classifyArrows = page => page.evaluate(() => {
@@ -123,18 +123,26 @@ for (let tap = 0; tap < 3; tap++) await tapArrow(page, blocked[0]);
 check(await gameData(page, 'status') === 'failed' && await page.getByTestId('arrow-failed').isVisible(), 'arrow: three blocked taps fail the level');
 await page.getByTestId('arrow-retry').click();
 check(await gameData(page, 'status') === 'playing' && await gameData(page, 'lives') === '3', 'arrow: Try again restarts the level with full lives');
-// a mid-size level (pretend 9 levels are done): screenshot while the longest free arrow slides out in gold
+// a mid-size level (pretend 9 levels are done)
 await page.evaluate(key => { localStorage.setItem('kush-games-arrow-out-progress', JSON.stringify({ highestCleared: 9 })); localStorage.removeItem(key); }, SAVE_KEY);
 await page.reload({ waitUntil: 'networkidle' });
 await page.waitForSelector('[data-testid=arrow-out]');
 const midStats = await classifyArrows(page);
-check(await gameData(page, 'level') === '10' && midStats.coveredCells / midStats.totalCells >= 0.9 && Math.max(...Object.values(midStats.lengths)) >= 8,
+check(await gameData(page, 'level') === '10' && midStats.coveredCells / midStats.totalCells >= 0.9 && Math.max(...Object.values(midStats.lengths)) >= 6,
   `arrow: level 10 is a packed ${await gameData(page, 'columns')}×${await gameData(page, 'rows')} board with long winding arrows (${midStats.coveredCells}/${midStats.totalCells} cells, ${Object.keys(midStats.lengths).length} arrows)`);
-const longestFree = [...midStats.free].sort((first, second) => midStats.lengths[second] - midStats.lengths[first])[0];
+// a hard level (pretend 24 levels are done): few free arrows; screenshot while the longest free one slides out in gold
+await page.evaluate(key => { localStorage.setItem('kush-games-arrow-out-progress', JSON.stringify({ highestCleared: 24 })); localStorage.removeItem(key); }, SAVE_KEY);
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForSelector('[data-testid=arrow-out]');
+const hardStats = await classifyArrows(page);
+const hardArrowCount = hardStats.free.length + hardStats.blocked.length;
+check(await gameData(page, 'level') === '25' && hardStats.free.length / hardArrowCount <= 0.2 && hardStats.coveredCells / hardStats.totalCells >= 0.9,
+  `arrow: level 25 is hard: only ${hardStats.free.length} of ${hardArrowCount} arrows free at the start, ${hardStats.coveredCells}/${hardStats.totalCells} cells covered`);
+const longestFree = [...hardStats.free].sort((first, second) => hardStats.lengths[second] - hardStats.lengths[first])[0];
 await tapArrow(page, longestFree);
 await page.waitForTimeout(260);
 check(await page.locator(`[data-arrow-id="${longestFree}"].is-leaving`).count() === 1, 'arrow: the tapped arrow turns gold and slides out along its path');
-await page.screenshot({ path: `${screenshotDirectory}/kush-games-arrow-bent.png` });
+await page.screenshot({ path: `${screenshotDirectory}/kush-games-arrow-hard.png` });
 check(await noOverflow(page), 'arrow: no horizontal overflow on desktop');
 const savedBeforeBack = await page.evaluate(key => localStorage.getItem(key), SAVE_KEY);
 await page.getByTestId('back').click();
@@ -150,13 +158,13 @@ phone.on('pageerror', error => pageErrors.push(`mobile: ${error}`));
 await phone.goto(`${siteUrl}#/play/arrow-out`, { waitUntil: 'networkidle' });
 await phone.waitForSelector('[data-testid=arrow-out]');
 check(await noOverflow(phone), 'mobile: level 1 has no horizontal overflow');
-// jump to a big late level (12×16) by pretending 29 levels are done
-await phone.evaluate(key => { localStorage.setItem('kush-games-arrow-out-progress', JSON.stringify({ highestCleared: 29 })); localStorage.removeItem(key); }, SAVE_KEY);
+// jump to a big hard level (12×16) by pretending 24 levels are done
+await phone.evaluate(key => { localStorage.setItem('kush-games-arrow-out-progress', JSON.stringify({ highestCleared: 24 })); localStorage.removeItem(key); }, SAVE_KEY);
 await phone.reload({ waitUntil: 'networkidle' });
 await phone.waitForSelector('[data-testid=arrow-out]');
 const boardBox = await phone.getByTestId('arrow-board').boundingBox();
-check(await gameData(phone, 'level') === '30' && await gameData(phone, 'columns') === '12' && await noOverflow(phone)
-  && boardBox.x >= 0 && boardBox.x + boardBox.width <= 375, `mobile: level 30 (${await gameData(phone, 'columns')}×${await gameData(phone, 'rows')}) fits the screen (${boardBox.width.toFixed(0)}px wide)`);
+check(await gameData(phone, 'level') === '25' && await gameData(phone, 'columns') === '12' && await noOverflow(phone)
+  && boardBox.x >= 0 && boardBox.x + boardBox.width <= 375, `mobile: level 25 (${await gameData(phone, 'columns')}×${await gameData(phone, 'rows')}) fits the screen (${boardBox.width.toFixed(0)}px wide)`);
 const phoneCellSize = boardBox.width / (12 + 0.6);
 check(phoneCellSize >= 22, `mobile: cells stay tappable (${phoneCellSize.toFixed(1)}px)`);
 const mobileStart = Number(await gameData(phone, 'arrows-left'));
@@ -170,7 +178,7 @@ const phoneLengths = (await classifyArrows(phone)).lengths;
 const longestPhoneFree = [...free].sort((first, second) => phoneLengths[second] - phoneLengths[first])[0];
 await tapArrow(phone, longestPhoneFree, true);
 await phone.waitForTimeout(240);
-await phone.screenshot({ path: `${screenshotDirectory}/kush-games-arrow-bent-mobile.png` });
+await phone.screenshot({ path: `${screenshotDirectory}/kush-games-arrow-hard-mobile.png` });
 check(await noOverflow(phone), 'mobile: still no horizontal overflow while an arrow slides out');
 await mobile.close();
 await browser.close();

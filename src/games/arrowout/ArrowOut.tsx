@@ -3,7 +3,7 @@ import type { MouseEvent as ReactMouseEvent } from 'react';
 import { readStoredJson, saveStoredJson } from '../random';
 import { MuteButton, unlockAudio, useSharedMute } from '../sharedSound';
 import {
-  Arrow, ArrowGameState, arrowsLeft, DIRECTION_STEPS, exitPath, findHint, LIVES_PER_LEVEL, startLevel, tapArrow, undoLast,
+  Arrow, ArrowGameState, arrowsLeft, DIRECTION_STEPS, exitPath, findHint, getLevel, LIVES_PER_LEVEL, startLevel, tapArrow, undoLast,
 } from './game';
 import { createArrowSaveSlot, MAX_LEVEL, restoreArrowGame, serializeArrowGame } from './save';
 import { playBlockedSound, playFailSound, playHintSound, playLevelClearSound, playSlideSound } from './sound';
@@ -225,6 +225,20 @@ export default function ArrowOut() {
   }, [hintId, isMutedRef, persist]);
 
   const restart = useCallback(() => showLevel(gameRef.current.level.number), [showLevel]);
+
+  // Generate the next level while the player is thinking, so "Next level" opens instantly on slow phones.
+  const currentLevelNumber = game.level.number;
+  useEffect(() => {
+    if (currentLevelNumber >= MAX_LEVEL) return;
+    const precompute = () => { getLevel(currentLevelNumber + 1); };
+    const idleWindow = window as Window & { requestIdleCallback?: (callback: () => void) => number; cancelIdleCallback?: (handle: number) => void };
+    if (idleWindow.requestIdleCallback) {
+      const handle = idleWindow.requestIdleCallback(precompute);
+      return () => idleWindow.cancelIdleCallback?.(handle);
+    }
+    const timer = window.setTimeout(precompute, 1500);
+    return () => window.clearTimeout(timer);
+  }, [currentLevelNumber]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {

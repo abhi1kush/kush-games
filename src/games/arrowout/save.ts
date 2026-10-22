@@ -3,7 +3,7 @@ import { ArrowGameState, canEscape, LIVES_PER_LEVEL, startLevel } from './game';
 
 export const MAX_LEVEL = 999;
 /** Version 2: winding arrows (version 1 saves were for straight arrows and are discarded). */
-export const ARROW_SAVE_VERSION = 2;
+export const ARROW_SAVE_VERSION = 3;
 
 export interface SavedArrowGame {
   levelNumber: number;

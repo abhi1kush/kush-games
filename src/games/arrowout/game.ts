@@ -4,7 +4,8 @@
  * trail. That only works when every cell between the head and the board edge is empty; tapping a blocked arrow
  * costs a life. Pure logic: levels, legality, lives, undo and hints.
  */
-import { createRandom } from '../random';
+import { createRandom, shuffled } from '../random';
+import { dependencies, hardnessScore, measureLevel } from './metrics';
 
 export type Direction = 'up' | 'down' | 'left' | 'right';
 export const DIRECTIONS: Direction[] = ['up', 'down', 'left', 'right'];
@@ -68,62 +69,107 @@ export function countBends(arrow: Arrow): number {
   return bends;
 }
 
-export interface LevelShape { rows: number; columns: number; minLength: number; maxLength: number; turnChance: number; }
+export interface LevelShape {
+  rows: number;
+  columns: number;
+  minLength: number;
+  maxLength: number;
+  turnChance: number;
+  /** 0 for the tutorial levels 1–3, rising to 1 by level 21: how hard the generator tries to tangle the arrows. */
+  difficulty: number;
+}
 
-/** Boards grow from 5×5 to 12×16; arrows get longer and wind more as levels go up. */
+/**
+ * Boards grow from 5×5 to 12×16 (reached at level 14). After that the size stays the same and the
+ * difficulty setting keeps rising to level 21, so the puzzles keep getting harder.
+ */
 export function levelShape(levelNumber: number): LevelShape {
   const growth = Math.max(0, levelNumber - 1);
   return {
-    columns: Math.min(MAX_COLUMNS, 5 + Math.floor(growth / 2)),
-    rows: Math.min(MAX_ROWS, 5 + Math.floor(levelNumber / 2) + Math.floor(growth / 4)),
+    columns: Math.min(MAX_COLUMNS, 5 + Math.floor((growth * 7) / 13)),
+    rows: Math.min(MAX_ROWS, 5 + Math.floor((growth * 11) / 13)),
     minLength: 2,
-    maxLength: Math.min(16, 4 + Math.floor(levelNumber / 2)),
+    maxLength: Math.min(8, 4 + Math.floor(levelNumber / 5)),
     turnChance: Math.min(0.65, 0.35 + levelNumber * 0.015),
+    difficulty: Math.max(0, Math.min(1, (levelNumber - 3) / 18)),
   };
 }
 
 const levelSeed = (levelNumber: number) => Math.imul(levelNumber, 2654435761) ^ 0x5eed;
 
+/** Boards at least this full are accepted. */
+export const TARGET_FILL = 0.9;
+
 /**
- * Builds a level that can always be cleared.
+ * Generates a level: the same level number always gives the same board, and every board can be cleared.
+ * Harder levels try several boards and keep the one that measures hardest (fewest free arrows, longest
+ * chains of arrows waiting on each other, mixed directions, few trivial same-direction lanes).
+ */
+export function generateLevel(levelNumber: number): Level {
+  const shape = levelShape(levelNumber);
+  const boardsToCompare = 1 + Math.round(shape.difficulty * 6);
+  const scoreBoard = (level: Level) => {
+    const isFullEnough = fillRatio(level) >= TARGET_FILL;
+    // full boards always beat boards with gaps; among full boards the hardest wins
+    return (isFullEnough ? 100 : fillRatio(level) * 10) + (shape.difficulty > 0 ? hardnessScore(measureLevel(level)) : 0);
+  };
+  const drafts: { level: Level; score: number }[] = [];
+  let acceptedBoards = 0;
+  for (let attempt = 0; attempt < boardsToCompare + 6 && acceptedBoards < boardsToCompare; attempt++) {
+    const level = buildLevel(levelNumber, levelSeed(levelNumber) + attempt * 7919, shape);
+    if (fillRatio(level) >= TARGET_FILL) acceptedBoards++;
+    drafts.push({ level, score: scoreBoard(level) });
+  }
+  drafts.sort((first, second) => second.score - first.score);
+  if (shape.difficulty === 0) return drafts[0].level;
+  // the slower tangling pass only runs on the two most promising drafts
+  const random = createRandom(levelSeed(levelNumber) ^ 0x7a9e1);
+  const tangled = drafts.slice(0, 2).map(draft => tangleLevel(draft.level, 0.4 - 0.33 * shape.difficulty, shape.maxLength + 8, random));
+  return tangled.map(level => ({ level, score: scoreBoard(level) })).sort((first, second) => second.score - first.score)[0].level;
+}
+
+interface PlacedArrow {
+  cells: number[];
+  direction: Direction;
+  ray: number[];
+  /** How many arrows placed later sit on this arrow's exit line (0 = it will start free). */
+  blockedBy: number;
+}
+
+/**
+ * Builds one board.
  *
  * Arrows are placed one after another, and the board is cleared in the reverse order: the arrow placed last
  * leaves first. So when arrow k leaves, only arrows placed before it are still on the board, which means arrow
- * k's exit ray only has to be clear of arrows placed BEFORE it. Arrows placed later may sit on that ray; they are
- * already gone by then. Each new arrow therefore picks a head whose ray to the edge is empty right now, then
- * grows a winding body backwards from the head (never onto its own ray).
+ * k's exit line only has to be clear of arrows placed BEFORE it. Arrows placed later may sit on that line; they
+ * are already gone by then. Each new arrow therefore picks a head whose line to the edge is empty right now,
+ * then grows a winding body backwards from the head (never onto its own line).
  *
- * To pack the board, a second pass lengthens arrows at the tail into empty neighbouring cells. Arrow k may take
- * a cell only if no arrow placed after k (and not k itself) needs that cell for its ray; the same reasoning keeps
- * the level solvable. The two passes repeat until nothing more fits. The same level number gives the same board.
+ * That freedom is what makes a level hard: a later arrow's body lying across an earlier arrow's exit line is a
+ * dependency the player has to discover. On harder levels each step samples several candidate arrows and keeps
+ * the one that blocks the most still-unblocked arrows, especially ones pointing another way, with a deep head
+ * (its own long exit line is likely to be crossed later), while avoiding same-direction lanes and keeping the
+ * four directions balanced.
+ *
+ * To pack the board, a second pass lengthens arrows at the tail into empty cells. Arrow k may take a cell only
+ * if no arrow placed after k (and not k itself) needs that cell for its line; the same reasoning keeps the
+ * level solvable. The two passes repeat until nothing more fits.
  */
-export function generateLevel(levelNumber: number): Level {
-  // Rarely a board leaves an unreachable pocket; then a few other seeds are tried and the fullest board is kept.
-  let best: Level | null = null;
-  for (let attempt = 0; attempt < 6; attempt++) {
-    const level = buildLevel(levelNumber, levelSeed(levelNumber) + attempt * 7919);
-    if (!best || fillRatio(level) > fillRatio(best)) best = level;
-    if (fillRatio(level) >= TARGET_FILL) break;
-  }
-  return best!;
-}
-
-/** Boards at least this full are accepted straight away. */
-export const TARGET_FILL = 0.9;
-
-function buildLevel(levelNumber: number, seed: number): Level {
-  const shape = levelShape(levelNumber);
-  const { rows, columns } = shape;
+export function buildLevel(levelNumber: number, seed: number, shape: LevelShape): Level {
+  const { rows, columns, difficulty } = shape;
   const random = createRandom(seed);
   const cellCount = rows * columns;
+  const longestLine = Math.max(rows, columns);
   const indexOf = (row: number, column: number) => row * columns + column;
   const inside = (row: number, column: number) => row >= 0 && row < rows && column >= 0 && column < columns;
   /** Which arrow covers each cell (-1 = empty). */
   const owner: number[] = Array(cellCount).fill(-1);
-  /** Arrows whose exit ray crosses each cell. */
+  /** Arrows whose exit line crosses each cell. */
   const rayOwners: number[][] = Array.from({ length: cellCount }, () => []);
-  const placed: { cells: number[]; direction: Direction }[] = [];
-  const maxTotalLength = shape.maxLength * 3;
+  const placed: PlacedArrow[] = [];
+  const directionCounts: Record<Direction, number> = { up: 0, down: 0, left: 0, right: 0 };
+  const maxTotalLength = shape.maxLength + 5;
+  const samplesPerArrow = 1 + Math.round(difficulty * 11);
 
   const rayFrom = (headIndex: number, direction: Direction): number[] | null => {
     const { rowStep, columnStep } = DIRECTION_STEPS[direction];
@@ -151,37 +197,20 @@ function buildLevel(levelNumber: number, seed: number): Level {
     }
     return neighbors;
   };
+  /** Would putting a cell into a body pointing `direction` block a still-free arrow that points another way? */
+  const blocksFreeCrossArrow = (cell: number, direction: Direction) =>
+    rayOwners[cell].some(arrowIndex => placed[arrowIndex].blockedBy === 0 && placed[arrowIndex].direction !== direction);
 
-  /** Place one new arrow; false when no head has a clear ray any more. */
-  const placeArrow = (): boolean => {
-    const candidates: { head: number; neck: number; direction: Direction; ray: number[]; weight: number }[] = [];
-    let totalWeight = 0;
-    for (let head = 0; head < cellCount; head++) {
-      if (owner[head] !== -1) continue;
-      for (const direction of DIRECTIONS) {
-        const { rowStep, columnStep } = DIRECTION_STEPS[direction];
-        const neckRow = Math.floor(head / columns) - rowStep, neckColumn = (head % columns) - columnStep;
-        if (!inside(neckRow, neckColumn) || owner[indexOf(neckRow, neckColumn)] !== -1) continue;
-        const ray = rayFrom(head, direction);
-        if (!ray) continue;
-        // heads deep inside the board (long rays) are preferred: later arrows will likely block them
-        const weight = (1 + ray.length) ** 1.5;
-        candidates.push({ head, neck: indexOf(neckRow, neckColumn), direction, ray, weight });
-        totalWeight += weight;
-      }
-    }
-    if (!candidates.length) return false;
-    let pick = random() * totalWeight;
-    let chosen = candidates[candidates.length - 1];
-    for (const candidate of candidates) { pick -= candidate.weight; if (pick <= 0) { chosen = candidate; break; } }
+  type HeadCandidate = { head: number; neck: number; direction: Direction; ray: number[]; weight: number };
 
-    const rayCells = new Set(chosen.ray);
-    const path = [chosen.head, chosen.neck];
+  /** Grow a body backwards from the neck; on hard levels it bends towards other arrows' exit lines. */
+  const growBody = (candidate: HeadCandidate): number[] => {
+    const rayCells = new Set(candidate.ray);
+    const path = [candidate.head, candidate.neck];
     const inPath = new Set(path);
     const targetLength = shape.minLength + Math.floor(random() * (shape.maxLength - shape.minLength + 1));
-    // the body grows backwards from the neck; going on in the same direction keeps a straight segment
-    let lastRowStep = Math.floor(chosen.neck / columns) - Math.floor(chosen.head / columns);
-    let lastColumnStep = (chosen.neck % columns) - (chosen.head % columns);
+    let lastRowStep = Math.floor(candidate.neck / columns) - Math.floor(candidate.head / columns);
+    let lastColumnStep = (candidate.neck % columns) - (candidate.head % columns);
     while (path.length < targetLength) {
       const current = path[path.length - 1];
       const currentRow = Math.floor(current / columns), currentColumn = current % columns;
@@ -190,7 +219,9 @@ function buildLevel(levelNumber: number, seed: number): Level {
       const straightRow = currentRow + lastRowStep, straightColumn = currentColumn + lastColumnStep;
       const straight = inside(straightRow, straightColumn) ? options.find(option => option === indexOf(straightRow, straightColumn)) : undefined;
       let next: number;
-      if (straight !== undefined && random() > shape.turnChance) next = straight;
+      const blocking = options.filter(option => blocksFreeCrossArrow(option, candidate.direction));
+      if (blocking.length && random() < difficulty * 0.7) next = blocking[Math.floor(random() * blocking.length)];
+      else if (straight !== undefined && random() > shape.turnChance) next = straight;
       else {
         // prefer cells with few free neighbours, so the snake hugs walls and fills pockets
         const scored = options.map(option => ({ option, score: emptyNeighbors(option, inPath).length + random() * 1.5 }));
@@ -202,11 +233,70 @@ function buildLevel(levelNumber: number, seed: number): Level {
       path.push(next);
       inPath.add(next);
     }
+    return path.reverse(); // tail → head
+  };
+
+  /** How much a candidate arrow would add to the puzzle (only matters on harder levels). */
+  const scoreCandidate = (cells: number[], candidate: HeadCandidate): number => {
+    const newlyBlockedCross = new Set<number>();
+    const newlyBlockedSameDirection = new Set<number>();
+    const alsoBlocked = new Set<number>();
+    for (const cell of cells) {
+      for (const arrowIndex of rayOwners[cell]) {
+        const earlier = placed[arrowIndex];
+        if (earlier.blockedBy > 0) alsoBlocked.add(arrowIndex);
+        else if (earlier.direction !== candidate.direction) newlyBlockedCross.add(arrowIndex);
+        else newlyBlockedSameDirection.add(arrowIndex);
+      }
+    }
+    // the new head sits in an earlier arrow's lane, pointing the same way: that arrow just follows it out
+    const laneRuns = rayOwners[candidate.head].filter(arrowIndex => placed[arrowIndex].direction === candidate.direction).length;
+    const directionShare = (directionCounts[candidate.direction] + 1) / (placed.length + 1);
+    return 3 * newlyBlockedCross.size + 1.2 * newlyBlockedSameDirection.size + 0.4 * alsoBlocked.size
+      - 4 * laneRuns - (placed.length >= 4 ? 12 * Math.max(0, directionShare - 0.27) : 0)
+      + 1.5 * (candidate.ray.length / longestLine) - (candidate.ray.length === 0 ? 1.5 : 0)
+      + 0.5 * (cells.length / shape.maxLength);
+  };
+
+  /** Place one new arrow; false when no head has a clear exit line any more. */
+  const placeArrow = (allowEdgeHeads: boolean): boolean => {
+    const candidates: HeadCandidate[] = [];
+    let totalWeight = 0;
+    for (let head = 0; head < cellCount; head++) {
+      if (owner[head] !== -1) continue;
+      for (const direction of DIRECTIONS) {
+        const { rowStep, columnStep } = DIRECTION_STEPS[direction];
+        const neckRow = Math.floor(head / columns) - rowStep, neckColumn = (head % columns) - columnStep;
+        if (!inside(neckRow, neckColumn) || owner[indexOf(neckRow, neckColumn)] !== -1) continue;
+        const ray = rayFrom(head, direction);
+        if (!ray || (!allowEdgeHeads && ray.length === 0)) continue;
+        // heads deep inside the board (long exit lines) are preferred: later arrows will likely block them
+        const weight = (1 + ray.length) ** (1.5 + difficulty) * (ray.length === 0 ? 1 - 0.8 * difficulty : 1);
+        candidates.push({ head, neck: indexOf(neckRow, neckColumn), direction, ray, weight });
+        totalWeight += weight;
+      }
+    }
+    if (!candidates.length) return false;
+    const pickCandidate = () => {
+      let pick = random() * totalWeight;
+      for (const candidate of candidates) { pick -= candidate.weight; if (pick <= 0) return candidate; }
+      return candidates[candidates.length - 1];
+    };
+    let best: { candidate: HeadCandidate; cells: number[]; score: number } | null = null;
+    for (let sample = 0; sample < samplesPerArrow; sample++) {
+      const candidate = pickCandidate();
+      const cells = growBody(candidate);
+      const score = samplesPerArrow > 1 ? scoreCandidate(cells, candidate) + random() * 0.3 : 0;
+      if (!best || score > best.score) best = { candidate, cells, score };
+    }
+    const { candidate, cells } = best!;
     const arrowIndex = placed.length;
-    const cells = path.reverse(); // tail → head
-    for (const cell of cells) owner[cell] = arrowIndex;
-    for (const cell of chosen.ray) rayOwners[cell].push(arrowIndex);
-    placed.push({ cells, direction: chosen.direction });
+    const newlyBlocked = new Set<number>();
+    for (const cell of cells) { owner[cell] = arrowIndex; rayOwners[cell].forEach(earlier => newlyBlocked.add(earlier)); }
+    newlyBlocked.forEach(earlier => { placed[earlier].blockedBy++; });
+    for (const cell of candidate.ray) rayOwners[cell].push(arrowIndex);
+    placed.push({ cells, direction: candidate.direction, ray: candidate.ray, blockedBy: 0 });
+    directionCounts[candidate.direction]++;
     return true;
   };
 
@@ -216,35 +306,224 @@ function buildLevel(levelNumber: number, seed: number): Level {
     for (let index = 0; index < cellCount; index++) {
       if (owner[index] !== -1) continue;
       const row = Math.floor(index / columns), column = index % columns;
-      const neighborArrows: number[] = [];
+      const usable: number[] = [];
       for (const direction of DIRECTIONS) {
         const { rowStep, columnStep } = DIRECTION_STEPS[direction];
         if (!inside(row + rowStep, column + columnStep)) continue;
-        const neighborOwner = owner[indexOf(row + rowStep, column + columnStep)];
-        if (neighborOwner !== -1 && placed[neighborOwner].cells[0] === indexOf(row + rowStep, column + columnStep)) neighborArrows.push(neighborOwner);
+        const neighbor = indexOf(row + rowStep, column + columnStep);
+        const arrowIndex = owner[neighbor];
+        if (arrowIndex === -1 || placed[arrowIndex].cells[0] !== neighbor || placed[arrowIndex].cells.length >= maxTotalLength) continue;
+        if (rayOwners[index].every(rayOwner => rayOwner < arrowIndex)) usable.push(arrowIndex);
       }
-      const usable = neighborArrows.filter(arrowIndex =>
-        placed[arrowIndex].cells.length < maxTotalLength && rayOwners[index].every(rayOwner => rayOwner < arrowIndex));
       if (!usable.length) continue;
       const arrowIndex = usable[Math.floor(random() * usable.length)];
       placed[arrowIndex].cells.unshift(index);
       owner[index] = arrowIndex;
+      for (const earlier of rayOwners[index]) {
+        if (!placed[arrowIndex].cells.some(cell => cell !== index && rayOwners[cell].includes(earlier))) placed[earlier].blockedBy++;
+      }
       changed = true;
     }
     return changed;
   };
 
-  for (let round = 0; round < 50; round++) {
-    let placedAny = false;
-    while (placeArrow()) placedAny = true;
-    const extended = extendTails();
-    if (!placedAny && !extended) break;
+  // On harder levels, first fill the board without heads that sit on the edge pointing straight out (those are
+  // always free); tails grow into the gaps, and only the pockets left after that get edge arrows.
+  const phases = difficulty > 0.3 ? [false, true] : [true];
+  for (const allowEdgeHeads of phases) {
+    for (let round = 0; round < 50; round++) {
+      let placedAny = false;
+      while (placeArrow(allowEdgeHeads)) placedAny = true;
+      const extended = extendTails();
+      if (!placedAny && !extended) break;
+    }
   }
 
-  const arrows: Arrow[] = placed.map((arrow, id) => ({
+  /**
+   * Arrows that end up free at the start are mostly small leftovers squeezed against an edge. On harder levels
+   * such an arrow is merged into a neighbour: if one end of it touches another arrow's tail, that arrow simply
+   * becomes longer at its tail (the same tail rule as above keeps the level solvable), so the board stays just
+   * as full but has one less obvious first move.
+   */
+  const isRemoved = (arrowIndex: number) => placed[arrowIndex].cells.length === 0;
+  const isFreeNow = (arrowIndex: number) => placed[arrowIndex].ray.every(cell => owner[cell] === -1);
+  const neighborsOf = (index: number) => DIRECTIONS.map(direction => {
+    const { rowStep, columnStep } = DIRECTION_STEPS[direction];
+    const row = Math.floor(index / columns) + rowStep, column = (index % columns) + columnStep;
+    return inside(row, column) ? indexOf(row, column) : -1;
+  }).filter(neighbor => neighbor !== -1);
+  const mergeFreeArrow = (freeIndex: number): boolean => {
+    const free = placed[freeIndex];
+    const ends = [free.cells[free.cells.length - 1], free.cells[0]];
+    for (const [endPosition, end] of ends.entries()) {
+      for (const neighbor of neighborsOf(end)) {
+        const absorberIndex = owner[neighbor];
+        if (absorberIndex === -1 || absorberIndex === freeIndex) continue;
+        const absorber = placed[absorberIndex];
+        if (absorber.cells[0] !== neighbor || absorber.cells.length + free.cells.length > shape.maxLength + 8) continue;
+        const allowed = free.cells.every(cell => rayOwners[cell].every(rayOwner => rayOwner === freeIndex || rayOwner < absorberIndex));
+        if (!allowed) continue;
+        // the free arrow's cells, ordered so the end touching the absorber's tail comes last
+        const addedCells = endPosition === 0 ? [...free.cells] : [...free.cells].reverse();
+        for (const cell of free.ray) rayOwners[cell] = rayOwners[cell].filter(rayOwner => rayOwner !== freeIndex);
+        for (const cell of addedCells) owner[cell] = absorberIndex;
+        absorber.cells = [...addedCells, ...absorber.cells];
+        free.cells = [];
+        free.ray = [];
+        directionCounts[free.direction]--;
+        return true;
+      }
+    }
+    return false;
+  };
+  if (difficulty > 0) {
+    const targetFreeShare = 0.4 - 0.33 * difficulty;
+    for (let pass = 0; pass < 4; pass++) {
+      let merged = false;
+      for (let arrowIndex = placed.length - 1; arrowIndex >= 0; arrowIndex--) {
+        if (isRemoved(arrowIndex) || !isFreeNow(arrowIndex)) continue;
+        const liveArrows = placed.filter((_, index) => !isRemoved(index));
+        const freeCount = liveArrows.filter(arrow => arrow.ray.every(cell => owner[cell] === -1)).length;
+        if (freeCount <= Math.max(1, Math.round(targetFreeShare * liveArrows.length))) break;
+        if (mergeFreeArrow(arrowIndex)) merged = true;
+      }
+      if (!merged) break;
+    }
+  }
+
+  const arrows: Arrow[] = placed.filter((_, index) => !isRemoved(index)).map((arrow, id) => ({
     id, direction: arrow.direction, cells: arrow.cells.map(cell => ({ row: Math.floor(cell / columns), column: cell % columns })),
   }));
   return { number: levelNumber, rows, columns, arrows };
+}
+
+/** The order to clear a level in (all free arrows each round), or null when it cannot be cleared. */
+export function clearingOrder(level: Level): number[] | null {
+  const blockersOf = dependencies(level);
+  const remaining = new Set(level.arrows.map(arrow => arrow.id));
+  const order: number[] = [];
+  while (remaining.size) {
+    const free = [...remaining].filter(arrowId => blockersOf[arrowId].every(blocker => !remaining.has(blocker)));
+    if (!free.length) return null;
+    free.forEach(arrowId => { remaining.delete(arrowId); order.push(arrowId); });
+  }
+  return order;
+}
+
+/**
+ * Last pass for harder levels. The placement order is one valid way to clear the board, but any board whose
+ * "must leave before" graph has no loops can be cleared, so here small edits are tried and kept only when the
+ * whole level still clears (checked by simulation):
+ * - an empty cell is added to the tail of a touching arrow (fuller board, and the cell may block an exit line);
+ * - an arrow that is free at the start is turned around (same cells, head at the other end) so it points into
+ *   the board and has to wait;
+ * - a free arrow is appended to the tail of a touching arrow, so one obvious first move disappears.
+ * Arrows are then renumbered so the highest id can leave first.
+ */
+function tangleLevel(level: Level, targetFreeShare: number, maxArrowLength: number, random: () => number): Level {
+  const targetFreeCount = Math.max(1, Math.round(targetFreeShare * level.arrows.length));
+  let arrows = level.arrows.map(arrow => ({ ...arrow, cells: [...arrow.cells] }));
+  const asLevel = (candidateArrows: Arrow[]): Level => ({ ...level, arrows: candidateArrows.map((arrow, id) => ({ ...arrow, id })) });
+  const freeCount = (candidateArrows: Arrow[]) => dependencies(asLevel(candidateArrows)).filter(blockers => !blockers.length).length;
+  const isClearable = (candidateArrows: Arrow[]) => clearingOrder(asLevel(candidateArrows)) !== null;
+  const key = (cell: Cell) => `${cell.row},${cell.column}`;
+  const isAdjacent = (first: Cell, second: Cell) => Math.abs(first.row - second.row) + Math.abs(first.column - second.column) === 1;
+  const rayCrossesBody = (arrow: Arrow) => {
+    const ownCells = new Set(arrow.cells.map(key));
+    return exitPath(arrow, level.rows, level.columns).some(cell => ownCells.has(key(cell)));
+  };
+  const directionFrom = (neck: Cell, head: Cell) => DIRECTIONS.find(direction =>
+    DIRECTION_STEPS[direction].rowStep === head.row - neck.row && DIRECTION_STEPS[direction].columnStep === head.column - neck.column)!;
+
+  const fillEmptyCells = () => {
+    const covered = new Set(arrows.flatMap(arrow => arrow.cells.map(key)));
+    for (let row = 0; row < level.rows; row++) {
+      for (let column = 0; column < level.columns; column++) {
+        const cell = { row, column };
+        if (covered.has(key(cell))) continue;
+        for (const arrowIndex of shuffled(arrows.map((_, index) => index), random)) {
+          const arrow = arrows[arrowIndex];
+          if (arrow.cells.length >= maxArrowLength || !isAdjacent(arrow.cells[0], cell)) continue;
+          const trial = arrows.map((other, index) => (index === arrowIndex ? { ...other, cells: [cell, ...other.cells] } : other));
+          if (rayCrossesBody(trial[arrowIndex]) || !isClearable(trial)) continue;
+          arrows = trial;
+          covered.add(key(cell));
+          break;
+        }
+      }
+    }
+  };
+
+  const removeFreeArrows = () => {
+    for (let pass = 0; pass < 3; pass++) {
+      let changed = false;
+      const blockersOf = dependencies(asLevel(arrows));
+      const freeArrows = shuffled(arrows.filter((_, index) => !blockersOf[index].length), random);
+      for (const freeArrow of freeArrows) {
+        if (freeCount(arrows) <= targetFreeCount) return;
+        const freeIndex = arrows.indexOf(freeArrow);
+        const before = freeCount(arrows);
+        // 1) turn it around
+        const reversedCells = [...freeArrow.cells].reverse();
+        const turned = { ...freeArrow, cells: reversedCells, direction: directionFrom(reversedCells[reversedCells.length - 2], reversedCells[reversedCells.length - 1]) };
+        const turnedTrial = arrows.map((arrow, index) => (index === freeIndex ? turned : arrow));
+        if (!rayCrossesBody(turned) && freeCount(turnedTrial) < before && isClearable(turnedTrial)) { arrows = turnedTrial; changed = true; continue; }
+        // 2) join it onto the tail of a touching arrow
+        let joined = false;
+        for (const [endIndex, end] of [freeArrow.cells[freeArrow.cells.length - 1], freeArrow.cells[0]].entries()) {
+          for (let absorberIndex = 0; absorberIndex < arrows.length && !joined; absorberIndex++) {
+            const absorber = arrows[absorberIndex];
+            if (absorberIndex === freeIndex || !isAdjacent(absorber.cells[0], end)) continue;
+            if (absorber.cells.length + freeArrow.cells.length > maxArrowLength) continue;
+            const addedCells = endIndex === 0 ? [...freeArrow.cells] : reversedCells;
+            const longer = { ...absorber, cells: [...addedCells, ...absorber.cells] };
+            if (rayCrossesBody(longer)) continue;
+            const joinTrial = arrows.map((arrow, index) => (index === absorberIndex ? longer : arrow)).filter((_, index) => index !== freeIndex);
+            if (freeCount(joinTrial) < before && isClearable(joinTrial)) { arrows = joinTrial; joined = true; }
+          }
+          if (joined) break;
+        }
+        if (joined) changed = true;
+      }
+      if (!changed) return;
+    }
+  };
+
+  /**
+   * Cut a long arrow in two: the tail half becomes its own arrow whose head points into the rest of the old
+   * arrow, so it always has to wait for it. More arrows, no extra free ones. Only cuts where the new arrow
+   * points a different way than the arrow in front of it (no same-direction lanes).
+   */
+  const splitLongArrows = (targetFreeShare: number) => {
+    for (const arrowIndex of shuffled(arrows.map((_, index) => index), random)) {
+      if (freeCount(arrows) / arrows.length <= targetFreeShare) return;
+      const arrow = arrows[arrowIndex];
+      if (arrow.cells.length < 6) continue;
+      const freeBefore = freeCount(arrows);
+      const cutPoints = shuffled(Array.from({ length: arrow.cells.length - 5 }, (_, index) => index + 3), random);
+      for (const cut of cutPoints) {
+        const tailPart = arrow.cells.slice(0, cut);
+        const direction = directionFrom(tailPart[tailPart.length - 2], tailPart[tailPart.length - 1]);
+        // the new head must point straight into the rest of the old arrow
+        if (directionFrom(tailPart[tailPart.length - 1], arrow.cells[cut]) !== direction || direction === arrow.direction) continue;
+        const tailArrow: Arrow = { id: -1, direction, cells: tailPart };
+        if (rayCrossesBody(tailArrow)) continue;
+        const trial = [...arrows.map((other, index) => (index === arrowIndex ? { ...other, cells: other.cells.slice(cut) } : other)), tailArrow];
+        if (freeCount(trial) > freeBefore || !isClearable(trial)) continue;
+        arrows = trial;
+        break;
+      }
+    }
+  };
+
+  fillEmptyCells();
+  removeFreeArrows();
+  fillEmptyCells();
+  splitLongArrows(targetFreeShare);
+  // renumber: the arrow that leaves first gets the highest id
+  const order = clearingOrder(asLevel(arrows))!;
+  const renumbered = order.reverse().map((oldId, newId) => ({ ...arrows[oldId], id: newId }));
+  return { ...level, arrows: renumbered };
 }
 
 export const fillRatio = (level: Level) => level.arrows.reduce((total, arrow) => total + arrow.cells.length, 0) / (level.rows * level.columns);
