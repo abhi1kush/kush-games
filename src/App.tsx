@@ -32,17 +32,17 @@ export default function App() {
     <>
       {/* Home stays mounted under the player so the scroll position is kept when you go Back. */}
       <div className="home" aria-hidden={isPlaying} ref={homeRef}>
-        <NavBar onShowGenre={showGenre} />
+        <NavBar onShowGenre={showGenre} hasComingSoon={sections.comingSoonGames.length > 0} />
         <HeroBanner game={featuredGame} />
         <main className="rows">
           <GameGrid sectionId="play-now" games={shownGames}
             title={<>{genre === 'all' ? 'All games' : `${genre} games`} <span className="home-section__count">{shownGames.length}</span></>}>
             <GenreFilter genres={sections.genres} totalCount={sections.playableGames.length} selected={genre} onSelect={setGenre} />
           </GameGrid>
-          <GameGrid sectionId="coming-soon" title="Coming Soon" games={sections.comingSoonGames} />
+          {sections.comingSoonGames.length > 0 && <GameGrid sectionId="coming-soon" title="Coming Soon" games={sections.comingSoonGames} />}
         </main>
         <footer className="footer">
-          <p>Kush Games — a home for browser games. Built with React, TypeScript &amp; Vite.</p>
+          <p>Kush Games — a home for browser games. Built with React, TypeScript, Vite &amp; Rust/WebAssembly.</p>
           <p><a href="https://github.com/abhi1kush/kush-games">Source on GitHub</a></p>
         </footer>
       </div>

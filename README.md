@@ -4,13 +4,13 @@ A Netflix-style home for browser games — dark UI, a big hero banner, and a wra
 
 **Live:** https://abhi1kush.github.io/kush-games/
 
-Built with **React + TypeScript + Vite**. Deployed to GitHub Pages from the `gh-pages` branch.
+Built with **React + TypeScript + Vite**; Breakout, Connect Four, Solitaire and Checkers run their game logic in **Rust compiled to WebAssembly**. Deployed to GitHub Pages from the `gh-pages` branch.
 
 ## Features
 
 - Top nav with the **Kush Games** logo and quick links (genre links filter the grid; the links wrap instead of scrolling)
 - Hero banner featuring **2048** with *Play* and *More Info*
-- **All games**: every playable game once, in a responsive CSS grid (`auto-fill`, min card width 190px; 140px on phones) — about 2 columns at 375px, 3–4 on tablets, 5–6 on desktop. Genre chips (All / Puzzle / Arcade / Strategy / Classic Board, with counts) filter it. **Coming Soon** is a separate grid below.
+- **All games**: every playable game once, in a responsive CSS grid (`auto-fill`, min card width 190px; 140px on phones) — about 2 columns at 375px, 3–4 on tablets, 5–6 on desktop. Genre chips (All / Puzzle / Arcade / Strategy / Classic Board, with counts) filter it. A **Coming Soon** grid (and nav link) appears below only while some game is still a placeholder — right now there are none.
 - Cards scale up on hover and show the title, tagline and genres
 - Game detail modal (`#/title/<id>`) with "More Like This"
 - Full-screen player (`#/play/<id>`) with a Back button (Escape also works)
@@ -35,7 +35,10 @@ Built with **React + TypeScript + Vite**. Deployed to GitHub Pages from the `gh-
 | Flappy Wings | ✅ Playable |
 | Arrow Out | ✅ Playable |
 | Color Trails | ✅ Playable |
-| Breakout, Connect Four, Solitaire, Checkers | 🕒 Coming soon |
+| Breakout (Rust/WebAssembly) | ✅ Playable |
+| Connect Four (vs computer or 2 players; Rust/WebAssembly) | ✅ Playable |
+| Solitaire — Klondike (Rust/WebAssembly) | ✅ Playable |
+| Checkers (vs computer or 2 players; Rust/WebAssembly) | ✅ Playable |
 
 ### Snake
 
@@ -144,9 +147,37 @@ A connect-the-dots path puzzle in the style of the "same color / connect two dot
 - **Difficulty:** boards grow 5×5 → 6×6 → 7×7 → 8×8/9×9 → 10×12 (≈ 30px cells on a 375×667 phone). For each level the generator keeps the candidate closest to a rising hardness target, from: share of the board solvable by forced moves alone, solver guesses, average path length and bends, how far paths wander from the direct route, and short (≤ 3 cell) pairs. `npx vite-node scripts/color-trails-metrics.ts 1 5 10 20 30 40 60` prints the table.
 - **Colors:** a color-blind friendlier palette, and every color also has its own small symbol inside its dots.
 
+### Rust/WebAssembly games: Breakout, Connect Four, Solitaire, Checkers
+
+The UI is React + TypeScript; the rules, physics and AI are Rust crates in `wasm/` (one crate per game, a Cargo workspace), built with `wasm-pack --target web` into `src/wasm/<crate>/`. Each game's `.wasm` is only fetched when that game opens (the hub downloads none). Data crosses the boundary as small typed arrays and integers — never JSON.
+
+| Crate | `.wasm` raw | gzipped |
+| --- | --- | --- |
+| breakout | 24.4 KB | 11.6 KB |
+| connect_four | 26.0 KB | 12.4 KB |
+| solitaire | 25.7 KB | 11.8 KB |
+| checkers | 31.1 KB | 14.6 KB |
+
+Size settings: `opt-level = "z"`, `lto`, `codegen-units = 1`, `panic = "abort"`, `strip`, then `wasm-opt -Oz`; `wasm-bindgen` without default features. Float formatting (pulled in by `f32::clamp`'s panic message) and libm `sin`/`cos` were avoided by hand (≈ 30 KB saved in Breakout).
+
+- **Breakout** — fixed 1/120 s physics step in Rust, driven by a `requestAnimationFrame` loop; JS draws one `<canvas>` straight from a `Float32Array` view of wasm memory (no per-frame allocation; bricks are cached on an offscreen canvas and redrawn only when one changes). Mouse/finger or ←/→, Space/tap to launch, P pause. Levels add rows, multi-hit and steel bricks and a faster ball. Power-ups (1 in 9 bricks): wide paddle, multi-ball, slower ball, extra life. Pauses when the tab is hidden; a refreshed game comes back paused.
+- **Connect Four** — bitboards; negamax with alpha-beta, a transposition table, threat-first move ordering and iterative deepening under a node budget. Easy (shallow and a bit random), Medium (depth 5 with noise), Hard (as deep as 160 000 nodes allow — about 30–50 ms on a desktop, roughly 4× that on a mid-range phone). The search runs in a Web Worker. 2-player pass-and-play, drop animation, highlighted four, win/draw tally, undo.
+- **Solitaire** — Klondike with a seeded (mulberry32) deal, Draw 1 / Draw 3, drag-and-drop or tap a card to send it to its best spot, safe cards go to the foundations by themselves, undo (replays the action list), hint, timer, moves, Windows-style score and a CSS win cascade. Seven columns fit a 375 px screen.
+- **Checkers** — English draughts: compulsory captures, multi-jumps, crowning ends the move, draw after 40 moves each without a capture or man move. Negamax alpha-beta with a transposition table and capture extension, in a Web Worker; Easy/Medium/Hard (Hard: 120 000-node budget, ≈ 50 ms desktop). Legal moves are highlighted, pieces that must capture are ringed, moves animate along their path.
+
+#### Toolchain
+
+```bash
+curl https://sh.rustup.rs -sSf | sh            # Rust stable (tested with 1.99)
+rustup target add wasm32-unknown-unknown
+cargo install wasm-pack                          # 0.13+ (downloads wasm-bindgen and wasm-opt/binaryen itself)
+```
+
+`npm run build` runs `npm run build:wasm` (`scripts/build-wasm.mjs`, prints the sizes) and then `tsc -b && vite build`. The built `src/wasm/` output is committed, so without `wasm-pack` the script warns and keeps the committed files — `npm ci && npm run build` works either way. `npm run test:rust` runs the cargo tests.
+
 ### Shared sound setting
 
-The newer games (Minesweeper, Sudoku, Tic-Tac-Toe, Memory Match, Flappy Wings, Arrow Out and Color Trails) share `src/games/sharedSound.tsx`: generated Web Audio sounds and one 🔊/🔇 button saved as `kush-games-muted` (`M` toggles). Snake, Blocks and Chess keep their own mute settings.
+The newer games (Minesweeper, Sudoku, Tic-Tac-Toe, Memory Match, Flappy Wings, Arrow Out, Color Trails, Breakout, Connect Four, Solitaire and Checkers) share `src/games/sharedSound.tsx`: generated Web Audio sounds and one 🔊/🔇 button saved as `kush-games-muted` (`M` toggles). Snake, Blocks and Chess keep their own mute settings.
 
 ### Chess
 
@@ -201,13 +232,17 @@ Every playable game saves its game in progress to `localStorage` and restores it
 | Arrow Out | level number, arrows that have left (in order), lives, mistakes, hints | after every tap, undo and hint; after a win the next level is saved |
 | Color Trails | level number, every drawn path, moves, last color drawn, hints | after every drag, undo and hint; after a win the next level is saved |
 | Flappy Wings | bird position and speed, pipes, score, distance, random seed | at most once per second while flying; at once on pause, `pagehide`, tab hidden and leaving |
+| Breakout | level, score, lives, each brick's remaining hits | on brick hits (at most every 1.5 s), at once on a lost life, level clear, pause, `pagehide` and tab hidden |
+| Connect Four | moves played, opponent, difficulty, who started (tally kept separately) | after every move |
+| Solitaire | deal seed, Draw 1/3, the list of actions (3 bytes each), time | after every action; time on `pagehide` / tab hidden |
+| Checkers | moves played (as legal-move indexes), opponent, difficulty (tally kept separately) | after every move |
 | Blocks | board cells, current piece (type, position, rotation), next queue, 7-bag and random-generator state (so the piece order carries on), hold + can-hold, score, lines, level, timers | on every lock, line clear, hold and pause; on `pagehide`, tab hidden, and leaving the game |
 
 Restoring:
 
 - 2048 comes back as it was.
 - Minesweeper, Sudoku, Tic-Tac-Toe and Memory Match come back as they were, with a *Saved game restored* note (the Minesweeper and Memory clocks wait for your next move).
-- A Snake, Blocks or Flappy Wings game comes back **paused**, with a *Saved game restored* overlay and **Resume** / **New game** buttons.
+- A Snake, Blocks, Flappy Wings or Breakout game comes back **paused**, with a *Saved game restored* overlay and **Resume** / **New game** buttons.
 - A finished game is never restored. Game Over clears the save, so the next visit starts fresh.
 - *New Game* / *New game* / *Play again* clear the save and start over.
 - The Blocks test parameters (`?blocksSetup`, `?blocksSeed`) never load or write saves, so the tests stay deterministic.
@@ -241,8 +276,9 @@ That's it — the rows, modal and player all read from the registry. Each game i
 ```bash
 npm install
 npm run dev        # http://localhost:5173/kush-games/
-npm test           # unit tests (game logic for every game, saved games, registry, routing)
-npm run build      # type-check + production build into dist/
+npm test           # unit tests (game logic for every game, saved games, registry, routing) + wasm integration tests
+npm run test:rust  # cargo tests for the four Rust crates
+npm run build      # build:wasm, then type-check + production build into dist/
 ```
 
 Browser check (needs Chrome at `/usr/bin/google-chrome` or `CHROME_PATH`):
@@ -250,6 +286,7 @@ Browser check (needs Chrome at `/usr/bin/google-chrome` or `CHROME_PATH`):
 ```bash
 npm run e2e -- https://abhi1kush.github.io/kush-games/ /tmp
 node e2e/new-games.mjs https://abhi1kush.github.io/kush-games/ /tmp   # Minesweeper, Sudoku, Tic-Tac-Toe, Memory, Flappy smoke tests
+node e2e/four-games.mjs https://abhi1kush.github.io/kush-games/ /tmp  # Breakout, Connect Four, Solitaire, Checkers at 1280 and 375 px
 ```
 
 ## Deploying

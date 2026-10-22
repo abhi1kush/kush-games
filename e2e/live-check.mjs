@@ -182,10 +182,11 @@ async function waitForBoardChange(page, before) {
   check(await page.locator('.nav__logo').innerText().then(text => /kush\s*games/i.test(text)), 'desktop: nav shows Kush Games logo');
   check(await page.locator('.hero__title').innerText() === '2048', 'desktop: hero features 2048');
   const sectionTitles = await page.locator('.home-section__title').allInnerTexts();
-  check(sectionTitles.length === 2 && /^All games/.test(sectionTitles[0]) && sectionTitles[1] === 'Coming Soon', `desktop: All games grid + Coming Soon grid (${sectionTitles.join(' | ')})`);
+  check(sectionTitles.length === 1 && /^All games/.test(sectionTitles[0]) && await page.locator('[data-testid=row-coming-soon]').count() === 0
+    && !(await page.locator('.nav__links').innerText()).includes('Coming Soon'), `desktop: one All games grid; no Coming Soon section or nav link (${sectionTitles.join(' | ')})`);
   const playableCount = await page.locator('[data-testid=row-play-now] .card').count();
-  check(playableCount >= 10 && await page.locator('.home .card').count() === playableCount + await page.locator('[data-testid=row-coming-soon] .card').count(),
-    `desktop: each game appears once (${playableCount} playable cards)`);
+  check(playableCount === 15 && await page.locator('.home .card').count() === playableCount && await page.locator('.game-art__soon, .game-art--soon').count() === 0,
+    `desktop: all ${playableCount} games appear once, none dimmed as Coming Soon`);
   const desktopLayout = await hubLayout(page);
   check(!desktopLayout.hasRowArrows && desktopLayout.scrollers.length === 0 && desktopLayout.pageFits,
     `desktop: no horizontal scroll rows or overflowing scroll containers (${desktopLayout.scrollers.join(', ') || 'none'})`);
@@ -256,8 +257,8 @@ async function waitForBoardChange(page, before) {
   check(true, 'desktop: Back returns to home');
 
   await page.goto(`${siteUrl}#/play/breakout`);
-  await page.waitForSelector('[data-testid=coming-soon]');
-  check(/Breakout/.test(await page.locator('[data-testid=coming-soon] h1').innerText()), 'desktop: placeholder game shows Coming Soon screen');
+  await page.waitForSelector('[data-testid=breakout]');
+  check(await page.locator('[data-testid=coming-soon]').count() === 0, 'desktop: Breakout opens the real game (no Coming Soon screen)');
 
   // Snake
   await page.goto(siteUrl, { waitUntil: 'networkidle' });
@@ -416,7 +417,7 @@ async function waitForBoardChange(page, before) {
   await page.goto(siteUrl, { waitUntil: 'networkidle' });
   await page.waitForSelector('[data-testid=hero]');
   const mobileLayout = await hubLayout(page);
-  check(await page.locator('.home-section').count() === 2 && !mobileLayout.hasRowArrows, 'mobile: All games + Coming Soon grids render, no scroll rows');
+  check(await page.locator('.home-section').count() === 1 && !mobileLayout.hasRowArrows, 'mobile: one All games grid renders, no scroll rows');
   check(mobileLayout.scrollers.length === 0 && mobileLayout.outside.length === 0,
     `mobile: all ${mobileLayout.cardCount} cards fit the 375px width, nothing scrolls sideways (${[...mobileLayout.scrollers, ...mobileLayout.outside].join(', ') || 'ok'})`);
   check(mobileLayout.columns === 2, `mobile: grid shows ${mobileLayout.columns} columns`);

@@ -12,7 +12,7 @@ const sectionLinks: NavLink[] = [
 ];
 
 /** Genre links filter the All games grid and scroll to it. */
-export default function NavBar({ onShowGenre }: { onShowGenre: (genre: GenreChoice) => void }) {
+export default function NavBar({ onShowGenre, hasComingSoon = false }: { onShowGenre: (genre: GenreChoice) => void; hasComingSoon?: boolean }) {
   const [hasScrolled, setHasScrolled] = useState(false);
 
   useEffect(() => {
@@ -34,7 +34,7 @@ export default function NavBar({ onShowGenre }: { onShowGenre: (genre: GenreChoi
         Kush<span>Games</span>
       </a>
       <ul className="nav__links">
-        {sectionLinks.map(link => (
+        {sectionLinks.filter(link => hasComingSoon || link.target !== 'coming-soon').map(link => (
           <li key={link.label}>
             <button type="button" onClick={() => goTo(link.target)}>{link.label}</button>
           </li>

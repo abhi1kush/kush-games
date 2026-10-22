@@ -14,18 +14,17 @@ describe('game registry', () => {
     games.filter(game => game.status === 'playable').forEach(game => expect(game.component).toBeDefined());
   });
 
-  it('features 2048 and keeps several coming soon placeholders', () => {
+  it('features 2048 and every game is playable (no Coming Soon placeholders left)', () => {
     expect(featuredGame.id).toBe('2048');
     expect(featuredGame.status).toBe('playable');
-    const placeholderCount = games.filter(game => game.status === 'coming-soon').length;
-    expect(placeholderCount).toBeGreaterThanOrEqual(3);
-    expect(placeholderCount).toBeLessThanOrEqual(10);
+    expect(games.filter(game => game.status === 'coming-soon')).toEqual([]);
+    expect(games).toHaveLength(15);
   });
 
-  it('builds one All games grid with genre filters and a Coming Soon grid (each game shown once)', () => {
+  it('builds one All games grid with genre filters and an empty Coming Soon list (each game shown once)', () => {
     const { playableGames, comingSoonGames, genres } = buildHomeSections();
-    expect(playableGames.map(game => game.id)).toEqual(['2048', 'snake', 'blocks', 'minesweeper', 'sudoku', 'chess', 'tic-tac-toe', 'memory-match', 'flappy-wings', 'arrow-out', 'color-trails']);
-    expect(comingSoonGames.map(game => game.id)).toEqual(['breakout', 'connect-four', 'solitaire', 'checkers']);
+    expect(playableGames.map(game => game.id)).toEqual(['2048', 'snake', 'blocks', 'minesweeper', 'sudoku', 'chess', 'tic-tac-toe', 'memory-match', 'flappy-wings', 'breakout', 'arrow-out', 'color-trails', 'connect-four', 'solitaire', 'checkers']);
+    expect(comingSoonGames).toEqual([]);
     expect(genres.map(entry => entry.genre)).toEqual(['Puzzle', 'Arcade', 'Strategy', 'Classic Board']);
     expect(genres.find(entry => entry.genre === 'Puzzle')!.count).toBe(playableGames.filter(game => game.categories.includes('Puzzle')).length);
     // a genre with no playable game gets no chip

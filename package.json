@@ -6,12 +6,15 @@
   "homepage": "https://abhi1kush.github.io/kush-games/",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "npm run build:wasm && npm run build:web",
     "preview": "vite preview",
     "test": "vitest run",
     "e2e": "node e2e/live-check.mjs",
     "predeploy": "npm run build",
-    "deploy": "gh-pages -d dist -t"
+    "deploy": "gh-pages -d dist -t",
+    "build:wasm": "node scripts/build-wasm.mjs",
+    "build:web": "tsc -b && vite build",
+    "test:rust": "cargo test --release --manifest-path wasm/Cargo.toml"
   },
   "dependencies": {
     "chess.js": "^1.4.0",

@@ -38,7 +38,7 @@ await page.goto(siteUrl, { waitUntil: 'networkidle' });
 const playNowIds = await page.locator('[data-testid=row-play-now] .card').evaluateAll(cards => cards.map(card => card.dataset.testid.replace('card-', '')));
 check(NEW_GAME_IDS.every(id => playNowIds.includes(id)), `hub: all five new games are in Play Now (${playNowIds.join(', ')})`);
 const comingSoonIds = await page.locator('[data-testid=row-coming-soon] .card').evaluateAll(cards => cards.map(card => card.dataset.testid.replace('card-', '')));
-check(NEW_GAME_IDS.every(id => !comingSoonIds.includes(id)) && comingSoonIds.length >= 3, `hub: Coming Soon keeps other placeholders (${comingSoonIds.join(', ')})`);
+check(NEW_GAME_IDS.every(id => !comingSoonIds.includes(id)) && comingSoonIds.length === 0, `hub: no game is left in Coming Soon (${comingSoonIds.join(', ') || 'none'})`);
 await page.getByTestId('filter-arcade').click();
 check(await page.locator('[data-testid=row-play-now] [data-testid=card-flappy-wings]').count() === 1, 'hub: Flappy Wings shows under the Arcade filter');
 await page.getByTestId('filter-all').click();
