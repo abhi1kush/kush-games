@@ -136,9 +136,11 @@ await page.waitForTimeout(260);
 check(await page.locator(`[data-arrow-id="${longestFree}"].is-leaving`).count() === 1, 'arrow: the tapped arrow turns gold and slides out along its path');
 await page.screenshot({ path: `${screenshotDirectory}/kush-games-arrow-bent.png` });
 check(await noOverflow(page), 'arrow: no horizontal overflow on desktop');
+const savedBeforeBack = await page.evaluate(key => localStorage.getItem(key), SAVE_KEY);
 await page.getByTestId('back').click();
 await page.waitForSelector('[data-testid=row-play-now]');
-check(await page.locator('[data-testid=row-play-now] [data-testid=continue-arrow-out]').count() === 1, 'hub: Arrow Out shows a Continue badge');
+check(await page.locator('[data-testid=row-play-now] [data-testid=continue-arrow-out]').count() === 1,
+  `hub: Arrow Out shows a Continue badge (save before Back: ${savedBeforeBack ? 'yes' : 'none'})`);
 await context.close();
 
 // ================= Mobile 375px =================
