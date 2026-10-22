@@ -36,6 +36,19 @@ const hubLayout = page => page.evaluate(() => {
     pageFits: document.documentElement.scrollWidth <= window.innerWidth };
 });
 
+/** Scroll through the page so lazy thumbnails load, then report cards whose thumbnail is missing or broken. */
+async function loadThumbnails(page) {
+  await page.evaluate(async () => {
+    for (let y = 0; y < document.body.scrollHeight; y += 400) { window.scrollTo(0, y); await new Promise(resolve => setTimeout(resolve, 60)); }
+    await Promise.all([...document.querySelectorAll('.home .game-art__image')].map(image => image.decode().catch(() => {})));
+    window.scrollTo(0, 0);
+  });
+  return page.evaluate(() => [...document.querySelectorAll('.home .card')].filter(card => {
+    const image = card.querySelector('img.game-art__image');
+    return !image || !image.complete || image.naturalWidth === 0 || !/\.svg/.test(image.currentSrc) || image.getAttribute('loading') !== 'lazy';
+  }).map(card => card.dataset.testid));
+}
+
 const boardSnapshot = page => page.evaluate(() =>
   [...document.querySelectorAll('.game-2048__tile')].map(tile => `${tile.dataset.value}@${tile.style.cssText}`).sort().join('|'));
 
@@ -179,6 +192,9 @@ async function waitForBoardChange(page, before) {
   check(desktopLayout.outside.length === 0, `desktop: all ${desktopLayout.cardCount} cards are within the 1280px viewport (${desktopLayout.outside.join(', ') || 'none outside'})`);
   check(desktopLayout.columns >= 5 && desktopLayout.columns <= 6, `desktop: grid shows ${desktopLayout.columns} columns`);
   check(await hasNoHorizontalOverflow(page), 'desktop: no horizontal page overflow');
+  const brokenThumbnails = await loadThumbnails(page);
+  check(brokenThumbnails.length === 0, `desktop: every card shows its lazy-loaded SVG thumbnail (${brokenThumbnails.join(', ') || 'all loaded'})`);
+  check(await page.locator('[data-testid=row-play-now] .card .game-art__title').first().innerText() === '2048', 'desktop: card titles are set over the thumbnails');
 
   // genre chips filter the grid
   await page.getByTestId('filter-arcade').click();
@@ -203,9 +219,9 @@ async function waitForBoardChange(page, before) {
   check(await firstCard.locator('.card__details').evaluate(element => getComputedStyle(element).opacity === '1'), 'desktop: hovered card shows title + description');
   check(await hasNoHorizontalOverflow(page) && (await hubLayout(page)).scrollers.length === 0, 'desktop: hovering a card causes no sideways overflow');
   await page.mouse.move(5, 5);
-  await page.evaluate(() => window.scrollTo(0, 0));
+  await loadThumbnails(page);
   await page.waitForTimeout(400);
-  await page.screenshot({ path: `${screenshotDirectory}/kush-games-grid-desktop.png`, fullPage: true });
+  await page.screenshot({ path: `${screenshotDirectory}/kush-games-thumbs-desktop.png`, fullPage: true });
 
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.mouse.move(5, 5);
@@ -406,7 +422,10 @@ async function waitForBoardChange(page, before) {
   check(mobileLayout.columns === 2, `mobile: grid shows ${mobileLayout.columns} columns`);
   check(await hasNoHorizontalOverflow(page), 'mobile: no horizontal page overflow');
   await page.screenshot({ path: `${screenshotDirectory}/kush-games-mobile.png` });
-  await page.screenshot({ path: `${screenshotDirectory}/kush-games-grid-mobile.png`, fullPage: true });
+  const brokenMobileThumbnails = await loadThumbnails(page);
+  check(brokenMobileThumbnails.length === 0, `mobile: every card shows its SVG thumbnail (${brokenMobileThumbnails.join(', ') || 'all loaded'})`);
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: `${screenshotDirectory}/kush-games-thumbs-mobile.png`, fullPage: true });
   await page.getByTestId('filter-puzzle').tap();
   const puzzleIds = await page.locator('[data-testid=row-play-now] .card').evaluateAll(cards => cards.map(card => card.dataset.testid));
   check(puzzleIds.includes('card-2048') && !puzzleIds.includes('card-snake') && (await hubLayout(page)).outside.length === 0,

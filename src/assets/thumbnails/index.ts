@@ -1,0 +1,32 @@
+/** Hand-authored SVG card thumbnails (320×180 scenes; the title is drawn over them in HTML). */
+import thumb2048 from './2048.svg';
+import thumbSnake from './snake.svg';
+import thumbBlocks from './blocks.svg';
+import thumbMinesweeper from './minesweeper.svg';
+import thumbSudoku from './sudoku.svg';
+import thumbChess from './chess.svg';
+import thumbTicTacToe from './tic-tac-toe.svg';
+import thumbMemoryMatch from './memory-match.svg';
+import thumbFlappyWings from './flappy-wings.svg';
+import thumbArrowOut from './arrow-out.svg';
+import thumbBreakout from './breakout.svg';
+import thumbConnectFour from './connect-four.svg';
+import thumbSolitaire from './solitaire.svg';
+import thumbCheckers from './checkers.svg';
+
+export const THUMBNAILS: Record<string, string> = {
+  '2048': thumb2048,
+  'snake': thumbSnake,
+  'blocks': thumbBlocks,
+  'minesweeper': thumbMinesweeper,
+  'sudoku': thumbSudoku,
+  'chess': thumbChess,
+  'tic-tac-toe': thumbTicTacToe,
+  'memory-match': thumbMemoryMatch,
+  'flappy-wings': thumbFlappyWings,
+  'arrow-out': thumbArrowOut,
+  'breakout': thumbBreakout,
+  'connect-four': thumbConnectFour,
+  'solitaire': thumbSolitaire,
+  'checkers': thumbCheckers,
+};

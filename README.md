@@ -17,6 +17,7 @@ Built with **React + TypeScript + Vite**. Deployed to GitHub Pages from the `gh-
 - Placeholder games show a "Coming Soon" screen
 - Hash routing, so deep links work on GitHub Pages without server rewrites
 - Card art is generated from CSS gradients + SVG patterns + a glyph — no images
+- **Thumbnails**: every card has a hand-drawn SVG scene of its game in `src/assets/thumbnails/` (320×180, no filters, ~1 KB each gzipped, lazy-loaded `<img>` with fixed width/height). The title is set over the scene in HTML and scales with the card; Coming Soon cards are slightly desaturated with a small pill.
 - Games in progress are saved in the browser, so a refresh doesn't lose them; their cards show a **▶ Continue** badge
 
 ## Games

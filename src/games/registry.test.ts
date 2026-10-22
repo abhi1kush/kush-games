@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SAVE_VERSIONS } from './persistence';
 import { buildHomeSections, featuredGame, findGame, games } from './registry';
+import { THUMBNAILS } from '../assets/thumbnails';
 
 describe('game registry', () => {
   it('has unique, URL-safe ids', () => {
@@ -33,6 +34,20 @@ describe('game registry', () => {
 
   it('every playable game has a save version for the Continue badge', () => {
     games.filter(game => game.status === 'playable').forEach(game => expect(SAVE_VERSIONS[game.id]).toBeGreaterThanOrEqual(1));
+  });
+
+  it('every card has a small hand-made SVG thumbnail', () => {
+    const sources = import.meta.glob('../assets/thumbnails/*.svg', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
+    let totalBytes = 0;
+    for (const game of games) {
+      expect(THUMBNAILS[game.id], game.id).toBeTruthy();
+      const source = sources[`../assets/thumbnails/${game.id}.svg`];
+      expect(source).toContain('viewBox="0 0 320 180"');
+      expect(source).not.toContain('<filter'); // no blur filters: cheap to draw while scrolling
+      expect(source.length, game.id).toBeLessThan(9 * 1024);
+      totalBytes += source.length;
+    }
+    expect(totalBytes).toBeLessThan(90 * 1024);
   });
 
   it('finds games by id', () => {

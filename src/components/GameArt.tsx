@@ -1,4 +1,5 @@
 import type { GameDefinition } from '../games/types';
+import { THUMBNAILS } from '../assets/thumbnails';
 
 interface GameArtProps {
   game: GameDefinition;
@@ -6,8 +7,22 @@ interface GameArtProps {
   showTitle?: boolean;
 }
 
-/** Generated cover art: gradient + SVG pattern + glyph + title. No external images. */
+/**
+ * Cover art: a hand-drawn SVG scene of the game (src/assets/thumbnails) with the title set over it in HTML.
+ * Games without a thumbnail fall back to the generated gradient + glyph art.
+ */
 export default function GameArt({ game, variant = 'card', showTitle = true }: GameArtProps) {
+  const thumbnail = THUMBNAILS[game.id];
+  const isComingSoon = game.status === 'coming-soon';
+  if (thumbnail) {
+    return (
+      <div className={`game-art game-art--${variant} game-art--thumb${isComingSoon ? ' game-art--soon' : ''}`} aria-hidden="true">
+        <img className="game-art__image" src={thumbnail} width={320} height={180} alt="" loading="lazy" decoding="async" draggable={false} />
+        {showTitle && <span className="game-art__title">{game.title}</span>}
+        {isComingSoon && variant === 'card' && <span className="game-art__soon">Coming soon</span>}
+      </div>
+    );
+  }
   const { gradientFrom, gradientTo, accentColor, glyph } = game.artwork;
   const patternId = `pattern-${game.id}-${variant}`;
   return (
