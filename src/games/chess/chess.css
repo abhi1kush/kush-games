@@ -45,25 +45,13 @@
 .chess-promotion__choices button:hover { background: #f3e37a; }
 
 .chess-panel { width: 320px; display: flex; flex-direction: column; gap: 10px; }
-.chess-room { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
 .chess-room__header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .chess-room__label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #999; }
 .chess-room__code { font-size: 22px; letter-spacing: 0.12em; color: #fff; font-family: ui-monospace, Menlo, Consolas, monospace; }
-.chess-connection { margin-left: auto; font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: #444; color: #eee; }
-.chess-connection--connected { background: rgba(70,211,105,0.18); color: #7ef29d; }
-.chess-connection--waiting, .chess-connection--connecting, .chess-connection--starting { background: rgba(245,197,24,0.16); color: #f5c518; }
-.chess-connection--opponent-left { background: rgba(255,159,26,0.18); color: #ffb454; }
-.chess-connection--failed { background: rgba(255,77,94,0.2); color: #ff7b88; }
-.chess-room__help { margin: 0; font-size: 13px; line-height: 1.4; color: #ffb3bb; }
-.chess-share { display: flex; flex-direction: column; gap: 6px; }
-.chess-share input { width: 100%; min-width: 0; padding: 7px 8px; border-radius: 4px; border: 1px solid #555; background: #1b1b1b; color: #ddd; font-size: 13px; }
-.chess-share__buttons { display: flex; gap: 6px; }
 .chess-restored { margin: 0; align-self: flex-start; padding: 4px 12px; border-radius: 999px; background: rgba(70,211,105,0.16); color: #7ef29d; font-size: 13px; font-weight: 700; }
 .chess-status { margin: 0; font-size: 18px; font-weight: 800; color: #fff; min-height: 1.3em; }
 .chess-status.is-check { color: #ff7b88; }
 .chess-status.is-over { color: #f5c518; }
-.chess-offer { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 10px; border-radius: 8px; background: rgba(77,163,255,0.14); font-size: 14px; font-weight: 700; }
-.chess-note { margin: 0; font-size: 13px; color: #aaa; }
 .chess-moves { margin: 0; padding: 6px 8px; list-style: none; max-height: 260px; min-height: 60px; overflow-y: auto; background: rgba(255,255,255,0.04);
   border-radius: 8px; font-size: 14px; font-variant-numeric: tabular-nums; contain: content; }
 .chess-moves li { display: grid; grid-template-columns: 34px 1fr 1fr; gap: 4px; padding: 2px 0; }
@@ -89,9 +77,6 @@
 .chess-segments { display: flex; border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; overflow: hidden; }
 .chess-segments button { flex: 1; padding: 8px; border: 0; background: transparent; color: #ccc; font-weight: 700; cursor: pointer; font-family: inherit; font-size: 14px; }
 .chess-segments button.is-selected { background: rgba(255,255,255,0.9); color: #000; }
-.chess-join { display: flex; gap: 8px; }
-.chess-join input { flex: 1; min-width: 0; padding: 9px 10px; border-radius: 5px; border: 1px solid #555; background: #1b1b1b; color: #fff;
-  font-size: 18px; letter-spacing: 0.12em; text-transform: uppercase; font-family: ui-monospace, Menlo, Consolas, monospace; }
 
 @media (max-width: 860px) {
   .chess-game { --board: min(calc(100vw - 16px), 560px); padding: 8px 8px 16px; }

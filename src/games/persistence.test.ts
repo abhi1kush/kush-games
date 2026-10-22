@@ -112,4 +112,12 @@ describe('save slots', () => {
     expect(hasSavedGame('snake', storage)).toBe(false);
     expect(hasSavedGame('chess', storage)).toBe(false);
   });
+
+  it('an online room counts as a saved game for Connect Four and Checkers (Continue badge)', () => {
+    const storage = memoryStorage();
+    expect(hasSavedGame('checkers', storage)).toBe(false);
+    storage.setItem('kush-games:checkers-online:save:v1', JSON.stringify({ version: 1, savedAt: 0, data: { mode: 'online' } }));
+    expect(hasSavedGame('checkers', storage)).toBe(true);
+    expect(hasSavedGame('connect-four', storage)).toBe(false);
+  });
 });

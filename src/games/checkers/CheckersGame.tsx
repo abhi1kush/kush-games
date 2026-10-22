@@ -1,9 +1,15 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createAiClient, emptyTally, isTally, Tally, waitAtLeast } from '../aiWorkerClient';
 import { readStoredJson, saveStoredJson } from '../random';
-import { MuteButton, playSound, unlockAudio, useSharedMute } from '../sharedSound';
-import { Checkers as Engine, CheckersMove, computeMoveHere, decodeMoves, HARD_NODE_BUDGET, loadCheckersEngine, squareColumn, squareRow } from './engine';
+import { OnlineLobbyCard } from '../online/OnlineUI';
+import { useOnlineScreen } from '../online/useOnlineScreen';
+import { MuteButton, unlockAudio, useSharedMute } from '../sharedSound';
+import CheckersBoard from './Board';
+import CheckersOnline, { createCheckersOnlineSlot } from './CheckersOnline';
+import { Checkers as Engine, CheckersMove, computeMoveHere, decodeMoves, HARD_NODE_BUDGET, loadCheckersEngine } from './engine';
+import { checkersRules } from './rules';
 import { createCheckersSaveSlot, LEVEL_NAMES, PlayMode } from './save';
+import { playCrownSound, playEndSound, playMoveSound } from './sounds';
 import '../shared.css';
 import './checkers.css';
 
@@ -25,13 +31,6 @@ const viewOf = (engine: Engine): BoardView => {
   return { cells: engine.cells(), moves, sideToMove: engine.side_to_move(), winner: engine.winner(), history: Array.from(engine.history()), mustCapture: moves.some(move => move.captured.length > 0) };
 };
 
-const playMoveSound = (isCapture: boolean, isMuted: boolean) => playSound(isCapture
-  ? { tones: [{ frequency: 520, endFrequency: 260, durationSeconds: 0.12, volume: 0.07, type: 'square' }], noises: [{ durationSeconds: 0.05, volume: 0.05, filterFrequency: 1600 }] }
-  : { noises: [{ durationSeconds: 0.05, volume: 0.06, filterFrequency: 900 }] }, isMuted);
-const playCrownSound = (isMuted: boolean) => playSound({ tones: [880, 1175].map((frequency, index) => ({ frequency, durationSeconds: 0.16, startSeconds: index * 0.08, volume: 0.05 })) }, isMuted);
-const playEndSound = (didWin: boolean, isMuted: boolean) =>
-  playSound({ tones: (didWin ? [523, 659, 784, 1047] : [392, 330, 262]).map((frequency, index) => ({ frequency, durationSeconds: 0.22, startSeconds: index * 0.11, volume: 0.07 })) }, isMuted);
-
 function readTallies(): Tallies {
   const stored = readStoredJson<Partial<Tallies>>(TALLY_STORAGE_KEY, {});
   return { computer: isTally(stored.computer) ? stored.computer : emptyTally(), friends: isTally(stored.friends) ? stored.friends : emptyTally() };
@@ -43,10 +42,44 @@ export default function CheckersScreen() {
   useEffect(() => { loadCheckersEngine().then(() => setIsReady(true), () => setLoadError(true)); }, []);
   if (loadError) return <div className="game-shell"><p className="game-banner game-banner--lose">Couldn’t load the game engine. Please refresh.</p></div>;
   if (!isReady) return <div className="game-shell" data-testid="checkers-loading"><p className="game-help">Loading…</p></div>;
-  return <CheckersGame />;
+  return <CheckersScreens />;
 }
 
-function CheckersGame() {
+/** Local play (vs computer / 2 players on one device), the online lobby, or an online room. */
+function CheckersScreens() {
+  const [onlineSlot] = useState(createCheckersOnlineSlot);
+  const { screen, createRoom, joinRoom, showLobby, showLocal } = useOnlineScreen(checkersRules, onlineSlot);
+  if (screen.kind === 'room') {
+    return (
+      <CheckersOnline key={`${screen.role}:${screen.roomCode}`} role={screen.role} roomCode={screen.roomCode} initialMatch={screen.initialMatch}
+        isRestored={screen.isRestored} saveSlot={onlineSlot} onLeave={showLocal} />
+    );
+  }
+  if (screen.kind === 'lobby') {
+    return (
+      <div className="game-shell checkers" data-testid="checkers" data-mode="online-lobby">
+        <div className="game-shell__header">
+          <ModeSegments mode="online" onLocalMode={showLocal} onOnline={showLobby} />
+        </div>
+        <OnlineLobbyCard onCreate={() => { unlockAudio(); createRoom(); }} onJoin={code => { unlockAudio(); joinRoom(code); }}
+          description="Create a room and send your friend the link. You play Dark and move first; colours swap every new game." />
+      </div>
+    );
+  }
+  return <CheckersGame onOnline={showLobby} />;
+}
+
+function ModeSegments({ mode, onLocalMode, onOnline }: { mode: PlayMode | 'online'; onLocalMode(mode: PlayMode): void; onOnline(): void }) {
+  return (
+    <div className="game-segments" role="group" aria-label="Opponent">
+      <button type="button" className={mode === 'computer' ? 'is-selected' : ''} onClick={() => onLocalMode('computer')} data-testid="checkers-mode-computer">vs Computer</button>
+      <button type="button" className={mode === 'friends' ? 'is-selected' : ''} onClick={() => onLocalMode('friends')} data-testid="checkers-mode-friends">2 Players</button>
+      <button type="button" className={mode === 'online' ? 'is-selected' : ''} onClick={onOnline} data-testid="checkers-mode-online">Online</button>
+    </div>
+  );
+}
+
+function CheckersGame({ onOnline }: { onOnline(): void }) {
   const saveSlot = useMemo(() => createCheckersSaveSlot(), []);
   const [initialSave] = useState(() => saveSlot.load());
   const engineRef = useRef<Engine>(null as unknown as Engine);
@@ -65,7 +98,6 @@ function CheckersGame() {
   const [tallies, setTallies] = useState<Tallies>(readTallies);
   const { isMuted, isMutedRef, toggleMute } = useSharedMute();
   const requestIdRef = useRef(0);
-  const boardRef = useRef<HTMLDivElement>(null);
   const settingsRef = useRef({ mode, level });
   settingsRef.current = { mode, level };
   const aiClient = useMemo(() => createAiClient(() => new Worker(new URL('./ai.worker.ts', import.meta.url), { type: 'module' }), computeMoveHere), []);
@@ -104,18 +136,6 @@ function CheckersGame() {
       playEndSound(currentMode === 'friends' || after.winner === 1, isMutedRef.current);
     }
   }, [isMutedRef, persist]);
-
-  // Slide the moved piece along its path (and fade captured pieces) with Web Animations: no React work per frame.
-  useLayoutEffect(() => {
-    const board = boardRef.current;
-    if (!lastMove || !board) return;
-    const piece = board.querySelector<HTMLElement>(`[data-square="${lastMove.to}"] .checkers-piece`);
-    const cellSize = board.clientWidth / 8;
-    const end = { x: squareColumn(lastMove.to), y: squareRow(lastMove.to) };
-    const points = [lastMove.from, ...lastMove.path].map(square => ({ x: (squareColumn(square) - end.x) * cellSize, y: (squareRow(square) - end.y) * cellSize }));
-    const animation = piece?.animate(points.map(point => ({ transform: `translate(${point.x}px, ${point.y}px)` })), { duration: 160 * lastMove.path.length + 60, easing: 'ease-in-out' });
-    return () => animation?.cancel();
-  }, [lastMove]);
 
   // Computer's turn.
   useEffect(() => {
@@ -178,8 +198,6 @@ function CheckersGame() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [startNewGame, toggleMute, undo]);
 
-  const movablePieces = useMemo(() => new Set(view.moves.map(move => move.from)), [view.moves]);
-  const targets = useMemo(() => new Set(view.moves.filter(move => move.from === selected).map(move => move.to)), [view.moves, selected]);
   const tally = tallies[mode];
   const pieceCount = (owner: 1 | 3) => view.cells.filter(cell => cell === owner || cell === owner + 1).length;
   const sideName = (side: number) => (side === DARK ? 'Dark' : 'Light');
@@ -192,10 +210,7 @@ function CheckersGame() {
     <div className="game-shell checkers" data-testid="checkers" data-mode={mode} data-level={level} data-winner={view.winner} data-plies={view.history.length}
       data-side={view.sideToMove} data-thinking={isThinking} data-must-capture={view.mustCapture} data-ai-ms={aiMilliseconds ?? ''}>
       <div className="game-shell__header">
-        <div className="game-segments" role="group" aria-label="Opponent">
-          <button type="button" className={mode === 'computer' ? 'is-selected' : ''} onClick={() => startNewGame({ mode: 'computer' })} data-testid="checkers-mode-computer">vs Computer</button>
-          <button type="button" className={mode === 'friends' ? 'is-selected' : ''} onClick={() => startNewGame({ mode: 'friends' })} data-testid="checkers-mode-friends">2 Players</button>
-        </div>
+        <ModeSegments mode={mode} onLocalMode={nextMode => startNewGame({ mode: nextMode })} onOnline={onOnline} />
         {mode === 'computer' && (
           <div className="game-segments" role="group" aria-label="Difficulty">
             {LEVEL_NAMES.map((name, index) => (
@@ -214,26 +229,8 @@ function CheckersGame() {
       {wasRestored && <p className="game-restored" data-testid="restored">💾 Saved game restored</p>}
       <p className={`game-banner ${view.winner === 0 ? (view.mustCapture && !isComputerTurn ? 'game-banner--lose' : 'game-banner--info') : view.winner === 1 || mode === 'friends' || view.winner === 3 ? 'game-banner--win' : 'game-banner--lose'}`}
         data-testid="checkers-status">{status}</p>
-      <div className={`checkers-board${isComputerTurn ? ' is-waiting' : ''}`} ref={boardRef} data-testid="checkers-board">
-        {Array.from({ length: 64 }, (_, cellIndex) => {
-          const row = Math.floor(cellIndex / 8), column = cellIndex % 8;
-          if ((row + column) % 2 === 0) return <div key={cellIndex} className="checkers-cell is-light" />;
-          const square = row * 4 + Math.floor(column / 2);
-          const owner = view.cells[square];
-          const isMovable = !isComputerTurn && view.winner === 0 && movablePieces.has(square);
-          const wasJumped = lastMove?.captured.includes(square);
-          return (
-            <button type="button" key={cellIndex} className={`checkers-cell${selected === square ? ' is-selected' : ''}${targets.has(square) ? ' is-target' : ''}${lastMove && (lastMove.from === square || lastMove.to === square) ? ' is-last' : ''}`}
-              data-square={square} data-testid="checkers-square" onClick={() => handleSquare(square)} aria-label={`Square ${square + 1}`}>
-              {owner !== 0 && (
-                <i className={`checkers-piece ${owner <= 2 ? 'is-dark' : 'is-light'}${owner % 2 === 0 ? ' is-king' : ''}${isMovable ? ' is-movable' : ''}${isMovable && view.mustCapture ? ' must-capture' : ''}`}
-                  data-piece={owner} />
-              )}
-              {wasJumped && owner === 0 && <i key={view.history.length} className="checkers-piece is-captured" aria-hidden="true" />}
-            </button>
-          );
-        })}
-      </div>
+      <CheckersBoard cells={view.cells} moves={view.winner === 0 ? view.moves : []} selected={selected} lastMove={lastMove}
+        isLocked={isComputerTurn || view.winner !== 0} isFlipped={false} mustCapture={view.mustCapture} plies={view.history.length} onSquare={handleSquare} />
       <div className="game-actions">
         <button type="button" className="game-button" onClick={undo} disabled={view.history.length === 0} data-testid="checkers-undo">↶ Undo</button>
         <button type="button" className="game-button game-button--primary" onClick={() => startNewGame()} data-testid="checkers-new">New game</button>

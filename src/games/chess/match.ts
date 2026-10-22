@@ -6,22 +6,14 @@
  * every move and decides check, mate, stalemate and the automatic draws.
  */
 import { Chess, Move, Square } from 'chess.js';
+import * as online from '../online/match';
+import type { Ending as OnlineEnding, OnlineMatch, OnlineRules } from '../online/match';
 
 export type Color = 'w' | 'b';
 export type PromotionPiece = 'q' | 'r' | 'b' | 'n';
-export type Ending = { kind: 'resign'; loser: Color } | { kind: 'draw-agreed' };
-
-export interface MatchState {
-  /** Increases with every rematch, so messages from an older game are ignored. */
-  gameNumber: number;
-  /** Colour the room's host plays in this game (swaps on rematch). Local games use 'w'. */
-  hostColor: Color;
-  /** Moves in UCI notation from the start position. */
-  moves: string[];
-  ending: Ending | null;
-  drawOfferFrom: Color | null;
-  rematchOfferFrom: Color | null;
-}
+export type Ending = OnlineEnding<Color>;
+/** A chess match: moves in UCI from the start position (see ../online/match.ts for the other fields). */
+export type MatchState = OnlineMatch<Color>;
 
 export const opposite = (color: Color): Color => (color === 'w' ? 'b' : 'w');
 export const colorName = (color: Color) => (color === 'w' ? 'White' : 'Black');
@@ -94,32 +86,30 @@ export function applyMove(match: MatchState, uci: string, mover: Color): { match
   return { match: { ...match, moves: [...match.moves, moveToUci(move)], drawOfferFrom: null }, move, game };
 }
 
-export function resign(match: MatchState, loser: Color): MatchState {
-  const game = replayMoves(match.moves);
-  if (!game || matchOutcome(match, game).isOver) return match;
-  return { ...match, ending: { kind: 'resign', loser }, drawOfferFrom: null };
-}
+/** Chess for the shared online code: chess.js validates every move on both sides. */
+export const chessRules: OnlineRules<Color> = {
+  gameId: 'chess',
+  colors: ['w', 'b'],
+  isMoveText: isUciMove,
+  isLegalLine: moves => replayMoves(moves) !== null,
+  legalMove(moves, uci) {
+    const game = replayMoves(moves);
+    if (!game || game.isGameOver()) return null;
+    const move = playUci(game, uci);
+    return move ? moveToUci(move) : null;
+  },
+  colorToMove: moves => (moves.length % 2 === 0 ? 'w' : 'b'),
+  isOverOnBoard: moves => replayMoves(moves)?.isGameOver() ?? true,
+};
 
-export function offerDraw(match: MatchState, from: Color): MatchState {
-  const game = replayMoves(match.moves);
-  if (!game || matchOutcome(match, game).isOver || match.drawOfferFrom) return match;
-  return { ...match, drawOfferFrom: from };
-}
-
+export const resign = (match: MatchState, loser: Color) => online.resignMatch(chessRules, match, loser);
+export const offerDraw = (match: MatchState, from: Color) => online.offerDraw(chessRules, match, from);
 /** Accepting only works for the player the draw was offered to. */
-export function acceptDraw(match: MatchState, by: Color): MatchState {
-  if (match.drawOfferFrom !== opposite(by)) return match;
-  return { ...match, ending: { kind: 'draw-agreed' }, drawOfferFrom: null };
-}
-
-export const declineDraw = (match: MatchState): MatchState => (match.drawOfferFrom ? { ...match, drawOfferFrom: null } : match);
-
-export const offerRematch = (match: MatchState, from: Color): MatchState => ({ ...match, rematchOfferFrom: from });
-
+export const acceptDraw = (match: MatchState, by: Color) => online.acceptDraw(chessRules, match, by);
+export const declineDraw = (match: MatchState) => online.declineDraw(match);
+export const offerRematch = (match: MatchState, from: Color) => online.offerRematch(chessRules, match, from);
 /** A new game with colours swapped. */
-export function startRematch(match: MatchState): MatchState {
-  return createMatch(opposite(match.hostColor), match.gameNumber + 1);
-}
+export const startRematch = (match: MatchState) => online.startRematch(chessRules, match);
 
 /** Squares a piece on `from` can move to (for highlighting). */
 export function legalTargets(game: Chess, from: Square): Move[] {

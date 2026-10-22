@@ -2,6 +2,7 @@
 // (host at 1280px, guest on a 375px phone) through the public PeerJS server.
 // Usage: node e2e/chess-online.mjs [siteUrl] [screenshotDirectory]
 import { chromium } from 'playwright-core';
+import { connectionStatus, createRelayContexts, noOverflow, pressNewGameTogether, sideBySide, waitFor } from './relay.mjs';
 
 const siteUrl = process.argv[2] ?? 'https://abhi1kush.github.io/kush-games/';
 const screenshotDirectory = process.argv[3] ?? '/workspace';
@@ -21,15 +22,6 @@ async function move(page, from, to, isTouch = false) {
   await tap(page, from, isTouch);
   await tap(page, to, isTouch);
 }
-async function waitFor(predicate, timeoutMs = 15000, intervalMs = 100) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (await predicate()) return true;
-    await new Promise(resolve => setTimeout(resolve, intervalMs));
-  }
-  return false;
-}
-const noOverflow = page => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
 const pageErrors = [];
 
 // ---------- Local pass-and-play ----------
@@ -73,59 +65,7 @@ const pageErrors = [];
 }
 
 // ---------- Online: host (desktop) + guest (phone) ----------
-const connectionStatus = page => page.getByTestId('chess-connection').getAttribute('data-status');
 const guestOptions = { viewport: { width: 375, height: 812 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true };
-
-/**
- * Stand-in for the network when this machine's browser can't make WebRTC connections: each page
- * gets a transport whose messages are relayed between the two browser contexts by this script.
- * Everything else (the session, protocol, saving and UI) is the real app code.
- */
-async function createRelayContexts() {
-  const pages = {};
-  let isOpen = false;
-  const deliver = (role, method, argument) => pages[role]?.evaluate(([name, value]) => {
-    const handlers = window.__chessRelayHandlers;
-    if (!handlers) return;
-    if (name === 'open') { window.__chessRelayOpen = true; handlers.onStatus({ status: 'connected' }); handlers.onOpen(); }
-    else if (name === 'close') { window.__chessRelayOpen = false; handlers.onStatus({ status: 'opponent-left' }); }
-    else handlers.onMessage(JSON.parse(value));
-  }, [method, argument]).catch(() => undefined);
-  const ready = { host: false, guest: false };
-  const setReady = async (role, isReady) => {
-    ready[role] = isReady;
-    const other = role === 'host' ? 'guest' : 'host';
-    if (isOpen) { isOpen = false; await deliver(other, 'close'); }
-    if (ready.host && ready.guest) {
-      await new Promise(resolve => setTimeout(resolve, 300));
-      isOpen = true;
-      await deliver('host', 'open');
-      await deliver('guest', 'open');
-    }
-  };
-  const makeContext = async (role, options) => {
-    const context = await browser.newContext(options);
-    await context.exposeBinding('__chessRelaySend', (_source, text) => { if (isOpen) void deliver(role === 'host' ? 'guest' : 'host', 'message', text); });
-    await context.exposeBinding('__chessRelayReady', (_source, isReady) => setReady(role, isReady));
-    await context.addInitScript(() => {
-      window.__kushChessTestTransport = () => ({
-        start(handlers) {
-          window.__chessRelayHandlers = handlers;
-          handlers.onStatus({ status: 'waiting' });
-          window.__chessRelayReady(true);
-        },
-        send(message) { if (!window.__chessRelayOpen) return false; window.__chessRelaySend(JSON.stringify(message)); return true; },
-        stop() { window.__chessRelayHandlers = null; window.__chessRelayOpen = false; window.__chessRelayReady(false); },
-      });
-      window.addEventListener('pagehide', () => window.__chessRelayReady(false));
-    });
-    pages[role] = await context.newPage();
-    return { context, page: pages[role] };
-  };
-  const hostSide = await makeContext('host', { viewport: { width: 1280, height: 800 } });
-  const guestSide = await makeContext('guest', guestOptions);
-  return { hostContext: hostSide.context, guestContext: guestSide.context, host: hostSide.page, guest: guestSide.page };
-}
 
 // 1) The real thing: PeerJS server + WebRTC.
 let transportUsed = 'PeerJS (WebRTC)';
@@ -138,33 +78,33 @@ host.on('pageerror', error => pageErrors.push(`host: ${error}`));
 guest.on('pageerror', error => pageErrors.push(`guest: ${error}`));
 
 await host.goto(`${siteUrl}#/play/chess`, { waitUntil: 'networkidle' });
-await host.getByTestId('chess-create-room').click();
+await host.getByTestId('online-create').click();
 const reachedServer = await waitFor(async () => (await connectionStatus(host)) === 'waiting', 20000);
 check(reachedServer, `peerjs: host registers the room on the public PeerJS server (status ${await connectionStatus(host)})`);
-let roomCode = await host.getByTestId('chess-room-code').innerText();
-const roomLinkText = await host.getByTestId('chess-room-link').inputValue();
+let roomCode = await host.getByTestId('online-room-code').innerText();
+const roomLinkText = await host.getByTestId('online-room-link').inputValue();
 check(/^[A-Z2-9]{5}$/.test(roomCode) && roomLinkText.endsWith(`#/play/chess?room=${roomCode}`), `online: room code ${roomCode} and link ${roomLinkText}`);
-check(/Waiting for friend/.test(await host.getByTestId('chess-connection').innerText()), 'online: host shows "Waiting for friend…"');
-await host.getByTestId('chess-copy').click();
+check(/Waiting for friend/.test(await host.getByTestId('online-connection').innerText()), 'online: host shows "Waiting for friend…"');
+await host.getByTestId('online-copy').click();
 check(await host.evaluate(() => navigator.clipboard.readText()) === roomLinkText, 'online: Copy link puts the link on the clipboard');
 await guest.goto(`${siteUrl}#/play/chess?room=${roomCode}`, { waitUntil: 'networkidle' });
 const peerConnected = reachedServer && await waitFor(async () => (await connectionStatus(guest)) === 'connected' && (await connectionStatus(host)) === 'connected', 25000);
 console.log(`INFO peerjs: direct WebRTC connection ${peerConnected ? 'worked' : 'did NOT open on this machine'}`);
 if (!peerConnected) {
   const guestStatus = await connectionStatus(guest);
-  const helpText = await guest.getByTestId('chess-connection-help').innerText().catch(() => '');
+  const helpText = await guest.getByTestId('online-connection-help').innerText().catch(() => '');
   check(guestStatus === 'failed' || guestStatus === 'connecting', `peerjs: guest found the host's room via the PeerJS server and is trying (${guestStatus})`);
   check(/another network/.test(helpText) || guestStatus === 'connecting', `peerjs: a failed direct connection shows the "try another network" help (${helpText.slice(0, 60)}…)`);
   await hostContext.close();
   await guestContext.close();
   // 2) Same two-browser test over the relay transport.
   transportUsed = 'relay (mocked transport)';
-  ({ hostContext, guestContext, host, guest } = await createRelayContexts());
+  ({ hostContext, guestContext, host, guest } = await createRelayContexts(browser));
   host.on('pageerror', error => pageErrors.push(`host: ${error}`));
   guest.on('pageerror', error => pageErrors.push(`guest: ${error}`));
   await host.goto(`${siteUrl}#/play/chess`, { waitUntil: 'networkidle' });
-  await host.getByTestId('chess-create-room').click();
-  roomCode = await host.getByTestId('chess-room-code').innerText();
+  await host.getByTestId('online-create').click();
+  roomCode = await host.getByTestId('online-room-code').innerText();
   await guest.goto(`${siteUrl}#/play/chess?room=${roomCode}`, { waitUntil: 'networkidle' });
 }
 console.log(`INFO online test transport: ${transportUsed}`);
@@ -215,25 +155,54 @@ console.log(`INFO online test transport: ${transportUsed}`);
   check(hostBack && await boardData(host, 'moves') === '8' && await boardData(host, 'fen') === await boardData(guest, 'fen'),
     `online: the host reloads, keeps the board and both reconnect (${await connectionStatus(host)} / ${await connectionStatus(guest)})`);
 
-  await guest.getByTestId('chess-offer-draw').tap();
-  check(await waitFor(() => host.getByTestId('chess-draw-offer').isVisible(), 10000), 'online: draw offer reaches the host');
-  await host.getByRole('button', { name: 'Decline' }).click();
-  check(await waitFor(async () => !(await guest.getByTestId('chess-offer-draw').isDisabled()), 10000), 'online: declining the draw re-enables the offer');
-  await host.getByTestId('chess-resign').click();
-  await host.getByTestId('chess-confirm-resign').click();
+  // Draw offer → pending indicator → decline (notice on the offerer).
+  await guest.getByTestId('online-offer-draw').tap();
+  check(await waitFor(() => host.getByTestId('online-draw-offer').isVisible(), 10000) && await guest.getByTestId('online-draw-pending').isVisible(),
+    'online: draw offer reaches the host; the guest sees "Draw offered — waiting"');
+  await host.getByTestId('online-decline-draw').click();
+  check(await waitFor(async () => !(await guest.getByTestId('online-offer-draw').isDisabled()), 10000)
+    && await waitFor(() => guest.getByTestId('online-notice').isVisible(), 5000), 'online: declining the draw tells the guest and re-enables the offer');
+  // Resign with confirmation → BOTH ends see the result and a New game button.
+  await host.getByTestId('online-resign').click();
+  check(await host.getByTestId('online-confirm-resign').isVisible() && await boardData(host, 'over') === 'false', 'online: resign asks "Really resign?" first');
+  await host.getByTestId('online-confirm-resign').click();
   check(await waitFor(async () => (await boardData(guest, 'result')) === 'b', 10000)
-    && /you win/.test(await guest.getByTestId('chess-status').innerText()), 'online: host resigns, the guest sees "you win"');
-  await guest.getByTestId('chess-rematch').tap();
-  check(await waitFor(() => host.getByTestId('chess-rematch-offer').isVisible(), 10000), 'online: rematch offer reaches the host');
-  await host.getByTestId('chess-accept-rematch').click();
+    && /you win/.test(await guest.getByTestId('online-result').innerText()) && /You resigned/.test(await host.getByTestId('online-result').innerText()),
+    'online: host resigns; the guest sees "you win", the host "You resigned"');
+  check(await host.getByTestId('online-new-game').isVisible() && await guest.getByTestId('online-new-game').isVisible(), 'online: game over shows New game on BOTH ends');
+  const guestNewGameBox = await guest.getByTestId('online-new-game').boundingBox();
+  check(guestNewGameBox && guestNewGameBox.y + guestNewGameBox.height <= 812, `online: the phone sees New game without scrolling (y=${Math.round(guestNewGameBox?.y ?? -1)})`);
+  // Rematch request → the other side sees Accept / Decline.
+  await guest.getByTestId('online-new-game').tap();
+  check(await waitFor(() => host.getByTestId('online-rematch-offer').isVisible(), 10000) && await guest.getByTestId('online-rematch-pending').isVisible()
+    && /Friend wants a rematch/.test(await host.getByTestId('online-rematch-offer').innerText()), 'online: New game sends a rematch request; the host sees "Friend wants a rematch — Accept / Decline"');
+  await host.mouse.move(0, 0);
+  await host.screenshot({ path: '/tmp/chess-rematch-host.png' });
+  await guest.screenshot({ path: '/tmp/chess-rematch-guest.png' });
+  await sideBySide('/tmp/chess-rematch-host.png', '/tmp/chess-rematch-guest.png', `${screenshotDirectory}/kush-games-chess-rematch.png`,
+    ['Host (resigned) — sees the rematch request', 'Guest (won) — waiting for the rematch']);
+  await host.getByTestId('online-accept-rematch').click();
   check(await waitFor(async () => (await boardData(guest, 'my-color')) === 'w' && (await boardData(host, 'my-color')) === 'b'
-    && (await boardData(guest, 'moves')) === '0' && (await boardData(guest, 'orientation')) === 'w', 10000), 'online: rematch starts a new game with colours swapped and boards re-oriented');
+    && (await boardData(guest, 'moves')) === '0' && (await boardData(guest, 'orientation')) === 'w' && (await boardData(host, 'game-number')) === '2', 10000),
+    'online: accepting starts game 2 on both ends with colours swapped and boards re-oriented');
+  check(!(await host.getByTestId('online-game-over').isVisible().catch(() => false)) && !(await guest.getByTestId('online-game-over').isVisible().catch(() => false)),
+    'online: the game-over banner is gone on both ends');
   await move(guest, 'd2', 'd4', true);
   check(await waitFor(async () => (await boardData(host, 'moves')) === '1', 10000), 'online: the new game syncs (guest now White)');
+  // Agreed draw, then both press New game at once → game 3 starts right away.
+  await host.getByTestId('online-offer-draw').click();
+  await waitFor(() => guest.getByTestId('online-draw-offer').isVisible(), 10000);
+  await guest.getByTestId('online-accept-draw').tap();
+  check(await waitFor(async () => (await boardData(host, 'result')) === 'draw' && (await boardData(guest, 'result')) === 'draw', 10000)
+    && /Draw agreed/.test(await host.getByTestId('online-result').innerText()) && /Draw agreed/.test(await guest.getByTestId('online-result').innerText()),
+    'online: accepted draw → "Draw agreed" on both ends');
+  await pressNewGameTogether([host, guest]);
+  check(await waitFor(async () => (await boardData(host, 'game-number')) === '3' && (await boardData(guest, 'game-number')) === '3'
+    && (await boardData(host, 'my-color')) === 'w', 10000), 'online: both pressing New game starts game 3 (colours swap back)');
 
   await guest.getByTestId('chess-leave').tap();
   check(await waitFor(async () => (await connectionStatus(host)) === 'opponent-left', 25000)
-    && /Opponent left/.test(await host.getByTestId('chess-connection').innerText()), 'online: host shows "Opponent left" when the guest leaves');
+    && /Opponent left/.test(await host.getByTestId('online-connection').innerText()), 'online: host shows "Opponent left" when the guest leaves');
   check(await guest.evaluate(() => localStorage.getItem('kush-games:chess:save:v1')) === null, 'online: leaving clears the guest’s save');
   await host.goto(siteUrl, { waitUntil: 'networkidle' });
   check(await host.locator('[data-testid=row-play-now] [data-testid=continue-chess]').isVisible(), 'home: Chess card shows ▶ Continue while a room is saved');

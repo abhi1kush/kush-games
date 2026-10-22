@@ -1,15 +1,17 @@
 import type { Chess as ChessGame, Square } from 'chess.js';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { MutableRefObject, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { emptyGuestMatch, Role } from '../online/match';
+import { MatchActions, MatchBanner, OnlineLobbyCard, RoomPanel } from '../online/OnlineUI';
+import { onlineResult } from '../online/result';
+import { createRoomCode, roomCodeFromHash, roomHash } from '../online/room';
+import { playConnectedSound, playGameOverSound, playOfferSound } from '../online/sounds';
+import { useOnlineRoom } from '../online/useOnlineRoom';
 import Board, { TargetKind } from './Board';
 import {
-  applyMove, Color, colorName, colorToMove, createMatch, describeOutcome, legalTargets, MatchState, matchOutcome, opposite,
+  applyMove, chessRules, Color, colorName, colorToMove, createMatch, describeOutcome, legalTargets, MatchState, matchOutcome, opposite,
   PromotionPiece, replayMoves,
 } from './match';
-import { PeerTransport } from './peerTransport';
-import { emptyGuestMatch, myColor as colorForRole, Role } from './protocol';
-import { createRoomCode, normalizeRoomCode, roomCodeFromHash, roomHash, roomLink } from './room';
-import { createChessSaveSlot } from './save';
-import { ConnectionInfo, RoomSession, Transport } from './session';
+import { createChessSaveSlot, SavedChess } from './save';
 import { getSoundsPlayed, MoveSound, playMoveSound, readMuted, saveMuted, unlockAudio } from './sound';
 import './chess.css';
 
@@ -23,49 +25,16 @@ const PROMOTION_CHOICES: PromotionPiece[] = ['q', 'r', 'b', 'n'];
 const PROMOTION_GLYPHS: Record<PromotionPiece, string> = { q: '♛\uFE0E', r: '♜\uFE0E', b: '♝\uFE0E', n: '♞\uFE0E' };
 const PROMOTION_NAMES: Record<PromotionPiece, string> = { q: 'Queen', r: 'Rook', b: 'Bishop', n: 'Knight' };
 
-type TransportFactory = (role: Role, roomCode: string) => Transport;
-/** PeerJS normally. Browser tests may install `window.__kushChessTestTransport` to relay messages themselves. */
-function createTransport(role: Role, roomCode: string): Transport {
-  const testFactory = (window as unknown as { __kushChessTestTransport?: TransportFactory }).__kushChessTestTransport;
-  return testFactory ? testFactory(role, roomCode) : new PeerTransport(role, roomCode);
-}
-
-function connectionText(connection: ConnectionInfo, role: Role): string {
-  switch (connection.status) {
-    case 'starting': return 'Connecting to server…';
-    case 'waiting': return 'Waiting for friend…';
-    case 'connecting': return connection.problem === 'host-not-found' ? 'Waiting for host…' : 'Connecting…';
-    case 'connected': return 'Connected';
-    case 'opponent-left': return role === 'host' ? 'Opponent left — waiting for them to come back…' : 'Opponent left — reconnecting…';
-    case 'failed':
-      switch (connection.problem) {
-        case 'direct-connection': return 'Can’t connect to your friend';
-        case 'room-in-use': return 'Room is open somewhere else';
-        case 'version': return 'Different app versions';
-        default: return 'Can’t reach the server — retrying…';
-      }
-  }
-}
-
-function connectionHelp(connection: ConnectionInfo): string | null {
-  if (connection.status !== 'failed') return null;
-  switch (connection.problem) {
-    case 'direct-connection':
-      return 'Your networks didn’t allow a direct connection (common on office, school or some mobile networks). Try another network — for example switch between Wi-Fi and mobile data. Still retrying…';
-    case 'room-in-use': return 'This room is already open in another tab or device. Close it there, or leave and create a new room.';
-    case 'version': return 'You and your friend have different versions of the game. Both reload the page.';
-    default: return 'Check your internet connection. Retrying…';
-  }
-}
+type SaveSlot = ReturnType<typeof createChessSaveSlot>;
 
 /** What to show when the page opens: a link to a room, a saved game, or the lobby. */
-function initialScreen(saved: ReturnType<ReturnType<typeof createChessSaveSlot>['load']>): { screen: Screen; match: MatchState; restored: boolean } {
+function initialScreen(saved: SavedChess | null): { screen: Screen; match: MatchState; restored: boolean } {
   const linkedRoom = roomCodeFromHash(window.location.hash);
   if (linkedRoom) {
     if (saved?.mode === 'online' && saved.roomCode === linkedRoom) {
       return { screen: { kind: 'online', role: saved.role, roomCode: saved.roomCode }, match: saved.match, restored: true };
     }
-    return { screen: { kind: 'online', role: 'guest', roomCode: linkedRoom }, match: emptyGuestMatch(), restored: false };
+    return { screen: { kind: 'online', role: 'guest', roomCode: linkedRoom }, match: emptyGuestMatch(chessRules), restored: false };
   }
   if (saved?.mode === 'online') return { screen: { kind: 'online', role: saved.role, roomCode: saved.roomCode }, match: saved.match, restored: true };
   if (saved?.mode === 'local') return { screen: { kind: 'local' }, match: saved.match, restored: true };
@@ -89,139 +58,48 @@ function findKingSquare(game: ChessGame, color: Color): string | null {
   return null;
 }
 
+/** The chess mute setting (chess keeps its own key, as before). */
+function useChessMute() {
+  const [isMuted, setIsMuted] = useState(readMuted);
+  const isMutedRef = useRef(isMuted);
+  const toggleMute = () => {
+    const nowMuted = !isMutedRef.current;
+    isMutedRef.current = nowMuted;
+    saveMuted(nowMuted);
+    if (!nowMuted) unlockAudio();
+    setIsMuted(nowMuted);
+  };
+  return { isMuted, isMutedRef, toggleMute };
+}
+
 export default function ChessGameScreen() {
   const [saveSlot] = useState(createChessSaveSlot);
   const [initial] = useState(() => initialScreen(saveSlot.load()));
   const [screen, setScreen] = useState<Screen>(initial.screen);
-  const [match, setMatch] = useState<MatchState>(initial.match);
-  const [connection, setConnection] = useState<ConnectionInfo>({ status: 'starting' });
+  const [startMatch, setStartMatch] = useState<MatchState>(initial.match);
   const [isRestored, setIsRestored] = useState(initial.restored);
-  const [selected, setSelected] = useState<string | null>(null);
-  const [pendingPromotion, setPendingPromotion] = useState<{ from: string; to: string } | null>(null);
-  const [isLocalBoardFlipped, setIsLocalBoardFlipped] = useState(false);
-  const [isMuted, setIsMuted] = useState(readMuted);
   const [hostColorChoice, setHostColorChoice] = useState<Color>('w');
-  const [joinCodeText, setJoinCodeText] = useState('');
-  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
-  const [isConfirmingResign, setIsConfirmingResign] = useState(false);
-  const sessionRef = useRef<RoomSession | null>(null);
-  const matchRef = useRef(match);
-  matchRef.current = match;
-  const isMutedRef = useRef(isMuted);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  const online = screen.kind === 'online' ? screen : null;
-  const role: Role = online?.role ?? 'host';
-
-  // ---------- Derived from the move list (recomputed only when it changes) ----------
-  const game = useMemo(() => replayMoves(match.moves) ?? replayMoves([])!, [match.moves]);
-  const position = useMemo(() => positionOf(game), [game]);
-  const outcome = useMemo(() => matchOutcome(match, game), [match, game]);
-  const history = useMemo(() => game.history({ verbose: true }), [game]);
-  const lastMoveDetails = history[history.length - 1];
-  const lastMove = useMemo(() => (lastMoveDetails ? { from: lastMoveDetails.from, to: lastMoveDetails.to } : null), [lastMoveDetails]);
-  const turn = colorToMove(match);
-  const checkSquare = useMemo(() => (game.inCheck() ? findKingSquare(game, game.turn()) : null), [game]);
-  const myColor: Color = online ? colorForRole(match, role) : turn;
-  const orientation: Color = online ? myColor : isLocalBoardFlipped ? 'b' : 'w';
-  const hasJoinedGame = !online || match.gameNumber > 0;
-  const canMove = screen.kind !== 'lobby' && hasJoinedGame && !outcome.isOver && turn === myColor && !pendingPromotion;
-
-  const targets = useMemo(() => {
-    const map = new Map<string, TargetKind>();
-    if (!selected || !canMove) return map;
-    for (const move of legalTargets(game, selected as Square)) map.set(move.to, move.captured ? 'capture' : 'move');
-    return map;
-  }, [selected, canMove, game]);
-
-  // ---------- Online session ----------
-  const roomCode = online?.roomCode;
-  useEffect(() => {
-    if (!roomCode) return;
-    const session = new RoomSession(role, matchRef.current, createTransport(role, roomCode), update => {
-      setMatch(current => (current === update.match ? current : update.match));
-      setConnection(current => (current.status === update.connection.status && current.problem === update.connection.problem ? current : update.connection));
-    });
-    sessionRef.current = session;
-    setConnection({ status: 'starting' });
-    session.start();
-    return () => { session.stop(); if (sessionRef.current === session) sessionRef.current = null; };
-  }, [role, roomCode]);
-
-  // ---------- Sounds for each new move (ours or the opponent's) ----------
-  const previousMovesRef = useRef({ gameNumber: match.gameNumber, count: match.moves.length });
-  useEffect(() => {
-    const previous = previousMovesRef.current;
-    previousMovesRef.current = { gameNumber: match.gameNumber, count: match.moves.length };
-    if (previous.gameNumber === match.gameNumber && match.moves.length === previous.count + 1 && !isMutedRef.current) {
-      playMoveSound(soundForLastMove(game));
-      containerRef.current?.setAttribute('data-sounds', String(getSoundsPlayed()));
-    }
-    setSelected(null);
-    setIsConfirmingResign(false);
-  }, [match.gameNumber, match.moves.length, game]);
-
-  // ---------- Saving ----------
-  useEffect(() => {
-    if (screen.kind === 'online') saveSlot.save({ mode: 'online', match, role: screen.role, roomCode: screen.roomCode });
-    else if (screen.kind === 'local') {
-      if (outcome.isOver) saveSlot.clear();
-      else if (match.moves.length > 0) saveSlot.save({ mode: 'local', match });
-    }
-  }, [screen, match, outcome.isOver, saveSlot]);
-
-  // ---------- Actions ----------
-  const playUci = useCallback((uci: string) => {
-    setIsRestored(false);
-    if (sessionRef.current && screen.kind === 'online') {
-      sessionRef.current.playMove(uci);
-      return;
-    }
-    const result = applyMove(matchRef.current, uci, colorToMove(matchRef.current));
-    if (result) setMatch(result.match);
-  }, [screen.kind]);
-
-  const handleSquareClick = useCallback((square: string) => {
-    if (!isMutedRef.current) unlockAudio();
-    if (!canMove) return;
-    if (selected && targets.has(square)) {
-      const options = legalTargets(game, selected as Square).filter(move => move.to === square);
-      if (options.some(move => move.promotion)) setPendingPromotion({ from: selected, to: square });
-      else playUci(`${selected}${square}`);
-      setSelected(null);
-      return;
-    }
-    const piece = game.get(square as Square);
-    if (piece && piece.color === turn && square !== selected) setSelected(square);
-    else setSelected(null);
-  }, [canMove, selected, targets, game, turn, playUci]);
-
-  const choosePromotion = (piece: PromotionPiece | null) => {
-    const pending = pendingPromotion;
-    setPendingPromotion(null);
-    if (pending && piece) playUci(`${pending.from}${pending.to}${piece}`);
-  };
-
-  const createRoom = () => {
-    unlockAudio();
-    const code = createRoomCode();
-    setMatch(createMatch(hostColorChoice));
-    setIsRestored(false);
-    setScreen({ kind: 'online', role: 'host', roomCode: code });
-  };
+  const mute = useChessMute();
 
   const joinRoom = useCallback((code: string) => {
     unlockAudio();
-    setMatch(emptyGuestMatch());
+    setStartMatch(emptyGuestMatch(chessRules));
     setIsRestored(false);
     setScreen({ kind: 'online', role: 'guest', roomCode: code });
-    if (roomCodeFromHash(window.location.hash) !== code) window.history.replaceState(null, '', roomHash(code));
+    if (roomCodeFromHash(window.location.hash) !== code) window.history.replaceState(null, '', roomHash('chess', code));
   }, []);
+
+  const createRoom = () => {
+    unlockAudio();
+    setStartMatch(createMatch(hostColorChoice));
+    setIsRestored(false);
+    setScreen({ kind: 'online', role: 'host', roomCode: createRoomCode() });
+  };
 
   const startLocalGame = () => {
     unlockAudio();
     saveSlot.clear();
-    setMatch(createMatch('w'));
+    setStartMatch(createMatch('w'));
     setIsRestored(false);
     setScreen({ kind: 'local' });
   };
@@ -229,23 +107,8 @@ export default function ChessGameScreen() {
   const leave = () => {
     saveSlot.clear();
     setScreen({ kind: 'lobby' });
-    setMatch(createMatch());
-    setSelected(null);
-    setPendingPromotion(null);
     setIsRestored(false);
     if (roomCodeFromHash(window.location.hash)) window.history.replaceState(null, '', LOBBY_HASH);
-  };
-
-  const undoLocalMove = () => setMatch(current => ({ ...current, moves: current.moves.slice(0, -1), ending: null, drawOfferFrom: null }));
-
-  const toggleMute = () => {
-    setIsMuted(wasMuted => {
-      const nowMuted = !wasMuted;
-      isMutedRef.current = nowMuted;
-      saveMuted(nowMuted);
-      if (!nowMuted) unlockAudio();
-      return nowMuted;
-    });
   };
 
   // Opening a room link while the game is open joins that room.
@@ -258,33 +121,207 @@ export default function ChessGameScreen() {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, [screen, joinRoom]);
 
-  // ---------- Sharing ----------
-  const shareLink = online ? roomLink(online.roomCode) : '';
-  const copyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(shareLink);
-      setCopyState('copied');
-    } catch {
-      const input = containerRef.current?.querySelector<HTMLInputElement>('[data-testid=chess-room-link]');
-      input?.select();
-      setCopyState(document.execCommand?.('copy') ? 'copied' : 'failed');
-    }
-    window.setTimeout(() => setCopyState('idle'), 2000);
+  if (screen.kind === 'lobby') {
+    return (
+      <div className="chess-game chess-game--lobby" data-testid="chess-game" data-screen="lobby">
+        <div className="chess-lobby" data-testid="chess-lobby">
+          <h1 className="chess-lobby__title"><span aria-hidden="true">♞</span> Chess</h1>
+          <OnlineLobbyCard onCreate={createRoom} onJoin={joinRoom}>
+            <div className="chess-segments" role="radiogroup" aria-label="Your colour">
+              {(['w', 'b'] as Color[]).map(color => (
+                <button key={color} type="button" role="radio" aria-checked={hostColorChoice === color}
+                  className={hostColorChoice === color ? 'is-selected' : ''} onClick={() => setHostColorChoice(color)}>
+                  I play {colorName(color)}
+                </button>
+              ))}
+            </div>
+          </OnlineLobbyCard>
+          <section className="chess-lobby__card">
+            <h2>Pass and play</h2>
+            <p>Two players on this device, taking turns.</p>
+            <button type="button" className="chess-button" onClick={startLocalGame} data-testid="chess-local">Play on this device</button>
+          </section>
+        </div>
+      </div>
+    );
+  }
+  if (screen.kind === 'local') {
+    return <LocalChess initialMatch={startMatch} isRestored={isRestored} saveSlot={saveSlot} mute={mute} onNewGame={startLocalGame} onExit={leave} />;
+  }
+  return (
+    <OnlineChess key={`${screen.role}:${screen.roomCode}`} role={screen.role} roomCode={screen.roomCode} initialMatch={startMatch}
+      isRestored={isRestored} saveSlot={saveSlot} mute={mute} onLeave={leave} />
+  );
+}
+
+type Mute = ReturnType<typeof useChessMute>;
+
+function LocalChess({ initialMatch, isRestored, saveSlot, mute, onNewGame, onExit }: {
+  initialMatch: MatchState; isRestored: boolean; saveSlot: SaveSlot; mute: Mute; onNewGame(): void; onExit(): void;
+}) {
+  const [match, setMatch] = useState(initialMatch);
+  const [isFlipped, setIsFlipped] = useState(false);
+  useEffect(() => setMatch(initialMatch), [initialMatch]);
+  const isOver = useMemo(() => matchOutcome(match, replayMoves(match.moves) ?? replayMoves([])!).isOver, [match]);
+  useEffect(() => {
+    if (isOver) saveSlot.clear();
+    else if (match.moves.length > 0) saveSlot.save({ mode: 'local', match });
+  }, [match, isOver, saveSlot]);
+  const playUci = (uci: string) => {
+    const result = applyMove(match, uci, colorToMove(match));
+    if (result) setMatch(result.match);
   };
-  const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
-  const shareRoom = () => {
-    navigator.share?.({ title: 'Chess on Kush Games', text: 'Play chess with me! Open this link to join my game:', url: shareLink }).catch(() => undefined);
+  const undo = () => setMatch(current => ({ ...current, moves: current.moves.slice(0, -1), ending: null, drawOfferFrom: null }));
+  return (
+    <ChessTable match={match} myColor={null} orientation={isFlipped ? 'b' : 'w'} canPlay isMuted={mute.isMutedRef} screen="local" onMove={playUci}
+      playerLabel={colorName}
+      panelTop={isRestored && match.moves.length > 0 ? <p className="chess-restored" data-testid="chess-restored">💾 Saved game restored</p> : null}
+      actions={(
+        <>
+          <button type="button" className="chess-button chess-button--small" onClick={undo} disabled={match.moves.length === 0} data-testid="chess-undo">↶ Undo</button>
+          <button type="button" className="chess-button chess-button--small" onClick={() => setIsFlipped(flipped => !flipped)} data-testid="chess-flip">⇅ Flip</button>
+          <button type="button" className="chess-button chess-button--small" onClick={onNewGame} data-testid="chess-new-game">↻ New game</button>
+          <MuteToggle mute={mute} />
+          <button type="button" className="chess-button chess-button--small" onClick={onExit} data-testid="chess-leave">Exit</button>
+        </>
+      )} />
+  );
+}
+
+function OnlineChess({ role, roomCode, initialMatch, isRestored, saveSlot, mute, onLeave }: {
+  role: Role; roomCode: string; initialMatch: MatchState; isRestored: boolean; saveSlot: SaveSlot; mute: Mute; onLeave(): void;
+}) {
+  const room = useOnlineRoom({
+    rules: chessRules, role, roomCode, initialMatch,
+    save: saved => saveSlot.save(saved),
+    onConnected: () => playConnectedSound(mute.isMutedRef.current),
+    onGameOver: finished => {
+      const game = replayMoves(finished.moves);
+      const outcome = game ? matchOutcome(finished, game) : null;
+      const mine = role === 'host' ? finished.hostColor : opposite(finished.hostColor);
+      playGameOverSound(!outcome?.winner ? 'draw' : outcome.winner === mine ? 'win' : 'loss', mute.isMutedRef.current);
+    },
+  });
+  const { match, connection, myColor, isOver, actions } = room;
+  const opponent = opposite(myColor);
+  const hasJoinedGame = match.gameNumber > 0;
+
+  // A ping when the friend offers a draw or a rematch.
+  const incomingOffer = (match.drawOfferFrom === opponent ? 'draw' : '') + (match.rematchOfferFrom === opponent ? 'rematch' : '');
+  useEffect(() => { if (incomingOffer) playOfferSound(mute.isMutedRef.current); }, [incomingOffer, mute.isMutedRef]);
+
+  const result = useMemo(() => {
+    if (!isOver) return null;
+    const game = replayMoves(match.moves);
+    const outcome = game ? matchOutcome(match, game) : null;
+    if (!outcome || match.ending) return onlineResult(match, myColor, null);
+    return onlineResult(match, myColor, outcome.winner ? { winner: outcome.winner, reason: `by ${outcome.reason}` } : { draw: true, reason: `by ${outcome.reason}` });
+  }, [isOver, match, myColor]);
+
+  const offerSide = (color: Color | null) => (color === null ? null : color === myColor ? 'me' : 'friend');
+  const banner = (
+    <MatchBanner result={result} drawOffer={offerSide(match.drawOfferFrom)} rematchOffer={offerSide(match.rematchOfferFrom)}
+      notice={room.notice} actions={actions} swapText={`Next game you play ${colorName(opponent)}.`} />
+  );
+  return (
+    <ChessTable match={match} myColor={myColor} orientation={myColor} canPlay={hasJoinedGame} isMuted={mute.isMutedRef} screen="online"
+      onMove={uci => { actions.playMove(uci); }}
+      statusOverride={!hasJoinedGame ? 'Joining the room…' : result ? result.text : null}
+      playerLabel={color => (color === myColor ? `You · ${colorName(color)}` : `Friend · ${colorName(color)}`)}
+      banner={banner}
+      panelTop={<RoomPanel gameId="chess" gameName="Chess" role={role} roomCode={roomCode} connection={connection} isRestored={isRestored} />}
+      actions={(
+        <>
+          <MatchActions canAct={hasJoinedGame && !isOver} isDrawPending={Boolean(match.drawOfferFrom)} actions={actions} />
+          <MuteToggle mute={mute} />
+          <button type="button" className="chess-button chess-button--small" onClick={onLeave} data-testid="chess-leave">Leave room</button>
+        </>
+      )} />
+  );
+}
+
+function MuteToggle({ mute }: { mute: Mute }) {
+  return (
+    <button type="button" className="chess-button chess-button--small" onClick={mute.toggleMute} data-testid="chess-mute" aria-pressed={mute.isMuted}
+      aria-label={mute.isMuted ? 'Unmute sound' : 'Mute sound'}>{mute.isMuted ? '🔇' : '🔊'}</button>
+  );
+}
+
+/** The board, players, status and move list; local and online play add their own panels and buttons. */
+function ChessTable({ match, myColor, orientation, canPlay, isMuted, screen, onMove, playerLabel, statusOverride, banner, panelTop, actions }: {
+  match: MatchState;
+  /** null in pass-and-play (whoever's turn it is moves). */
+  myColor: Color | null;
+  orientation: Color;
+  canPlay: boolean;
+  isMuted: MutableRefObject<boolean>;
+  screen: 'local' | 'online';
+  onMove(uci: string): void;
+  playerLabel(color: Color): string;
+  statusOverride?: string | null;
+  banner?: ReactNode;
+  panelTop?: ReactNode;
+  actions: ReactNode;
+}) {
+  const [selected, setSelected] = useState<string | null>(null);
+  const [pendingPromotion, setPendingPromotion] = useState<{ from: string; to: string } | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const game = useMemo(() => replayMoves(match.moves) ?? replayMoves([])!, [match.moves]);
+  const position = useMemo(() => positionOf(game), [game]);
+  const outcome = useMemo(() => matchOutcome(match, game), [match, game]);
+  const history = useMemo(() => game.history({ verbose: true }), [game]);
+  const lastMoveDetails = history[history.length - 1];
+  const lastMove = useMemo(() => (lastMoveDetails ? { from: lastMoveDetails.from, to: lastMoveDetails.to } : null), [lastMoveDetails]);
+  const turn = colorToMove(match);
+  const checkSquare = useMemo(() => (game.inCheck() ? findKingSquare(game, game.turn()) : null), [game]);
+  const canMove = canPlay && !outcome.isOver && (myColor === null || turn === myColor) && !pendingPromotion;
+
+  const targets = useMemo(() => {
+    const map = new Map<string, TargetKind>();
+    if (!selected || !canMove) return map;
+    for (const move of legalTargets(game, selected as Square)) map.set(move.to, move.captured ? 'capture' : 'move');
+    return map;
+  }, [selected, canMove, game]);
+
+  // Sound for each new move (ours or the opponent's); clear the selection.
+  const previousMovesRef = useRef({ gameNumber: match.gameNumber, count: match.moves.length });
+  useEffect(() => {
+    const previous = previousMovesRef.current;
+    previousMovesRef.current = { gameNumber: match.gameNumber, count: match.moves.length };
+    if (previous.gameNumber === match.gameNumber && match.moves.length === previous.count + 1 && !isMuted.current) {
+      playMoveSound(soundForLastMove(game));
+      containerRef.current?.setAttribute('data-sounds', String(getSoundsPlayed()));
+    }
+    setSelected(null);
+    setPendingPromotion(null);
+  }, [match.gameNumber, match.moves.length, game, isMuted]);
+
+  const handleSquareClick = useCallback((square: string) => {
+    if (!isMuted.current) unlockAudio();
+    if (!canMove) return;
+    if (selected && targets.has(square)) {
+      const options = legalTargets(game, selected as Square).filter(move => move.to === square);
+      if (options.some(move => move.promotion)) setPendingPromotion({ from: selected, to: square });
+      else onMove(`${selected}${square}`);
+      setSelected(null);
+      return;
+    }
+    const piece = game.get(square as Square);
+    if (piece && piece.color === turn && square !== selected) setSelected(square);
+    else setSelected(null);
+  }, [canMove, selected, targets, game, turn, onMove, isMuted]);
+
+  const choosePromotion = (piece: PromotionPiece | null) => {
+    const pending = pendingPromotion;
+    setPendingPromotion(null);
+    if (pending && piece) onMove(`${pending.from}${pending.to}${piece}`);
   };
 
-  // ---------- Text ----------
-  const opponentColor = opposite(myColor);
   let statusText: string;
-  if (screen.kind === 'lobby') statusText = '';
-  else if (!hasJoinedGame) statusText = 'Joining the room…';
-  else if (outcome.isOver) {
-    const base = describeOutcome(outcome);
-    statusText = online && outcome.winner ? `${base} — ${outcome.winner === myColor ? 'you win! 🎉' : 'you lose'}` : base;
-  } else if (online) statusText = `${turn === myColor ? 'Your move' : 'Friend’s move'}${checkSquare ? ' · Check!' : ''}`;
+  if (statusOverride) statusText = statusOverride;
+  else if (outcome.isOver) statusText = describeOutcome(outcome);
+  else if (myColor) statusText = `${turn === myColor ? 'Your move' : 'Friend’s move'}${checkSquare ? ' · Check!' : ''}`;
   else statusText = `${colorName(turn)} to move${checkSquare ? ' · Check!' : ''}`;
 
   const movePairs = useMemo(() => {
@@ -298,63 +335,16 @@ export default function ChessGameScreen() {
   const moveListRef = useRef<HTMLOListElement>(null);
   useEffect(() => { const list = moveListRef.current; if (list) list.scrollTop = list.scrollHeight; }, [movePairs]);
 
-  // ---------- Lobby ----------
-  if (screen.kind === 'lobby') {
-    const typedCode = normalizeRoomCode(joinCodeText);
-    return (
-      <div className="chess-game chess-game--lobby" ref={containerRef} data-testid="chess-game" data-screen="lobby">
-        <div className="chess-lobby" data-testid="chess-lobby">
-          <h1 className="chess-lobby__title"><span aria-hidden="true">♞</span> Chess</h1>
-          <section className="chess-lobby__card">
-            <h2>Play a friend online</h2>
-            <p>Create a room and send your friend the link. Moves go straight between your two browsers.</p>
-            <div className="chess-segments" role="radiogroup" aria-label="Your colour">
-              {(['w', 'b'] as Color[]).map(color => (
-                <button key={color} type="button" role="radio" aria-checked={hostColorChoice === color}
-                  className={hostColorChoice === color ? 'is-selected' : ''} onClick={() => setHostColorChoice(color)}>
-                  I play {colorName(color)}
-                </button>
-              ))}
-            </div>
-            <button type="button" className="chess-button chess-button--primary" onClick={createRoom} data-testid="chess-create-room">
-              Play a friend
-            </button>
-          </section>
-          <section className="chess-lobby__card">
-            <h2>Join with a code</h2>
-            <form className="chess-join" onSubmit={event => { event.preventDefault(); if (typedCode) joinRoom(typedCode); }}>
-              <input value={joinCodeText} onChange={event => setJoinCodeText(event.target.value)} placeholder="e.g. K7M2Q" maxLength={10}
-                aria-label="Room code" data-testid="chess-join-code" autoCapitalize="characters" autoComplete="off" spellCheck={false} />
-              <button type="submit" className="chess-button" disabled={!typedCode} data-testid="chess-join">Join</button>
-            </form>
-          </section>
-          <section className="chess-lobby__card">
-            <h2>Pass and play</h2>
-            <p>Two players on this device, taking turns.</p>
-            <button type="button" className="chess-button" onClick={startLocalGame} data-testid="chess-local">Play on this device</button>
-          </section>
-        </div>
-      </div>
-    );
-  }
-
-  // ---------- Game ----------
-  const opponentOffersDraw = online && match.drawOfferFrom === opponentColor && !outcome.isOver;
-  const iOfferedDraw = online && match.drawOfferFrom === myColor && !outcome.isOver;
-  const opponentOffersRematch = online && outcome.isOver && match.rematchOfferFrom === opponentColor;
-  const iOfferedRematch = online && outcome.isOver && match.rematchOfferFrom === myColor;
-  const help = online ? connectionHelp(connection) : null;
-  const playerLabel = (color: Color) => (online ? (color === myColor ? `You · ${colorName(color)}` : `Friend · ${colorName(color)}`) : colorName(color));
-
   return (
-    <div className="chess-game" ref={containerRef} data-testid="chess-game" data-screen={screen.kind}>
+    <div className="chess-game" ref={containerRef} data-testid="chess-game" data-screen={screen}>
       <div className="chess-layout">
         <div className="chess-board-area">
+          {banner}
           <div className={`chess-player chess-player--top${turn === opposite(orientation) && !outcome.isOver ? ' is-to-move' : ''}`}>
             <span className={`chess-player__dot chess-player__dot--${opposite(orientation)}`} />{playerLabel(opposite(orientation))}
           </div>
           <div className="chess-board-frame" data-testid="chess-board" data-fen={game.fen()} data-moves={match.moves.length}
-            data-turn={turn} data-my-color={online ? myColor : ''} data-orientation={orientation} data-game-number={match.gameNumber}
+            data-turn={turn} data-my-color={myColor ?? ''} data-orientation={orientation} data-game-number={match.gameNumber}
             data-over={outcome.isOver ? 'true' : 'false'} data-result={outcome.isOver ? (outcome.winner ?? 'draw') : ''}>
             <Board position={position} orientation={orientation} selected={selected} targets={targets} lastMove={lastMove}
               checkSquare={checkSquare} onSquareClick={handleSquareClick} />
@@ -378,79 +368,14 @@ export default function ChessGameScreen() {
         </div>
 
         <aside className="chess-panel">
-          {online && (
-            <div className="chess-room" data-testid="chess-room">
-              <div className="chess-room__header">
-                <span className="chess-room__label">Room</span>
-                <b className="chess-room__code" data-testid="chess-room-code">{online.roomCode}</b>
-                <span className={`chess-connection chess-connection--${connection.status}`} data-testid="chess-connection"
-                  data-status={connection.status} data-problem={connection.problem ?? ''} role="status">
-                  {connectionText(connection, online.role)}
-                </span>
-              </div>
-              {help && <p className="chess-room__help" data-testid="chess-connection-help">{help}</p>}
-              {online.role === 'host' && (
-                <div className="chess-share">
-                  <input readOnly value={shareLink} data-testid="chess-room-link" aria-label="Room link" onFocus={event => event.target.select()} />
-                  <div className="chess-share__buttons">
-                    <button type="button" className="chess-button chess-button--small" onClick={copyLink} data-testid="chess-copy">
-                      {copyState === 'copied' ? '✓ Copied' : copyState === 'failed' ? 'Copy failed' : 'Copy link'}
-                    </button>
-                    {canShare && <button type="button" className="chess-button chess-button--small" onClick={shareRoom} data-testid="chess-share">Share…</button>}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-          {isRestored && (!online || connection.status !== 'connected') && <p className="chess-restored" data-testid="chess-restored">💾 Saved game restored{online ? ' — rejoining the room' : ''}</p>}
+          {panelTop}
           <p className={`chess-status${outcome.isOver ? ' is-over' : ''}${checkSquare ? ' is-check' : ''}`} data-testid="chess-status">{statusText}</p>
-
-          {opponentOffersDraw && (
-            <div className="chess-offer" data-testid="chess-draw-offer">
-              <span>Your friend offers a draw</span>
-              <button type="button" className="chess-button chess-button--small chess-button--primary" onClick={() => sessionRef.current?.acceptDraw()} data-testid="chess-accept-draw">Accept</button>
-              <button type="button" className="chess-button chess-button--small" onClick={() => sessionRef.current?.declineDraw()}>Decline</button>
-            </div>
-          )}
-          {iOfferedDraw && <p className="chess-note">Draw offered — waiting for your friend.</p>}
-          {opponentOffersRematch && (
-            <div className="chess-offer" data-testid="chess-rematch-offer">
-              <span>Your friend wants a rematch</span>
-              <button type="button" className="chess-button chess-button--small chess-button--primary" onClick={() => sessionRef.current?.acceptRematch()} data-testid="chess-accept-rematch">Play again</button>
-            </div>
-          )}
-          {iOfferedRematch && <p className="chess-note">Rematch offered — waiting for your friend.</p>}
-
           <ol className="chess-moves" ref={moveListRef} data-testid="chess-moves" aria-label="Moves">
             {movePairs.map(pair => (
               <li key={pair.number}><span className="chess-moves__number">{pair.number}.</span><span>{pair.white}</span><span>{pair.black}</span></li>
             ))}
           </ol>
-
-          <div className="chess-actions">
-            {online && !outcome.isOver && hasJoinedGame && (
-              <>
-                <button type="button" className="chess-button chess-button--small" disabled={Boolean(match.drawOfferFrom)}
-                  onClick={() => sessionRef.current?.offerDraw()} data-testid="chess-offer-draw">½ Offer draw</button>
-                {isConfirmingResign
-                  ? <button type="button" className="chess-button chess-button--small chess-button--danger" onClick={() => { sessionRef.current?.resign(); setIsConfirmingResign(false); }} data-testid="chess-confirm-resign">Really resign?</button>
-                  : <button type="button" className="chess-button chess-button--small" onClick={() => setIsConfirmingResign(true)} data-testid="chess-resign">🏳 Resign</button>}
-              </>
-            )}
-            {online && outcome.isOver && !match.rematchOfferFrom && (
-              <button type="button" className="chess-button chess-button--small chess-button--primary" onClick={() => sessionRef.current?.offerRematch()} data-testid="chess-rematch">↻ Rematch</button>
-            )}
-            {!online && (
-              <>
-                <button type="button" className="chess-button chess-button--small" onClick={undoLocalMove} disabled={match.moves.length === 0} data-testid="chess-undo">↶ Undo</button>
-                <button type="button" className="chess-button chess-button--small" onClick={() => setIsLocalBoardFlipped(flipped => !flipped)} data-testid="chess-flip">⇅ Flip</button>
-                <button type="button" className="chess-button chess-button--small" onClick={startLocalGame} data-testid="chess-new-game">↻ New game</button>
-              </>
-            )}
-            <button type="button" className="chess-button chess-button--small" onClick={toggleMute} data-testid="chess-mute" aria-pressed={isMuted}
-              aria-label={isMuted ? 'Unmute sound' : 'Mute sound'}>{isMuted ? '🔇' : '🔊'}</button>
-            <button type="button" className="chess-button chess-button--small" onClick={leave} data-testid="chess-leave">{online ? 'Leave room' : 'Exit'}</button>
-          </div>
+          <div className="chess-actions">{actions}</div>
         </aside>
       </div>
     </div>

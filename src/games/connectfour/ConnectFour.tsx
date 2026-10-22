@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createAiClient, emptyTally, isTally, Tally, waitAtLeast } from '../aiWorkerClient';
 import { readStoredJson, saveStoredJson } from '../random';
-import { MuteButton, playSound, unlockAudio, useSharedMute } from '../sharedSound';
+import { OnlineLobbyCard } from '../online/OnlineUI';
+import { useOnlineScreen } from '../online/useOnlineScreen';
+import { MuteButton, unlockAudio, useSharedMute } from '../sharedSound';
+import ConnectFourBoard from './Board';
+import ConnectFourOnline, { createConnectFourOnlineSlot } from './ConnectFourOnline';
 import { COLUMNS, computeMoveHere, ConnectFour as Engine, HARD_NODE_BUDGET, loadConnectFourEngine, ROWS } from './engine';
+import { connectFourRules } from './rules';
 import { createConnectFourSaveSlot, DiscColor, LEVEL_NAMES, PlayMode, SavedConnectFour } from './save';
+import { playDropSound, playEndSound } from './sounds';
 import '../shared.css';
 import './connectfour.css';
 
@@ -25,13 +31,6 @@ const viewOf = (engine: Engine): BoardView => ({
   playerToMove: engine.player_to_move(), history: Array.from(engine.history()),
 });
 
-const playDropSound = (row: number, isMuted: boolean) =>
-  playSound({ tones: [{ frequency: 180 + row * 30, endFrequency: 90 + row * 15, durationSeconds: 0.12, volume: 0.09, type: 'sine' }] }, isMuted);
-const playEndSound = (outcome: 'win' | 'lose' | 'draw', isMuted: boolean) => {
-  const notes = outcome === 'win' ? [523, 659, 784, 1047] : outcome === 'lose' ? [392, 330, 262] : [440, 440];
-  playSound({ tones: notes.map((frequency, index) => ({ frequency, durationSeconds: 0.22, startSeconds: index * 0.11, volume: 0.07 })) }, isMuted);
-};
-
 function readTallies(): Tallies {
   const stored = readStoredJson<Partial<Tallies>>(TALLY_STORAGE_KEY, {});
   return { computer: isTally(stored.computer) ? stored.computer : emptyTally(), friends: isTally(stored.friends) ? stored.friends : emptyTally() };
@@ -44,10 +43,44 @@ export default function ConnectFour() {
   useEffect(() => { loadConnectFourEngine().then(() => setIsReady(true), () => setLoadError(true)); }, []);
   if (loadError) return <div className="game-shell"><p className="game-banner game-banner--lose">Couldn’t load the game engine. Please refresh.</p></div>;
   if (!isReady) return <div className="game-shell" data-testid="connect-four-loading"><p className="game-help">Loading…</p></div>;
-  return <ConnectFourGame />;
+  return <ConnectFourScreens />;
 }
 
-function ConnectFourGame() {
+/** Local play (vs computer / 2 players on one device), the online lobby, or an online room. */
+function ConnectFourScreens() {
+  const [onlineSlot] = useState(createConnectFourOnlineSlot);
+  const { screen, createRoom, joinRoom, showLobby, showLocal } = useOnlineScreen(connectFourRules, onlineSlot);
+  if (screen.kind === 'room') {
+    return (
+      <ConnectFourOnline key={`${screen.role}:${screen.roomCode}`} role={screen.role} roomCode={screen.roomCode} initialMatch={screen.initialMatch}
+        isRestored={screen.isRestored} saveSlot={onlineSlot} onLeave={showLocal} />
+    );
+  }
+  if (screen.kind === 'lobby') {
+    return (
+      <div className="game-shell connect-four" data-testid="connect-four" data-mode="online-lobby">
+        <div className="game-shell__header">
+          <ModeSegments mode="online" onLocalMode={showLocal} onOnline={showLobby} />
+        </div>
+        <OnlineLobbyCard onCreate={() => { unlockAudio(); createRoom(); }} onJoin={code => { unlockAudio(); joinRoom(code); }}
+          description="Create a room and send your friend the link. You play Red and go first; colours swap every new game." />
+      </div>
+    );
+  }
+  return <ConnectFourGame onOnline={showLobby} />;
+}
+
+function ModeSegments({ mode, onLocalMode, onOnline }: { mode: PlayMode | 'online'; onLocalMode(mode: PlayMode): void; onOnline(): void }) {
+  return (
+    <div className="game-segments" role="group" aria-label="Opponent">
+      <button type="button" className={mode === 'computer' ? 'is-selected' : ''} onClick={() => onLocalMode('computer')} data-testid="c4-mode-computer">vs Computer</button>
+      <button type="button" className={mode === 'friends' ? 'is-selected' : ''} onClick={() => onLocalMode('friends')} data-testid="c4-mode-friends">2 Players</button>
+      <button type="button" className={mode === 'online' ? 'is-selected' : ''} onClick={onOnline} data-testid="c4-mode-online">Online</button>
+    </div>
+  );
+}
+
+function ConnectFourGame({ onOnline }: { onOnline(): void }) {
   const saveSlot = useMemo(() => createConnectFourSaveSlot(), []);
   const [initialSave] = useState(() => saveSlot.load());
   const engineRef = useRef<Engine>(null as unknown as Engine);
@@ -64,7 +97,6 @@ function ConnectFourGame() {
   const [lastDrop, setLastDrop] = useState<{ cell: number; row: number } | null>(null);
   const [aiMilliseconds, setAiMilliseconds] = useState<number | null>(null);
   const [tallies, setTallies] = useState<Tallies>(readTallies);
-  const [hoverColumn, setHoverColumn] = useState<number | null>(null);
   const { isMuted, isMutedRef, toggleMute } = useSharedMute();
   const requestIdRef = useRef(0);
   const settingsRef = useRef({ mode, level, firstColor });
@@ -183,10 +215,7 @@ function ConnectFourGame() {
     <div className="game-shell connect-four" data-testid="connect-four" data-mode={mode} data-level={level} data-winner={view.winner}
       data-moves={view.history.length} data-thinking={isThinking} data-ai-ms={aiMilliseconds ?? ''}>
       <div className="game-shell__header">
-        <div className="game-segments" role="group" aria-label="Opponent">
-          <button type="button" className={mode === 'computer' ? 'is-selected' : ''} onClick={() => startNewGame({ mode: 'computer' })} data-testid="c4-mode-computer">vs Computer</button>
-          <button type="button" className={mode === 'friends' ? 'is-selected' : ''} onClick={() => startNewGame({ mode: 'friends' })} data-testid="c4-mode-friends">2 Players</button>
-        </div>
+        <ModeSegments mode={mode} onLocalMode={nextMode => startNewGame({ mode: nextMode })} onOnline={onOnline} />
         {mode === 'computer' && (
           <div className="game-segments" role="group" aria-label="Difficulty">
             {LEVEL_NAMES.map((name, index) => (
@@ -206,27 +235,8 @@ function ConnectFourGame() {
         data-testid="c4-status">
         {view.winner === 0 && <i className={`c4-turn-disc c4-turn-disc--${colorToMove}`} aria-hidden="true" />}{statusText}
       </p>
-      <div className="c4-board" data-testid="c4-board" onPointerLeave={() => setHoverColumn(null)}>
-        {Array.from({ length: COLUMNS }, (_, column) => (
-          <button type="button" key={column} className={`c4-column${hoverColumn === column && view.winner === 0 && !isComputerTurn ? ' is-hovered' : ''}`}
-            onClick={() => handleColumn(column)} onPointerEnter={() => setHoverColumn(column)} aria-label={`Drop in column ${column + 1}`}
-            data-testid={`c4-column-${column}`} disabled={view.cells[column * ROWS + ROWS - 1] !== 0}>
-            {Array.from({ length: ROWS }, (_, rowFromTop) => {
-              const row = ROWS - 1 - rowFromTop;
-              const cell = column * ROWS + row;
-              const owner = view.cells[cell];
-              const color = owner === 0 ? null : colorOfPlayer(owner - 1);
-              const isNew = lastDrop?.cell === cell;
-              return (
-                <span key={row} className="c4-cell">
-                  {color && <i className={`c4-disc c4-disc--${color}${view.winningCells.has(cell) ? ' is-winning' : ''}${isNew ? ' is-dropping' : ''}`}
-                    style={isNew ? { ['--drop-rows' as string]: ROWS - row } : undefined} data-testid="c4-disc" data-color={color} />}
-                </span>
-              );
-            })}
-          </button>
-        ))}
-      </div>
+      <ConnectFourBoard cells={view.cells} winningCells={view.winningCells} lastDropCell={lastDrop?.cell ?? null}
+        colorOfOwner={owner => colorOfPlayer(owner - 1)} isLocked={view.winner !== 0 || isComputerTurn} onColumn={handleColumn} />
       <div className="game-actions">
         <button type="button" className="game-button" onClick={undo} disabled={view.history.length === 0} data-testid="c4-undo">↶ Undo</button>
         <button type="button" className="game-button game-button--primary" onClick={() => startNewGame({ alternate: true })} data-testid="c4-new">New game</button>

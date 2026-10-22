@@ -4,9 +4,10 @@
  * the guest connects to it. Handles reconnects, a heartbeat and friendly failure states.
  */
 import type { DataConnection, Peer as PeerType } from 'peerjs';
-import type { Message, Role } from './protocol';
+import type { Role } from './match';
+import type { Message } from './protocol';
 import { hostPeerId } from './room';
-import type { ConnectionInfo, Transport, TransportHandlers } from './session';
+import type { ConnectionInfo, Transport, TransportHandlers } from './transport';
 
 const OPEN_TIMEOUT_MS = 20_000;
 const HEARTBEAT_INTERVAL_MS = 4_000;
@@ -26,7 +27,11 @@ export class PeerTransport implements Transport {
   private guestRetryDelayMs = 2_000;
   private lastStatus: ConnectionInfo = { status: 'starting' };
 
-  constructor(private readonly role: Role, private readonly roomCode: string) {}
+  private readonly hostId: string;
+
+  constructor(private readonly role: Role, roomCode: string, gameId: string) {
+    this.hostId = hostPeerId(gameId, roomCode);
+  }
 
   start(handlers: TransportHandlers) {
     this.handlers = handlers;
@@ -66,7 +71,7 @@ export class PeerTransport implements Transport {
     const { Peer } = await import('peerjs');
     if (this.stopped) return;
     this.peer?.destroy();
-    const peer = this.role === 'host' ? new Peer(hostPeerId(this.roomCode), { debug: 0 }) : new Peer({ debug: 0 });
+    const peer = this.role === 'host' ? new Peer(this.hostId, { debug: 0 }) : new Peer({ debug: 0 });
     this.peer = peer;
     peer.on('open', () => {
       if (peer !== this.peer) return;
@@ -126,7 +131,7 @@ export class PeerTransport implements Transport {
     if (peer.disconnected) { peer.reconnect(); return; }
     if (this.connection?.open) return;
     if (!this.wasConnected) this.setStatus({ status: 'connecting', problem: this.lastStatus.problem === 'host-not-found' ? 'host-not-found' : undefined });
-    this.adopt(peer.connect(hostPeerId(this.roomCode), { reliable: true, serialization: 'json' }));
+    this.adopt(peer.connect(this.hostId, { reliable: true, serialization: 'json' }));
   }
 
   private adopt(connection: DataConnection) {

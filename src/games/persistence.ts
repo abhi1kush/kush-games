@@ -41,6 +41,11 @@ export const SAVE_VERSIONS: Record<string, number> = {
   'arrow-out': 3, 'color-trails': 1, breakout: 1, 'connect-four': 1, solitaire: 1, checkers: 1,
 };
 
+/** Games whose online room is saved in a second slot (so it doesn't replace the local game's save). */
+export const ONLINE_SAVE_VERSION = 1;
+export const onlineSaveGameId = (gameId: string) => `${gameId}-online`;
+export const GAMES_WITH_ONLINE_SAVE: readonly string[] = ['connect-four', 'checkers'];
+
 export const saveKey = (gameId: string, version: number) => `kush-games:${gameId}:save:v${version}`;
 
 export const DEFAULT_SAVE_THROTTLE_MS = 1000;
@@ -124,8 +129,11 @@ export function createSaveSlot<Data>(options: SaveSlotOptions<Data>): SaveSlot<D
 export function hasSavedGame(gameId: string, storage: KeyValueStorage | null = browserStorage()): boolean {
   const version = SAVE_VERSIONS[gameId];
   if (version === undefined || !storage) return false;
+  const isSaved = (key: string, keyVersion: number) =>
+    parseEnvelope(storage.getItem(key), keyVersion, data => (typeof data === 'object' && data !== null ? data : null)) !== null;
   try {
-    return parseEnvelope(storage.getItem(saveKey(gameId, version)), version, data => (typeof data === 'object' && data !== null ? data : null)) !== null;
+    return isSaved(saveKey(gameId, version), version)
+      || (GAMES_WITH_ONLINE_SAVE.includes(gameId) && isSaved(saveKey(onlineSaveGameId(gameId), ONLINE_SAVE_VERSION), ONLINE_SAVE_VERSION));
   } catch { return false; }
 }
 

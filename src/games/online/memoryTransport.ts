@@ -1,6 +1,6 @@
 /** Two in-memory transports wired to each other, for tests (and as a stand-in for the network). */
 import type { Message } from './protocol';
-import type { Transport, TransportHandlers } from './session';
+import type { Transport, TransportHandlers } from './transport';
 
 export interface MemoryLink {
   host: Transport;

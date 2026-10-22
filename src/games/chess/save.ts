@@ -1,8 +1,9 @@
 /** Saving and restoring a chess game in progress, including the online room (see ../persistence.ts). */
 import { createSaveSlot, isRecord } from '../persistence';
-import { MatchState } from './match';
-import { parseMatch, Role } from './protocol';
-import { normalizeRoomCode } from './room';
+import type { Role } from '../online/match';
+import { parseOnlineMatch } from '../online/match';
+import { normalizeRoomCode } from '../online/room';
+import { chessRules, MatchState } from './match';
 
 export const CHESS_SAVE_VERSION = 1;
 
@@ -12,7 +13,7 @@ export type SavedChess =
 
 export function parseChessSave(data: unknown): SavedChess | null {
   if (!isRecord(data)) return null;
-  const match = parseMatch(data.match);
+  const match = parseOnlineMatch(chessRules, data.match);
   if (!match) return null;
   if (data.mode === 'local') return { mode: 'local', match };
   if (data.mode !== 'online' || (data.role !== 'host' && data.role !== 'guest')) return null;

@@ -36,9 +36,9 @@ Built with **React + TypeScript + Vite**; Breakout, Connect Four, Solitaire and 
 | Arrow Out | ✅ Playable |
 | Color Trails | ✅ Playable |
 | Breakout (Rust/WebAssembly) | ✅ Playable |
-| Connect Four (vs computer or 2 players; Rust/WebAssembly) | ✅ Playable |
+| Connect Four (vs computer, 2 players, or online with a friend; Rust/WebAssembly) | ✅ Playable |
 | Solitaire — Klondike (Rust/WebAssembly) | ✅ Playable |
-| Checkers (vs computer or 2 players; Rust/WebAssembly) | ✅ Playable |
+| Checkers (vs computer, 2 players, or online with a friend; Rust/WebAssembly) | ✅ Playable |
 
 ### Snake
 
@@ -187,18 +187,30 @@ The newer games (Minesweeper, Sudoku, Tic-Tac-Toe, Memory Match, Flappy Wings, A
 
 - **Rules:** [`chess.js`](https://github.com/jhlywa/chess.js) handles legal moves, check, checkmate, stalemate, threefold repetition, insufficient material, the fifty-move rule, castling, en passant and promotion. `match.ts` wraps it: a match is just the list of moves in UCI (`e2e4`, `e7e8q`) plus resignation or an agreed draw.
 - **Board:** `Board.tsx` draws 64 memoised squares. Tap a piece to see its legal squares (dots, or rings for captures), then tap where it should go. The last move and a king in check are highlighted. A pawn reaching the last rank opens a promotion picker. The board flips for Black. Pieces are Unicode glyphs coloured with CSS, so there are no images.
-- **Online:** *Play a friend* creates a room with a 5-character code (no 0/O/1/I/L). The host registers the PeerJS id `kushchess-<code>` on the free public PeerJS server and gets a link like `https://abhi1kush.github.io/kush-games/#/play/chess?room=K7M2Q`, with **Copy link** and **Share…** (`navigator.share`) buttons. Opening the link joins automatically, or you can type the code in *Join with a code*. The host chooses White or Black, and each rematch swaps colours.
-  - Moves go directly between the two browsers over a WebRTC data channel (`peerTransport.ts`), using PeerJS's default ICE servers. No game server is involved.
-  - Connection status is always shown: *Waiting for friend*, *Connected*, *Opponent left — reconnecting*. The guest keeps retrying, and a heartbeat notices a silent disconnect.
-  - If the browsers can't reach each other directly (strict office, school or mobile networks), the game says so and suggests trying another network.
-- **Protocol** (`protocol.ts`, tested in `protocol.test.ts` and `session.test.ts`):
-  - Each move is sent as UCI + SAN with its ply and game number, and the receiver checks it with chess.js.
-  - On every (re)connect both sides send their whole match (moves + FEN). The newer game wins. In the same game the longer move list wins when the other is a prefix of it, otherwise the host's version wins, so both sides always converge.
-  - Also covered: resign (with a confirm step), offer/accept/decline a draw, and rematch.
+- **Online:** built on the shared online module (see *Online play with a friend* below). The host chooses White or Black; each rematch swaps colours. Chess keeps its PeerJS id prefix `kushchess-` and its save key.
 - **Pass and play:** two players on one device, with Undo, Flip and New game.
 - **Saving:** the game is saved under `kush-games:chess:save:v1`, including the room code and your role. A refresh restores the board and re-joins the room (a refreshed host re-opens the same room). A finished pass-and-play game isn't kept. *Leave room* / *Exit* clears the save.
 - **Sound:** small Web Audio sounds for a move, a capture and check, with a 🔊/🔇 toggle saved as `kush-games-chess-muted`.
-- **Browser test:** `node e2e/chess-online.mjs [url]` plays a local game, then two browser contexts (a 1280px host and a 375px phone guest) play an online game: moves both ways, reloads on both sides, draw, resign, rematch and leave. If WebRTC can't connect on the test machine, it still checks the PeerJS server part, then runs the same two-browser test over a relay transport that the script installs (`window.__kushChessTestTransport`, a test-only hook).
+- **Browser test:** `node e2e/chess-online.mjs [url]` plays a local game, then two browser contexts (a 1280px host and a 375px phone guest) play an online game: moves both ways, reloads on both sides, draw offer/decline/accept, resign, game over + New game on both ends, rematch request/accept (colours swap), both pressing New game at once, and leave. If WebRTC can't connect on the test machine, it still checks the PeerJS server part, then runs the same two-browser test over the relay transport in `e2e/relay.mjs`.
+
+### Online play with a friend (Chess, Connect Four, Checkers)
+
+`src/games/online/` holds everything the three games share; each game only adds a small rules adapter (`OnlineRules`: move format, legality, whose turn, finished on the board).
+
+| Game | Move on the wire | Checked by | Host plays in game 1 |
+|---|---|---|---|
+| Chess | UCI, e.g. `e2e4`, `e7e8q` | chess.js (`chess/match.ts`) | White or Black (chosen) |
+| Connect Four | column `"0"`–`"6"` | Rust/wasm rules (`connectfour/rules.ts`) | Red (moves first) |
+| Checkers | path of squares, e.g. `22-15-6` for a double jump | Rust/wasm legal-move list, so forced captures and full multi-jumps are enforced (`checkers/rules.ts`) | Dark (moves first); the guest's board is flipped |
+
+- **Rooms** (`room.ts`): 5-character codes (no 0/O/1/I/L); the host registers the PeerJS id `kushchess-` / `kushc4-` / `kushcheckers-` + code on the free public PeerJS broker. Share link `#/play/<game>?room=CODE` with **Copy link** and **Share…**; opening it joins automatically, or type the code.
+- **Transport** (`peerTransport.ts`): a WebRTC data channel with PeerJS's default ICE servers, a heartbeat, reconnects, and clear states: *Waiting for friend*, *Connected*, *Opponent left — reconnecting*, and a "try another network" hint when a direct connection is impossible. No game server.
+- **Protocol** (`protocol.ts`, version 2): `hello` (protocol + game id), full `sync` on every (re)connect (newer game wins; a longer move list wins over its prefix; otherwise the host's version), `move` with ply + game number (validated on receipt; anything odd triggers a sync), `resign`, `draw-offer/accept/decline`, `rematch-offer/accept/decline`, `ping`.
+- **Match** (`match.ts`): the move list plus resignation / agreed draw / pending draw offer (cancelled by the next move) / pending rematch request. A rematch swaps colours, so the other player moves first next game. If both players press New game, it starts at once.
+- **UI** (`OnlineUI.tsx`, `online.css`): room panel; *½ Offer draw* and *🏳 Resign* (with "Really resign?"); incoming offers with Accept / Decline; a game-over banner above the board on **both** ends with the result and **↻ New game**; the other side then sees "Friend wants a rematch — Accept / Decline".
+- **Saving:** Chess keeps the room in `kush-games:chess:save:v1`; Connect Four and Checkers use a second slot (`kush-games:connect-four-online:save:v1`, `kush-games:checkers-online:save:v1`) so a local game in progress isn't overwritten. A refresh rejoins the room; the hub shows ▶ Continue; *Leave room* clears it.
+- **Sounds:** opponent moves use the game's move sound; a chime on connect, a ping for incoming offers and a jingle at game over (shared mute; Chess keeps its own mute).
+- **Tests:** `online/protocol.test.ts`, `online/session.test.ts` (sync, reconnect, reload, draw offer/decline/auto-cancel/accept, resign, rematch handshake incl. crossing requests and decline) and `online/gameRules.test.ts` (Connect Four and Checkers rules through the real wasm). Browser: `node e2e/online-games.mjs [url]` checks the real PeerJS broker for both games, then plays Connect Four and Checkers between a desktop host and a 375px phone guest over the relay transport (`window.__kushTestTransport`, test-only; `__kushChessTestTransport` still works).
 
 ### Where 2048 came from
 
@@ -289,6 +301,8 @@ Browser check (needs Chrome at `/usr/bin/google-chrome` or `CHROME_PATH`):
 npm run e2e -- https://abhi1kush.github.io/kush-games/ /tmp
 node e2e/new-games.mjs https://abhi1kush.github.io/kush-games/ /tmp   # Minesweeper, Sudoku, Tic-Tac-Toe, Memory, Flappy smoke tests
 node e2e/four-games.mjs https://abhi1kush.github.io/kush-games/ /tmp  # Breakout, Connect Four, Solitaire, Checkers at 1280 and 375 px
+node e2e/chess-online.mjs https://abhi1kush.github.io/kush-games/ /tmp  # Chess local + online (two browsers)
+node e2e/online-games.mjs https://abhi1kush.github.io/kush-games/ /tmp  # Connect Four + Checkers online (add --peerjs-only for the broker check)
 ```
 
 ## Deploying
