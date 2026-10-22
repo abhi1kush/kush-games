@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { SAVE_VERSIONS } from './persistence';
 import { buildHomeRows, featuredGame, findGame, games } from './registry';
 
 describe('game registry', () => {
@@ -16,7 +17,7 @@ describe('game registry', () => {
     expect(featuredGame.id).toBe('2048');
     expect(featuredGame.status).toBe('playable');
     const placeholderCount = games.filter(game => game.status === 'coming-soon').length;
-    expect(placeholderCount).toBeGreaterThanOrEqual(6);
+    expect(placeholderCount).toBeGreaterThanOrEqual(3);
     expect(placeholderCount).toBeLessThanOrEqual(10);
   });
 
@@ -26,13 +27,18 @@ describe('game registry', () => {
     const puzzleRow = buildHomeRows().find(row => row.title === 'Puzzle')!;
     expect(puzzleRow.games[0].id).toBe('2048');
     const playNowIds = buildHomeRows().find(row => row.title === 'Play Now')!.games.map(game => game.id);
-    expect(playNowIds).toEqual(['2048', 'snake', 'blocks', 'chess']);
+    expect(playNowIds).toEqual(['2048', 'snake', 'blocks', 'minesweeper', 'sudoku', 'chess', 'tic-tac-toe', 'memory-match', 'flappy-wings']);
     const arcadeRow = buildHomeRows().find(row => row.title === 'Arcade')!;
     expect(arcadeRow.games[0].id).toBe('snake');
     const comingSoonIds = buildHomeRows().find(row => row.title === 'Coming Soon')!.games.map(game => game.id);
     expect(comingSoonIds).not.toContain('snake');
     expect(comingSoonIds).not.toContain('blocks');
-    expect(comingSoonIds).not.toContain('chess');
+    for (const playableId of ['chess', 'minesweeper', 'sudoku', 'tic-tac-toe', 'memory-match', 'flappy-wings']) expect(comingSoonIds).not.toContain(playableId);
+    expect(comingSoonIds).toEqual(['breakout', 'connect-four', 'solitaire', 'checkers']);
+  });
+
+  it('every playable game has a save version for the Continue badge', () => {
+    games.filter(game => game.status === 'playable').forEach(game => expect(SAVE_VERSIONS[game.id]).toBe(1));
   });
 
   it('finds games by id', () => {

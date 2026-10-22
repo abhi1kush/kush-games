@@ -1,0 +1,13 @@
+.ttt-tally { display: flex; gap: 8px; }
+.ttt-tally--x b { color: #ff6b81; }
+.ttt-tally--o b { color: #6fc3ff; }
+.ttt-board { --ttt-cell: min(110px, calc((100vw - 48px) / 3)); display: grid; grid-template-columns: repeat(3, var(--ttt-cell)); gap: 8px; }
+.ttt-cell { width: var(--ttt-cell); height: var(--ttt-cell); border-radius: 12px; border: 0; background: #222; cursor: pointer; font-size: calc(var(--ttt-cell) * 0.6);
+  font-weight: 900; line-height: 1; display: flex; align-items: center; justify-content: center; transition: background 150ms, transform 150ms; }
+.ttt-cell:hover:not(:disabled) { background: #2e2e2e; }
+.ttt-cell:disabled { cursor: default; }
+.ttt-cell--x { color: #ff6b81; animation: ttt-pop 160ms ease-out; }
+.ttt-cell--o { color: #6fc3ff; animation: ttt-pop 160ms ease-out; }
+.ttt-board.is-over .ttt-cell:not(.is-winning) { opacity: 0.55; }
+.ttt-cell.is-winning { background: #3a3220; box-shadow: 0 0 0 3px #ffd34d inset; transform: scale(1.04); }
+@keyframes ttt-pop { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }

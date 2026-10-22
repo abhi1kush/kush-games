@@ -155,13 +155,14 @@ async function waitForBoardChange(page, before) {
   check(await page.locator('.card').count() >= 20, 'desktop: many game cards rendered');
   check(await hasNoHorizontalOverflow(page), 'desktop: no horizontal page overflow');
 
-  const comingSoonRow = page.locator('[data-testid=row-coming-soon]');
-  await comingSoonRow.scrollIntoViewIfNeeded();
-  await comingSoonRow.locator('.row__viewport').hover();
-  await comingSoonRow.locator('.row__arrow--right').click();
+  const playNowRow = page.locator('[data-testid=row-play-now]');
+  await playNowRow.scrollIntoViewIfNeeded();
+  await playNowRow.locator('.row__viewport').hover();
+  await playNowRow.locator('.row__arrow--right').click();
   await page.waitForTimeout(800);
-  const rowScrollLeft = await comingSoonRow.locator('.row__track').evaluate(track => track.scrollLeft);
-  check(rowScrollLeft > 0, `desktop: Coming Soon row scrolls with arrow (scrollLeft=${rowScrollLeft})`);
+  const rowScrollLeft = await playNowRow.locator('.row__track').evaluate(track => track.scrollLeft);
+  check(rowScrollLeft > 0, `desktop: Play Now row scrolls with arrow (scrollLeft=${rowScrollLeft})`);
+  await playNowRow.locator('.row__track').evaluate(track => { track.scrollLeft = 0; });
 
   const firstPuzzleCard = page.locator('[data-testid=row-puzzle] .card').first();
   await firstPuzzleCard.hover();
@@ -202,9 +203,9 @@ async function waitForBoardChange(page, before) {
   await page.waitForSelector('[data-testid=player]', { state: 'detached' });
   check(true, 'desktop: Back returns to home');
 
-  await page.goto(`${siteUrl}#/play/minesweeper`);
+  await page.goto(`${siteUrl}#/play/breakout`);
   await page.waitForSelector('[data-testid=coming-soon]');
-  check(/Minesweeper/.test(await page.locator('[data-testid=coming-soon] h1').innerText()), 'desktop: placeholder game shows Coming Soon screen');
+  check(/Breakout/.test(await page.locator('[data-testid=coming-soon] h1').innerText()), 'desktop: placeholder game shows Coming Soon screen');
 
   // Snake
   await page.goto(siteUrl, { waitUntil: 'networkidle' });

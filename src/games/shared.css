@@ -1,0 +1,28 @@
+/* Small pieces shared by the newer games. */
+.shared-mute { width: 38px; height: 34px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.08);
+  color: #fff; font-size: 16px; cursor: pointer; }
+.shared-mute:hover { background: rgba(255,255,255,0.18); }
+.game-shell { min-height: 100%; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 14px 10px 22px; color: #e8e8e8; }
+.game-shell__header { width: 100%; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.game-shell__title { margin: 0; font-size: 26px; font-weight: 900; letter-spacing: -0.01em; }
+.game-shell__stats { display: flex; gap: 8px; flex-wrap: wrap; }
+.game-stat { display: flex; flex-direction: column; align-items: center; min-width: 64px; padding: 4px 10px; border-radius: 6px; background: rgba(255,255,255,0.08); }
+.game-stat span { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: #aaa; }
+.game-stat b { font-size: 18px; font-variant-numeric: tabular-nums; }
+.game-button { background: rgba(255,255,255,0.1); color: #fff; border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; padding: 7px 13px;
+  font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit; }
+.game-button:hover:not(:disabled) { background: rgba(255,255,255,0.2); }
+.game-button:disabled { opacity: 0.45; cursor: default; }
+.game-button.is-active, .game-button--primary { background: #fff; color: #000; border-color: #fff; }
+.game-segments { display: inline-flex; border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; overflow: hidden; }
+.game-segments button { padding: 6px 11px; border: 0; background: transparent; color: #ccc; font-weight: 700; cursor: pointer; font-family: inherit; font-size: 13px; }
+.game-segments button.is-selected { background: rgba(255,255,255,0.92); color: #000; }
+.game-banner { margin: 0; padding: 8px 14px; border-radius: 8px; font-weight: 800; text-align: center; }
+.game-banner--win { background: rgba(70,211,105,0.18); color: #8ff5a9; }
+.game-banner--lose { background: rgba(255,77,94,0.18); color: #ff8b97; }
+.game-banner--info { background: rgba(255,255,255,0.08); color: #ddd; }
+.game-restored { margin: 0; padding: 4px 12px; border-radius: 999px; background: rgba(70,211,105,0.16); color: #7ef29d; font-size: 13px; font-weight: 700; }
+.game-help { margin: 0; font-size: 12px; color: #999; text-align: center; max-width: 520px; }
+.game-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+/* The page area scrolls when a game is taller than the screen; never squash the board instead. */
+.game-shell > * { flex-shrink: 0; }

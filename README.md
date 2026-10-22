@@ -27,7 +27,12 @@ Built with **React + TypeScript + Vite**. Deployed to GitHub Pages from the `gh-
 | Snake | ✅ Playable |
 | Blocks | ✅ Playable |
 | Chess (online with a friend, or pass and play) | ✅ Playable |
-| Minesweeper, Sudoku, Tic-Tac-Toe, Memory Match, Flappy Flight, Breakout | 🕒 Coming soon |
+| Minesweeper | ✅ Playable |
+| Sudoku | ✅ Playable |
+| Tic-Tac-Toe (vs computer or 2 players) | ✅ Playable |
+| Memory Match | ✅ Playable |
+| Flappy Wings | ✅ Playable |
+| Breakout, Connect Four, Solitaire, Checkers | 🕒 Coming soon |
 
 ### Snake
 
@@ -80,6 +85,44 @@ Controls: ←/→ or A/D to move (hold to repeat), ↑/W to rotate, ↓/S soft d
 
 For tests, `?blocksSeed=N` fixes the piece order and `?blocksSetup=quad` starts with the bottom 4 rows full except one column and an I piece first (e.g. `…/kush-games/?blocksSetup=quad#/play/blocks`).
 
+### Minesweeper
+
+`src/games/minesweeper/` — Beginner (9×9, 10 mines), Intermediate (16×16, 40) and Expert (30×16, 99).
+
+- `game.ts` keeps the board in flat arrays (mines, neighbour counts, cell states). Mines are placed on the **first click**, never on the clicked cell or its neighbours, so the first click always opens an area. Opening an empty cell flood-fills (iteratively) to the numbered border. Tapping an open number whose flags are all placed **chords** (opens the rest of its neighbours). Winning flags every mine; losing shows them all and marks wrong flags.
+- Controls: click/tap to dig; right-click, **long-press** (380 ms) or the **⛏ Dig / 🚩 Flag** toggle to flag (`F` switches, `N` new game). Mine counter, timer and best time per difficulty (`kush-games-minesweeper-best`).
+- Phones: cells shrink to fit (22–34 px) and on screens ≤ 600 px Expert turns sideways into a tall 16-wide board; the page scrolls vertically.
+- Sounds: click, cascade sweep, flag blip, boom and a win jingle.
+
+### Sudoku
+
+`src/games/sudoku/` — Easy (~40 clues), Medium (~32) and Hard (~26).
+
+- `sudoku.ts` has a bit-mask backtracking solver (fewest-candidates cell first). Puzzles are generated from a random solved grid by removing clues in random order and **keeping a removal only if the puzzle still has exactly one solution** (`countSolutions(grid, 2)`), using a seeded generator.
+- `game.ts`: number pad (with how many of each digit are left), pencil notes (placing a number clears that note from its row, column and box), undo for every change, erase, hint (fills the selected cell, or the first empty/wrong one), mistakes counter (a number that isn't the answer), timer and best time per difficulty.
+- Highlights: the selected cell's row, column and box, every cell with the same number, and red conflicts (duplicates).
+- Keyboard: 1–9, arrows, Backspace/Delete/0, `N`/`P` notes, `U` or Ctrl+Z undo, `H` hint.
+
+### Tic-Tac-Toe
+
+`src/games/tictactoe/` — play the computer (**Easy**: wins or blocks about half the time, otherwise random; **Hard**: minimax that prefers the quickest win and never loses) or **2 Players** on one device. The starter alternates each round, the winning line is highlighted, and a score tally is kept per mode (`kush-games-tictactoe-tally`). A unit test plays every possible line against Hard, as X and as O, and checks it never loses.
+
+### Memory Match
+
+`src/games/memory/` — emoji cards on a 4×4, 4×5 or 6×6 grid. Two different cards stay up for 0.8 s (tapping a third card turns them back at once). Moves, timer and best (fewest moves, then time) per size. The flip is a CSS `rotateY` with `backface-visibility`, only on the cards that change (memoised).
+
+### Flappy Wings
+
+`src/games/flappy/` — one-button flying through pipe gaps.
+
+- `physics.ts` is pure: a 288×512 world, gravity, flap impulse, pipes every 180 px with a random gap (seeded, and the seed is part of the state), circle-vs-rectangle collision, one point per pipe passed.
+- `FlappyWings.tsx` runs a `requestAnimationFrame` loop with a **fixed 1/120 s timestep** (accumulator), so speed is the same at 60 Hz or 144 Hz. The sky, pipes, ground and bird are drawn once into offscreen canvases. React only re-renders when the score or status changes, and the loop sleeps while paused or after the crash.
+- Space / ↑ / click / tap to flap, `P` or the button to pause; switching tabs pauses. Score and best (`kush-games-flappy-best`). Flap, score and hit sounds.
+
+### Shared sound setting
+
+The five newer games share `src/games/sharedSound.tsx`: generated Web Audio sounds and one 🔊/🔇 button saved as `kush-games-muted` (`M` toggles). Snake, Blocks and Chess keep their own mute settings.
+
 ### Chess
 
 `src/games/chess/` has chess you can play against a friend over the internet, or on one device.
@@ -112,7 +155,7 @@ Controls: arrow keys / WASD, or swipe on the board on mobile.
 
 ## Saved games
 
-Every playable game (2048, Snake, Blocks and Chess) saves its game in progress to `localStorage` and restores it after a reload, Back, or closing the tab. Settings and best scores were already saved and still are.
+Every playable game saves its game in progress to `localStorage` and restores it after a reload, Back, or closing the tab. Settings and best scores were already saved and still are.
 
 [`src/games/persistence.ts`](src/games/persistence.ts) is the shared helper:
 
@@ -126,12 +169,18 @@ Every playable game (2048, Snake, Blocks and Chess) saves its game in progress t
 | Chess | moves, game number, colours, resign/draw state, mode, room code and role | after every change (moves are rare) |
 | 2048 | tiles (value, row, column), score, won, keep-playing | after every move (and *Keep going*) |
 | Snake | body, direction, apple, score, length, apples eaten, speed setting + step interval, status | on every apple and pause at once; at most once per second while moving; on `pagehide`, tab hidden, and leaving the game |
+| Minesweeper | difficulty, mine positions, cell states (hidden/open/flagged), time | after every move; on `pagehide`, tab hidden and leaving |
+| Sudoku | puzzle, solution, numbers, notes, undo history, mistakes, hints, time | as soon as a puzzle is made, after every change; on `pagehide`, tab hidden and leaving |
+| Tic-Tac-Toe | board, who started, opponent, difficulty (the tally is kept separately) | after every move |
+| Memory Match | card faces, matched cards, open card, moves, time | after every flip; on `pagehide`, tab hidden and leaving |
+| Flappy Wings | bird position and speed, pipes, score, distance, random seed | at most once per second while flying; at once on pause, `pagehide`, tab hidden and leaving |
 | Blocks | board cells, current piece (type, position, rotation), next queue, 7-bag and random-generator state (so the piece order carries on), hold + can-hold, score, lines, level, timers | on every lock, line clear, hold and pause; on `pagehide`, tab hidden, and leaving the game |
 
 Restoring:
 
 - 2048 comes back as it was.
-- A Snake or Blocks game comes back **paused**, with a *Saved game restored* overlay and **Resume** / **New game** buttons.
+- Minesweeper, Sudoku, Tic-Tac-Toe and Memory Match come back as they were, with a *Saved game restored* note (the Minesweeper and Memory clocks wait for your next move).
+- A Snake, Blocks or Flappy Wings game comes back **paused**, with a *Saved game restored* overlay and **Resume** / **New game** buttons.
 - A finished game is never restored. Game Over clears the save, so the next visit starts fresh.
 - *New Game* / *New game* / *Play again* clear the save and start over.
 - The Blocks test parameters (`?blocksSetup`, `?blocksSeed`) never load or write saves, so the tests stay deterministic.
@@ -165,7 +214,7 @@ That's it — the rows, modal and player all read from the registry. Each game i
 ```bash
 npm install
 npm run dev        # http://localhost:5173/kush-games/
-npm test           # unit tests (2048, Snake and Blocks logic, saved games, registry, routing)
+npm test           # unit tests (game logic for every game, saved games, registry, routing)
 npm run build      # type-check + production build into dist/
 ```
 
@@ -173,6 +222,7 @@ Browser check (needs Chrome at `/usr/bin/google-chrome` or `CHROME_PATH`):
 
 ```bash
 npm run e2e -- https://abhi1kush.github.io/kush-games/ /tmp
+node e2e/new-games.mjs https://abhi1kush.github.io/kush-games/ /tmp   # Minesweeper, Sudoku, Tic-Tac-Toe, Memory, Flappy smoke tests
 ```
 
 ## Deploying
