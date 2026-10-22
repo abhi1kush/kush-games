@@ -174,28 +174,29 @@ export const games: GameDefinition[] = [
   },
 ];
 
-export interface GameRow {
-  id: string;
-  title: string;
-  games: GameDefinition[];
+/** Genre filter chips on the home page, in this order (only genres that have a playable game are shown). */
+export const GENRE_FILTERS: GameCategory[] = ['Puzzle', 'Arcade', 'Strategy', 'Classic Board'];
+
+export const genreSlug = (genre: GameCategory) => genre.toLowerCase().replace(/\s+/g, '-');
+
+export interface HomeSections {
+  /** Every playable game, shown once in the "All games" grid. */
+  playableGames: GameDefinition[];
+  comingSoonGames: GameDefinition[];
+  /** Genres with at least one playable game, and how many. */
+  genres: { genre: GameCategory; count: number }[];
 }
 
-const genreRows: GameCategory[] = ['Puzzle', 'Arcade', 'Strategy', 'Classic Board'];
-
-/** Rows shown on the home page, Netflix style. */
-export function buildHomeRows(allGames: GameDefinition[] = games): GameRow[] {
+/** What the home page shows: one grid of all playable games (filterable by genre) and a Coming Soon grid. */
+export function buildHomeSections(allGames: GameDefinition[] = games): HomeSections {
   const playableGames = allGames.filter(game => game.status === 'playable');
-  const comingSoonGames = allGames.filter(game => game.status === 'coming-soon');
-  const rows: GameRow[] = [{ id: 'play-now', title: 'Play Now', games: playableGames }];
-  for (const category of genreRows) {
-    // playable games first within each genre
-    const gamesInCategory = allGames
-      .filter(game => game.categories.includes(category))
-      .sort((first, second) => Number(second.status === 'playable') - Number(first.status === 'playable'));
-    rows.push({ id: category.toLowerCase().replace(/\s+/g, '-'), title: category, games: gamesInCategory });
-  }
-  rows.push({ id: 'coming-soon', title: 'Coming Soon', games: comingSoonGames });
-  return rows.filter(row => row.games.length > 0);
+  return {
+    playableGames,
+    comingSoonGames: allGames.filter(game => game.status === 'coming-soon'),
+    genres: GENRE_FILTERS
+      .map(genre => ({ genre, count: playableGames.filter(game => game.categories.includes(genre)).length }))
+      .filter(entry => entry.count > 0),
+  };
 }
 
 export function findGame(gameId: string): GameDefinition | undefined {

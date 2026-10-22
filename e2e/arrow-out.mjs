@@ -72,8 +72,9 @@ await context.addInitScript(reactCommitCounterScript);
 const page = await context.newPage();
 page.on('pageerror', error => pageErrors.push(`desktop: ${error}`));
 await page.goto(siteUrl, { waitUntil: 'networkidle' });
-check(await page.locator('[data-testid=row-play-now] [data-testid=card-arrow-out]').count() === 1
-  && await page.locator('[data-testid=row-puzzle] [data-testid=card-arrow-out]').count() === 1, 'hub: Arrow Out card is in Play Now and the Puzzle row');
+const inAllGames = await page.locator('[data-testid=row-play-now] [data-testid=card-arrow-out]').count() === 1;
+await page.getByTestId('filter-puzzle').click();
+check(inAllGames && await page.locator('[data-testid=row-play-now] [data-testid=card-arrow-out]').count() === 1, 'hub: Arrow Out card is in All games and under the Puzzle filter');
 await page.goto(`${siteUrl}#/play/arrow-out`, { waitUntil: 'networkidle' });
 await page.waitForSelector('[data-testid=arrow-out]');
 const levelOneStats = await classifyArrows(page);

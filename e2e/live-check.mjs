@@ -18,6 +18,24 @@ async function hasNoHorizontalOverflow(page) {
   return page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth
     && document.body.scrollWidth <= window.innerWidth);
 }
+/** Hub layout: nothing scrolls sideways, every card sits inside the viewport, and how many grid columns there are. */
+const hubLayout = page => page.evaluate(() => {
+  const scrollers = [...document.querySelectorAll('.home *')].filter(element => {
+    const overflowX = getComputedStyle(element).overflowX;
+    return (overflowX === 'auto' || overflowX === 'scroll') && element.scrollWidth > element.clientWidth + 1;
+  }).map(element => element.className || element.tagName);
+  const cards = [...document.querySelectorAll('.home .card')].map(card => {
+    const box = card.getBoundingClientRect();
+    return { id: card.dataset.testid, left: box.left, right: box.right };
+  });
+  const outside = cards.filter(card => card.left < -0.5 || card.right > window.innerWidth + 0.5).map(card => card.id);
+  const firstRowTop = document.querySelector('[data-testid=row-play-now] .card')?.getBoundingClientRect().top;
+  const columns = [...document.querySelectorAll('[data-testid=row-play-now] .card')]
+    .filter(card => Math.abs(card.getBoundingClientRect().top - firstRowTop) < 2).length;
+  return { scrollers, outside, cardCount: cards.length, columns, hasRowArrows: document.querySelectorAll('.row__arrow, .row__track').length > 0,
+    pageFits: document.documentElement.scrollWidth <= window.innerWidth };
+});
+
 const boardSnapshot = page => page.evaluate(() =>
   [...document.querySelectorAll('.game-2048__tile')].map(tile => `${tile.dataset.value}@${tile.style.cssText}`).sort().join('|'));
 
@@ -150,26 +168,44 @@ async function waitForBoardChange(page, before) {
   await page.waitForSelector('[data-testid=hero]');
   check(await page.locator('.nav__logo').innerText().then(text => /kush\s*games/i.test(text)), 'desktop: nav shows Kush Games logo');
   check(await page.locator('.hero__title').innerText() === '2048', 'desktop: hero features 2048');
-  const rowTitles = await page.locator('.row__title').allInnerTexts();
-  check(['Puzzle', 'Arcade', 'Strategy', 'Classic Board', 'Coming Soon'].every(title => rowTitles.includes(title)), `desktop: category rows present (${rowTitles.join(', ')})`);
-  check(await page.locator('.card').count() >= 20, 'desktop: many game cards rendered');
+  const sectionTitles = await page.locator('.home-section__title').allInnerTexts();
+  check(sectionTitles.length === 2 && /^All games/.test(sectionTitles[0]) && sectionTitles[1] === 'Coming Soon', `desktop: All games grid + Coming Soon grid (${sectionTitles.join(' | ')})`);
+  const playableCount = await page.locator('[data-testid=row-play-now] .card').count();
+  check(playableCount >= 10 && await page.locator('.home .card').count() === playableCount + await page.locator('[data-testid=row-coming-soon] .card').count(),
+    `desktop: each game appears once (${playableCount} playable cards)`);
+  const desktopLayout = await hubLayout(page);
+  check(!desktopLayout.hasRowArrows && desktopLayout.scrollers.length === 0 && desktopLayout.pageFits,
+    `desktop: no horizontal scroll rows or overflowing scroll containers (${desktopLayout.scrollers.join(', ') || 'none'})`);
+  check(desktopLayout.outside.length === 0, `desktop: all ${desktopLayout.cardCount} cards are within the 1280px viewport (${desktopLayout.outside.join(', ') || 'none outside'})`);
+  check(desktopLayout.columns >= 5 && desktopLayout.columns <= 6, `desktop: grid shows ${desktopLayout.columns} columns`);
   check(await hasNoHorizontalOverflow(page), 'desktop: no horizontal page overflow');
 
-  const playNowRow = page.locator('[data-testid=row-play-now]');
-  await playNowRow.scrollIntoViewIfNeeded();
-  await playNowRow.locator('.row__viewport').hover();
-  await playNowRow.locator('.row__arrow--right').click();
-  await page.waitForTimeout(800);
-  const rowScrollLeft = await playNowRow.locator('.row__track').evaluate(track => track.scrollLeft);
-  check(rowScrollLeft > 0, `desktop: Play Now row scrolls with arrow (scrollLeft=${rowScrollLeft})`);
-  await playNowRow.locator('.row__track').evaluate(track => { track.scrollLeft = 0; });
+  // genre chips filter the grid
+  await page.getByTestId('filter-arcade').click();
+  const arcadeIds = await page.locator('[data-testid=row-play-now] .card').evaluateAll(cards => cards.map(card => card.dataset.testid));
+  check(arcadeIds.includes('card-snake') && arcadeIds.includes('card-flappy-wings') && !arcadeIds.includes('card-sudoku')
+    && await page.getByTestId('filter-arcade').getAttribute('aria-pressed') === 'true', `desktop: Arcade chip filters the grid (${arcadeIds.length} games)`);
+  await page.getByTestId('filter-all').focus();
+  await page.keyboard.press('Enter');
+  check(await page.locator('[data-testid=row-play-now] .card').count() === playableCount, 'desktop: All chip (keyboard) shows every playable game again');
+  await page.locator('.nav__links button', { hasText: 'Puzzle' }).click();
+  await page.waitForTimeout(700);
+  check(await page.getByTestId('filter-puzzle').getAttribute('aria-pressed') === 'true'
+    && await page.locator('[data-testid=row-play-now] [data-testid=card-arrow-out]').count() === 1, 'desktop: nav Puzzle link filters to puzzle games');
+  await page.getByTestId('filter-all').click();
 
-  const firstPuzzleCard = page.locator('[data-testid=row-puzzle] .card').first();
-  await firstPuzzleCard.hover();
+  const firstCard = page.locator('[data-testid=row-play-now] .card').first();
+  await firstCard.scrollIntoViewIfNeeded();
+  await firstCard.hover();
   await page.waitForTimeout(450);
-  const cardScale = await firstPuzzleCard.evaluate(card => new DOMMatrix(getComputedStyle(card).transform).a);
-  check(cardScale > 1.1, `desktop: card scales up on hover (scale=${cardScale.toFixed(2)})`);
-  check(await firstPuzzleCard.locator('.card__details').evaluate(element => getComputedStyle(element).opacity === '1'), 'desktop: hovered card shows title + description');
+  const cardScale = await firstCard.evaluate(card => new DOMMatrix(getComputedStyle(card).transform).a);
+  check(cardScale > 1.05, `desktop: card scales up on hover (scale=${cardScale.toFixed(2)})`);
+  check(await firstCard.locator('.card__details').evaluate(element => getComputedStyle(element).opacity === '1'), 'desktop: hovered card shows title + description');
+  check(await hasNoHorizontalOverflow(page) && (await hubLayout(page)).scrollers.length === 0, 'desktop: hovering a card causes no sideways overflow');
+  await page.mouse.move(5, 5);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: `${screenshotDirectory}/kush-games-grid-desktop.png`, fullPage: true });
 
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.mouse.move(5, 5);
@@ -363,26 +399,21 @@ async function waitForBoardChange(page, before) {
   page.on('pageerror', error => pageErrors.push(String(error)));
   await page.goto(siteUrl, { waitUntil: 'networkidle' });
   await page.waitForSelector('[data-testid=hero]');
-  check(await page.locator('.row').count() >= 5, 'mobile: rows render');
+  const mobileLayout = await hubLayout(page);
+  check(await page.locator('.home-section').count() === 2 && !mobileLayout.hasRowArrows, 'mobile: All games + Coming Soon grids render, no scroll rows');
+  check(mobileLayout.scrollers.length === 0 && mobileLayout.outside.length === 0,
+    `mobile: all ${mobileLayout.cardCount} cards fit the 375px width, nothing scrolls sideways (${[...mobileLayout.scrollers, ...mobileLayout.outside].join(', ') || 'ok'})`);
+  check(mobileLayout.columns === 2, `mobile: grid shows ${mobileLayout.columns} columns`);
   check(await hasNoHorizontalOverflow(page), 'mobile: no horizontal page overflow');
   await page.screenshot({ path: `${screenshotDirectory}/kush-games-mobile.png` });
+  await page.screenshot({ path: `${screenshotDirectory}/kush-games-grid-mobile.png`, fullPage: true });
+  await page.getByTestId('filter-puzzle').tap();
+  const puzzleIds = await page.locator('[data-testid=row-play-now] .card').evaluateAll(cards => cards.map(card => card.dataset.testid));
+  check(puzzleIds.includes('card-2048') && !puzzleIds.includes('card-snake') && (await hubLayout(page)).outside.length === 0,
+    `mobile: Puzzle chip filters the grid (${puzzleIds.length} games)`);
+  await page.getByTestId('filter-all').tap();
 
   const cdp = await context.newCDPSession(page);
-  const puzzleTrack = page.locator('[data-testid=row-puzzle] .row__track');
-  await puzzleTrack.scrollIntoViewIfNeeded();
-  const trackBox = await puzzleTrack.boundingBox();
-  const swipeY = Math.round(trackBox.y + trackBox.height / 2);
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 300, y: swipeY }] });
-  for (let step = 1; step <= 10; step++) {
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 300 - step * 25, y: swipeY }] });
-    await page.waitForTimeout(16);
-  }
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-  await page.waitForTimeout(700);
-  const swipedScrollLeft = await puzzleTrack.evaluate(track => track.scrollLeft);
-  check(swipedScrollLeft > 0, `mobile: row swipes horizontally (scrollLeft=${swipedScrollLeft})`);
-  check(await hasNoHorizontalOverflow(page), 'mobile: still no page overflow after swipe');
-
   await page.locator('[data-testid=card-snake] .card__cover').first().tap();
   await page.waitForSelector('[data-testid=modal]');
   check(true, 'mobile: tapping a card opens the detail modal');
@@ -512,8 +543,12 @@ async function stackSomePieces(page, pressKey, count) {
   const playNowIds = await page.locator('[data-testid=row-play-now] .card').evaluateAll(cards => cards.map(card => card.dataset.testid));
   check(playNowIds.includes('card-blocks') && await page.locator('[data-testid=row-coming-soon] [data-testid=card-blocks]').count() === 0,
     `blocks desktop: Blocks is in Play Now and not Coming Soon (${playNowIds.join(', ')})`);
-  check(await page.locator('[data-testid=row-puzzle] [data-testid=card-blocks]').count() === 1
-    && await page.locator('[data-testid=row-arcade] [data-testid=card-blocks]').count() === 1, 'blocks desktop: Blocks is in Puzzle and Arcade rows');
+  await page.getByTestId('filter-puzzle').click();
+  const blocksInPuzzle = await page.locator('[data-testid=row-play-now] [data-testid=card-blocks]').count();
+  await page.getByTestId('filter-arcade').click();
+  const blocksInArcade = await page.locator('[data-testid=row-play-now] [data-testid=card-blocks]').count();
+  await page.getByTestId('filter-all').click();
+  check(blocksInPuzzle === 1 && blocksInArcade === 1, 'blocks desktop: Blocks shows under the Puzzle and Arcade filters');
   await page.goto(`${siteUrl}?blocksSeed=11#/play/blocks`, { waitUntil: 'networkidle' });
   await page.waitForSelector('[data-testid=blocks-start]');
   check(await page.getByTestId('blocks-canvas').count() === 1, 'blocks desktop: board is a single canvas');

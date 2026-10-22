@@ -39,7 +39,9 @@ const playNowIds = await page.locator('[data-testid=row-play-now] .card').evalua
 check(NEW_GAME_IDS.every(id => playNowIds.includes(id)), `hub: all five new games are in Play Now (${playNowIds.join(', ')})`);
 const comingSoonIds = await page.locator('[data-testid=row-coming-soon] .card').evaluateAll(cards => cards.map(card => card.dataset.testid.replace('card-', '')));
 check(NEW_GAME_IDS.every(id => !comingSoonIds.includes(id)) && comingSoonIds.length >= 3, `hub: Coming Soon keeps other placeholders (${comingSoonIds.join(', ')})`);
-check(await page.locator('[data-testid=row-arcade] [data-testid=card-flappy-wings] .card__title, [data-testid=row-arcade] [data-testid=card-flappy-wings]').count() >= 1, 'hub: Flappy Wings card is in the Arcade row');
+await page.getByTestId('filter-arcade').click();
+check(await page.locator('[data-testid=row-play-now] [data-testid=card-flappy-wings]').count() === 1, 'hub: Flappy Wings shows under the Arcade filter');
+await page.getByTestId('filter-all').click();
 await page.locator('[data-testid=row-play-now]').scrollIntoViewIfNeeded();
 await page.evaluate(() => window.scrollTo(0, 0));
 await page.screenshot({ path: `${screenshotDirectory}/kush-games-home-new.png` });

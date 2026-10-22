@@ -1,15 +1,18 @@
 import { useEffect, useState } from 'react';
 import { homePath, navigate } from '../routing';
+import type { GenreChoice } from './GenreFilter';
 
-const sectionLinks = [
-  { label: 'Home', rowId: 'top' },
-  { label: 'Puzzle', rowId: 'puzzle' },
-  { label: 'Arcade', rowId: 'arcade' },
-  { label: 'Strategy', rowId: 'strategy' },
-  { label: 'Coming Soon', rowId: 'coming-soon' },
+type NavLink = { label: string; target: 'top' | 'coming-soon' | GenreChoice };
+const sectionLinks: NavLink[] = [
+  { label: 'Home', target: 'top' },
+  { label: 'Puzzle', target: 'Puzzle' },
+  { label: 'Arcade', target: 'Arcade' },
+  { label: 'Strategy', target: 'Strategy' },
+  { label: 'Coming Soon', target: 'coming-soon' },
 ];
 
-export default function NavBar() {
+/** Genre links filter the All games grid and scroll to it. */
+export default function NavBar({ onShowGenre }: { onShowGenre: (genre: GenreChoice) => void }) {
   const [hasScrolled, setHasScrolled] = useState(false);
 
   useEffect(() => {
@@ -19,9 +22,10 @@ export default function NavBar() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const scrollToRow = (rowId: string) => {
-    if (rowId === 'top') { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
-    document.getElementById(`row-${rowId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const goTo = (target: NavLink['target']) => {
+    if (target === 'top') { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    if (target === 'coming-soon') { document.getElementById('row-coming-soon')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+    onShowGenre(target);
   };
 
   return (
@@ -31,8 +35,8 @@ export default function NavBar() {
       </a>
       <ul className="nav__links">
         {sectionLinks.map(link => (
-          <li key={link.rowId}>
-            <button type="button" onClick={() => scrollToRow(link.rowId)}>{link.label}</button>
+          <li key={link.label}>
+            <button type="button" onClick={() => goTo(link.target)}>{link.label}</button>
           </li>
         ))}
       </ul>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SAVE_VERSIONS } from './persistence';
-import { buildHomeRows, featuredGame, findGame, games } from './registry';
+import { buildHomeSections, featuredGame, findGame, games } from './registry';
 
 describe('game registry', () => {
   it('has unique, URL-safe ids', () => {
@@ -21,20 +21,14 @@ describe('game registry', () => {
     expect(placeholderCount).toBeLessThanOrEqual(10);
   });
 
-  it('builds home rows by category with a Coming Soon row', () => {
-    const rowTitles = buildHomeRows().map(row => row.title);
-    expect(rowTitles).toEqual(['Play Now', 'Puzzle', 'Arcade', 'Strategy', 'Classic Board', 'Coming Soon']);
-    const puzzleRow = buildHomeRows().find(row => row.title === 'Puzzle')!;
-    expect(puzzleRow.games[0].id).toBe('2048');
-    const playNowIds = buildHomeRows().find(row => row.title === 'Play Now')!.games.map(game => game.id);
-    expect(playNowIds).toEqual(['2048', 'snake', 'blocks', 'minesweeper', 'sudoku', 'chess', 'tic-tac-toe', 'memory-match', 'flappy-wings', 'arrow-out']);
-    const arcadeRow = buildHomeRows().find(row => row.title === 'Arcade')!;
-    expect(arcadeRow.games[0].id).toBe('snake');
-    const comingSoonIds = buildHomeRows().find(row => row.title === 'Coming Soon')!.games.map(game => game.id);
-    expect(comingSoonIds).not.toContain('snake');
-    expect(comingSoonIds).not.toContain('blocks');
-    for (const playableId of ['chess', 'minesweeper', 'sudoku', 'tic-tac-toe', 'memory-match', 'flappy-wings']) expect(comingSoonIds).not.toContain(playableId);
-    expect(comingSoonIds).toEqual(['breakout', 'connect-four', 'solitaire', 'checkers']);
+  it('builds one All games grid with genre filters and a Coming Soon grid (each game shown once)', () => {
+    const { playableGames, comingSoonGames, genres } = buildHomeSections();
+    expect(playableGames.map(game => game.id)).toEqual(['2048', 'snake', 'blocks', 'minesweeper', 'sudoku', 'chess', 'tic-tac-toe', 'memory-match', 'flappy-wings', 'arrow-out']);
+    expect(comingSoonGames.map(game => game.id)).toEqual(['breakout', 'connect-four', 'solitaire', 'checkers']);
+    expect(genres.map(entry => entry.genre)).toEqual(['Puzzle', 'Arcade', 'Strategy', 'Classic Board']);
+    expect(genres.find(entry => entry.genre === 'Puzzle')!.count).toBe(playableGames.filter(game => game.categories.includes('Puzzle')).length);
+    // a genre with no playable game gets no chip
+    expect(buildHomeSections(games.filter(game => !game.categories.includes('Arcade') || game.status !== 'playable')).genres.map(entry => entry.genre)).not.toContain('Arcade');
   });
 
   it('every playable game has a save version for the Continue badge', () => {

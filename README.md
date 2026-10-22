@@ -1,6 +1,6 @@
 # Kush Games
 
-A Netflix-style home for browser games — dark UI, a big hero banner, and horizontally scrolling rows of game cards by category. Click **Play** and the game opens full screen on its own route.
+A Netflix-style home for browser games — dark UI, a big hero banner, and a wrapping grid of game cards (no sideways scrolling), filterable by genre. Click **Play** and the game opens full screen on its own route.
 
 **Live:** https://abhi1kush.github.io/kush-games/
 
@@ -8,9 +8,9 @@ Built with **React + TypeScript + Vite**. Deployed to GitHub Pages from the `gh-
 
 ## Features
 
-- Top nav with the **Kush Games** logo and quick links to each row
+- Top nav with the **Kush Games** logo and quick links (genre links filter the grid; the links wrap instead of scrolling)
 - Hero banner featuring **2048** with *Play* and *More Info*
-- Rows: Play Now, Puzzle, Arcade, Strategy, Classic Board, Coming Soon — arrow buttons on desktop, swipe on mobile
+- **All games**: every playable game once, in a responsive CSS grid (`auto-fill`, min card width 190px; 140px on phones) — about 2 columns at 375px, 3–4 on tablets, 5–6 on desktop. Genre chips (All / Puzzle / Arcade / Strategy / Classic Board, with counts) filter it. **Coming Soon** is a separate grid below.
 - Cards scale up on hover and show the title, tagline and genres
 - Game detail modal (`#/title/<id>`) with "More Like This"
 - Full-screen player (`#/play/<id>`) with a Back button (Escape also works)
