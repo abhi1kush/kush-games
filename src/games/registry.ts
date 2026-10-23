@@ -188,6 +188,18 @@ export const games: GameDefinition[] = [
     releaseYear: 2026,
     component: lazy(() => import('./checkers/CheckersGame')),
   },
+  {
+    id: 'kush-jump',
+    title: 'Kush Jump',
+    tagline: 'Run, jump, stomp — reach the flag.',
+    description: 'A side-scrolling platformer stage: run across Sunny Hills, leap the gaps, bump ★ crates for coins and a Sun Berry that makes Kush big enough to smash bricks and survive a hit. Stomp grumbles, kick shellbug shells, climb the stone stairs and grab the flag high for a bigger bonus before the clock runs out. Midway checkpoint; the physics run in Rust compiled to WebAssembly.',
+    categories: ['Arcade'],
+    status: 'playable',
+    artwork: { gradientFrom: '#071a33', gradientTo: '#14606e', accentColor: '#ffd23f', glyph: '🏃' },
+    controls: '←/→ or A/D move; Space/Z/↑ jump (hold for higher); Shift/X run; P pause; on-screen buttons on phones',
+    releaseYear: 2026,
+    component: lazy(() => import('./kushjump/KushJump')),
+  },
 ];
 
 /** Genre filter chips on the home page, in this order (only genres that have a playable game are shown). */

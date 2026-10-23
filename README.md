@@ -4,7 +4,7 @@ A Netflix-style home for browser games — dark UI, a big hero banner, and a wra
 
 **Live:** https://abhi1kush.github.io/kush-games/
 
-Built with **React + TypeScript + Vite**; Breakout, Connect Four, Solitaire and Checkers run their game logic in **Rust compiled to WebAssembly**. Deployed to GitHub Pages from the `gh-pages` branch.
+Built with **React + TypeScript + Vite**; Breakout, Connect Four, Solitaire, Checkers and Kush Jump run their game logic in **Rust compiled to WebAssembly**. Deployed to GitHub Pages from the `gh-pages` branch.
 
 ## Features
 
@@ -39,6 +39,7 @@ Built with **React + TypeScript + Vite**; Breakout, Connect Four, Solitaire and 
 | Connect Four (vs computer, 2 players, or online with a friend; Rust/WebAssembly) | ✅ Playable |
 | Solitaire — Klondike (Rust/WebAssembly) | ✅ Playable |
 | Checkers (vs computer, 2 players, or online with a friend; Rust/WebAssembly) | ✅ Playable |
+| Kush Jump — side-scrolling platformer, one stage (Rust/WebAssembly) | ✅ Playable |
 
 ### Snake
 
@@ -147,7 +148,7 @@ A connect-the-dots path puzzle in the style of the "same color / connect two dot
 - **Difficulty:** boards grow 5×5 → 6×6 → 7×7 → 8×8/9×9 → 10×12 (≈ 30px cells on a 375×667 phone). For each level the generator keeps the candidate closest to a rising hardness target, from: share of the board solvable by forced moves alone, solver guesses, average path length and bends, how far paths wander from the direct route, and short (≤ 3 cell) pairs. `npx vite-node scripts/color-trails-metrics.ts 1 5 10 20 30 40 60` prints the table.
 - **Colors:** a color-blind friendlier palette, and every color also has its own small symbol inside its dots.
 
-### Rust/WebAssembly games: Breakout, Connect Four, Solitaire, Checkers
+### Rust/WebAssembly games: Breakout, Connect Four, Solitaire, Checkers, Kush Jump
 
 The UI is React + TypeScript; the rules, physics and AI are Rust crates in `wasm/` (one crate per game, a Cargo workspace), built with `wasm-pack --target web` into `src/wasm/<crate>/`. Each game's `.wasm` is only fetched when that game opens (the hub downloads none). Data crosses the boundary as small typed arrays and integers — never JSON.
 
@@ -157,6 +158,7 @@ The UI is React + TypeScript; the rules, physics and AI are Rust crates in `wasm
 | connect_four | 26.0 KB | 12.4 KB |
 | solitaire | 25.7 KB | 11.8 KB |
 | checkers | 31.1 KB | 14.6 KB |
+| kush_jump | 30.3 KB | 13.9 KB |
 
 Size settings: `opt-level = "z"`, `lto`, `codegen-units = 1`, `panic = "abort"`, `strip`, then `wasm-opt -Oz`; `wasm-bindgen` without default features. Float formatting (pulled in by `f32::clamp`'s panic message) and libm `sin`/`cos` were avoided by hand (≈ 30 KB saved in Breakout).
 
@@ -166,6 +168,10 @@ Size settings: `opt-level = "z"`, `lto`, `codegen-units = 1`, `panic = "abort"`,
 - **Connect Four** — bitboards; negamax with alpha-beta, a transposition table, threat-first move ordering and iterative deepening under a node budget. Easy (shallow and a bit random), Medium (depth 5 with noise), Hard (as deep as 160 000 nodes allow — about 30–50 ms on a desktop, roughly 4× that on a mid-range phone). The search runs in a Web Worker. 2-player pass-and-play, drop animation, highlighted four, win/draw tally, undo.
 - **Solitaire** — Klondike with a seeded (mulberry32) deal, Draw 1 / Draw 3, drag-and-drop or tap a card to send it to its best spot, safe cards go to the foundations by themselves, undo (replays the action list), hint, timer, moves, Windows-style score and a CSS win cascade. Seven columns fit a 375 px screen.
 - **Checkers** — English draughts: compulsory captures, multi-jumps, crowning ends the move, draw after 40 moves each without a capture or man move. Negamax alpha-beta with a transposition table and capture extension, in a Web Worker; Easy/Medium/Hard (Hard: 120 000-node budget, ≈ 50 ms desktop). Legal moves are highlighted, pieces that must capture are ringed, moves animate along their path.
+- **Kush Jump** — an original side-scrolling platformer stage (own hero, enemies, art and sounds, all drawn with canvas paths / generated with Web Audio; no image or audio files). Stage 1 "Sunny Hills" is 214 tiles long: ground with three pits, ★ crates (coins; two hold a Sun Berry that makes Kush big — bigger hitbox, smashes bricks, survives one hit), a 6-coin brick, floating coins, six pipes of three heights, grumbles (walk, stomp them — stomp chains score 100→1000) and shellbugs (stomp → shell, kick it to slide and knock out others; it wakes after 8 s), stone stair pyramids, a midway checkpoint, a final staircase and a flag pole (higher grab = bigger bonus: 100–5000) before a fort, then the time left ×50 is counted into the score. 300-tick timer (2 ticks/s), 3 lives, extra life every 100 coins.
+  - Rust (`wasm/kush_jump`) owns the level, physics (fixed 1/120 s step; acceleration, skid, run speed, variable jump height via lighter gravity while jump is held, jump buffering, coyote time, corner slip), enemies, scoring, checkpoint and goal sequence. JS sets the held buttons, calls `advance(seconds)` and draws from a `Float32Array` render buffer + the tile map in wasm memory. Same hitch rules as Breakout: a frame simulates at most 50 ms, gaps over 100 ms are dropped, and for 0.3 s after a dropped gap enemies can't hurt and a pit fall puts the hero back on the last safe ground.
+  - One canvas, 240 world units tall and 256–480 wide (fits the screen), camera scrolls forward only. Tiles are pre-rendered sprites (one per kind, rebuilt only on resize) and only on-screen columns are drawn; the far hills/clouds are one repeating strip with parallax; the start, game-over and clear screens stop redrawing.
+  - Keyboard: ←/→ or A/D move, Space/↑/W/Z jump (hold for higher), Shift/X run, P pause, M mute, Enter/any key starts. Phones: ◀ ▶ pad (slide between halves), RUN and JUMP buttons, multi-touch; below the stage in portrait, over its corners in landscape. Saves checkpoint, lives, score and coins (`kush-games:kush-jump:save:v1`) when the checkpoint is reached, a life is lost, on pause, tab hidden, `pagehide` and leaving; a refresh restarts from the start or the checkpoint. `?kushJumpTest` exposes `window.__kushJumpTest` (teleport/drop hooks) for `e2e/kush-jump.mjs`.
 
 #### Toolchain
 
@@ -179,7 +185,7 @@ cargo install wasm-pack                          # 0.13+ (downloads wasm-bindgen
 
 ### Shared sound setting
 
-The newer games (Minesweeper, Sudoku, Tic-Tac-Toe, Memory Match, Flappy Wings, Arrow Out, Color Trails, Breakout, Connect Four, Solitaire and Checkers) share `src/games/sharedSound.tsx`: generated Web Audio sounds and one 🔊/🔇 button saved as `kush-games-muted` (`M` toggles). Snake, Blocks and Chess keep their own mute settings.
+The newer games (Minesweeper, Sudoku, Tic-Tac-Toe, Memory Match, Flappy Wings, Arrow Out, Color Trails, Breakout, Connect Four, Solitaire, Checkers and Kush Jump) share `src/games/sharedSound.tsx`: generated Web Audio sounds and one 🔊/🔇 button saved as `kush-games-muted` (`M` toggles). Snake, Blocks and Chess keep their own mute settings.
 
 ### Chess
 
@@ -250,6 +256,7 @@ Every playable game saves its game in progress to `localStorage` and restores it
 | Connect Four | moves played, opponent, difficulty, who started (tally kept separately) | after every move |
 | Solitaire | deal seed, Draw 1/3, the list of actions (3 bytes each), time | after every action; time on `pagehide` / tab hidden |
 | Checkers | moves played (as legal-move indexes), opponent, difficulty (tally kept separately) | after every move |
+| Kush Jump | checkpoint reached, lives, score, coins | checkpoint reached, a life lost, pause, `pagehide`, tab hidden and leaving (cleared on game over / stage clear) |
 | Blocks | board cells, current piece (type, position, rotation), next queue, 7-bag and random-generator state (so the piece order carries on), hold + can-hold, score, lines, level, timers | on every lock, line clear, hold and pause; on `pagehide`, tab hidden, and leaving the game |
 
 Restoring:
@@ -303,6 +310,7 @@ node e2e/new-games.mjs https://abhi1kush.github.io/kush-games/ /tmp   # Mineswee
 node e2e/four-games.mjs https://abhi1kush.github.io/kush-games/ /tmp  # Breakout, Connect Four, Solitaire, Checkers at 1280 and 375 px
 node e2e/chess-online.mjs https://abhi1kush.github.io/kush-games/ /tmp  # Chess local + online (two browsers)
 node e2e/online-games.mjs https://abhi1kush.github.io/kush-games/ /tmp  # Connect Four + Checkers online (add --peerjs-only for the broker check)
+node e2e/kush-jump.mjs https://abhi1kush.github.io/kush-games/ /tmp     # Kush Jump: move, jump, stomp, checkpoint reload, finish, phone layouts
 ```
 
 ## Deploying

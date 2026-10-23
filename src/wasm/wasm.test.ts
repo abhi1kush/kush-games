@@ -5,23 +5,46 @@ import * as breakoutModule from './breakout/breakout.js';
 import * as checkersModule from './checkers/checkers.js';
 import * as connectFourModule from './connect_four/connect_four.js';
 import * as solitaireModule from './solitaire/solitaire.js';
+import * as kushJumpModule from './kush_jump/kush_jump.js';
 import { decodeMoves } from '../games/checkers/engine';
 import { decodeLayout } from '../games/solitaire/engine';
 import { RenderSlot } from '../games/breakout/engine';
+import { Buttons, Phase as KushJumpPhase, RenderSlot as KushJumpSlot } from '../games/kushjump/engine';
 
 const wasmBytes = (name: string) => readFileSync(new URL(`./${name}/${name}_bg.wasm`, import.meta.url));
 let breakoutMemory: WebAssembly.Memory;
+let kushJumpMemory: WebAssembly.Memory;
 
 beforeAll(() => {
   breakoutMemory = breakoutModule.initSync({ module: wasmBytes('breakout') }).memory;
   checkersModule.initSync({ module: wasmBytes('checkers') });
   connectFourModule.initSync({ module: wasmBytes('connect_four') });
   solitaireModule.initSync({ module: wasmBytes('solitaire') });
+  kushJumpMemory = kushJumpModule.initSync({ module: wasmBytes('kush_jump') }).memory;
 });
 
 describe('wasm bindings', () => {
   it('every game .wasm stays small (< 40 KB raw)', () => {
-    for (const name of ['breakout', 'checkers', 'connect_four', 'solitaire']) expect(wasmBytes(name).length, name).toBeLessThan(40 * 1024);
+    for (const name of ['breakout', 'checkers', 'connect_four', 'solitaire', 'kush_jump']) expect(wasmBytes(name).length, name).toBeLessThan(40 * 1024);
+  });
+
+  it('Kush Jump: runs right through the render buffer, survives a hitch and finishes at the flag', () => {
+    const game = new kushJumpModule.KushJump();
+    const render = new Float32Array(kushJumpMemory.buffer, game.render_pointer(), KushJumpSlot.length);
+    game.set_view_width(400);
+    game.start();
+    const startX = render[KushJumpSlot.heroX];
+    game.set_input(Buttons.right);
+    for (let frame = 0; frame < 30; frame++) game.advance(1 / 60);
+    expect(render[KushJumpSlot.heroX]).toBeGreaterThan(startX + 10);
+    const beforeHitch = render[KushJumpSlot.heroX];
+    game.advance(3); // a 3 s freeze is dropped, not simulated
+    expect(render[KushJumpSlot.heroX] - beforeHitch).toBeLessThan(4);
+    game.debug_teleport(195);
+    for (let frame = 0; frame < 900 && game.phase() !== KushJumpPhase.Cleared; frame++) game.advance(1 / 60);
+    expect(game.phase()).toBe(KushJumpPhase.Cleared);
+    expect(game.score()).toBeGreaterThan(5000);
+    game.free();
   });
 
   it('Connect Four: plays, detects a win and the hard AI blocks a threat in a worker-sized budget', () => {

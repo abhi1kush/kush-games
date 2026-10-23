@@ -1,0 +1,31 @@
+/* tslint:disable */
+/* eslint-disable */
+export const memory: WebAssembly.Memory;
+export const __wbg_kushjump_free: (a: number, b: number) => void;
+export const kushjump_advance: (a: number, b: number) => number;
+export const kushjump_checkpoint_column: () => number;
+export const kushjump_checkpoint_reached: (a: number) => number;
+export const kushjump_coins: (a: number) => number;
+export const kushjump_debug_drop: (a: number, b: number, c: number) => void;
+export const kushjump_debug_set_big: (a: number, b: number) => void;
+export const kushjump_debug_teleport: (a: number, b: number) => void;
+export const kushjump_enemies_defeated: (a: number) => number;
+export const kushjump_flag_column: () => number;
+export const kushjump_fort_door_column: () => number;
+export const kushjump_hero_x: (a: number) => number;
+export const kushjump_hero_y: (a: number) => number;
+export const kushjump_is_big: (a: number) => number;
+export const kushjump_level_columns: () => number;
+export const kushjump_level_rows: () => number;
+export const kushjump_lives: (a: number) => number;
+export const kushjump_new: () => number;
+export const kushjump_phase: (a: number) => number;
+export const kushjump_press_jump: (a: number) => void;
+export const kushjump_render_pointer: (a: number) => number;
+export const kushjump_restart: (a: number) => void;
+export const kushjump_restore: (a: number, b: number, c: number, d: number, e: number) => number;
+export const kushjump_score: (a: number) => number;
+export const kushjump_set_input: (a: number, b: number) => void;
+export const kushjump_set_view_width: (a: number, b: number) => void;
+export const kushjump_start: (a: number) => void;
+export const kushjump_tiles_pointer: (a: number) => number;
