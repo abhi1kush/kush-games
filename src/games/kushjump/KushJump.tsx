@@ -287,7 +287,7 @@ function KushJumpGame({ memory }: { memory: WebAssembly.Memory }) {
         if (events) handleEvents(events);
         const views = readViews();
         const currentPhase = views.render[RenderSlot.phase];
-        if (currentPhase !== lastPhase) { lastPhase = currentPhase; setPhase(currentPhase as Phase); }
+        if (currentPhase !== lastPhase) { lastPhase = currentPhase; setPhase(currentPhase as Phase); needsDrawRef.current = true; }
         // nothing moves on the start / game-over / clear screens: draw once, then idle
         const isStill = (currentPhase === Phase.Ready || currentPhase === Phase.GameOver || currentPhase === Phase.Cleared) && views.render[RenderSlot.effectCount] === 0;
         if (renderer && (!isStill || needsDrawRef.current)) { needsDrawRef.current = false; drawFrame(renderer, views, now / 1000); }
