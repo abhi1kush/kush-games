@@ -7,17 +7,21 @@ import * as connectFourModule from './connect_four/connect_four.js';
 import * as solitaireModule from './solitaire/solitaire.js';
 import * as kushJumpModule from './kush_jump/kush_jump.js';
 import * as jungleStrikeModule from './jungle_strike/jungle_strike.js';
+import * as antarikshModule from './antariksh_defenders/antariksh_defenders.js';
 import { decodeMoves } from '../games/checkers/engine';
 import { decodeLayout } from '../games/solitaire/engine';
 import { RenderSlot } from '../games/breakout/engine';
 import { Buttons, Phase as KushJumpPhase, RenderSlot as KushJumpSlot } from '../games/kushjump/engine';
 import { Buttons as StrikeButtons, PLATFORM_COUNT, RenderSlot as StrikeSlot } from '../games/junglestrike/engine';
 import { parseJungleStrikeSave } from '../games/junglestrike/save';
+import { Buttons as AntarikshButtons, RenderSlot as AntarikshSlot, SHIELD_COUNT, SHIELD_HEIGHT, SHIELD_WIDTH } from '../games/antariksh/engine';
+import { parseAntarikshSave } from '../games/antariksh/save';
 
 const wasmBytes = (name: string) => readFileSync(new URL(`./${name}/${name}_bg.wasm`, import.meta.url));
 let breakoutMemory: WebAssembly.Memory;
 let kushJumpMemory: WebAssembly.Memory;
 let jungleStrikeMemory: WebAssembly.Memory;
+let antarikshMemory: WebAssembly.Memory;
 
 beforeAll(() => {
   breakoutMemory = breakoutModule.initSync({ module: wasmBytes('breakout') }).memory;
@@ -26,11 +30,12 @@ beforeAll(() => {
   solitaireModule.initSync({ module: wasmBytes('solitaire') });
   kushJumpMemory = kushJumpModule.initSync({ module: wasmBytes('kush_jump') }).memory;
   jungleStrikeMemory = jungleStrikeModule.initSync({ module: wasmBytes('jungle_strike') }).memory;
+  antarikshMemory = antarikshModule.initSync({ module: wasmBytes('antariksh_defenders') }).memory;
 });
 
 describe('wasm bindings', () => {
   it('every game .wasm stays small (< 40 KB raw)', () => {
-    for (const name of ['breakout', 'checkers', 'connect_four', 'solitaire', 'kush_jump', 'jungle_strike']) expect(wasmBytes(name).length, name).toBeLessThan(40 * 1024);
+    for (const name of ['breakout', 'checkers', 'connect_four', 'solitaire', 'kush_jump', 'jungle_strike', 'antariksh_defenders']) expect(wasmBytes(name).length, name).toBeLessThan(40 * 1024);
   });
 
   it('Kush Jump: runs right through the render buffer, survives a hitch and finishes at the flag', () => {
@@ -82,6 +87,41 @@ describe('wasm bindings', () => {
     expect(parseJungleStrikeSave({ checkpoint: true, lives: 0, score: 0, weapon: 0, continues: 0 })).toBeNull();
     expect(parseJungleStrikeSave({ checkpoint: true, lives: 2, score: 0, weapon: 7, continues: 0 })).toBeNull();
     expect(parseJungleStrikeSave(null)).toBeNull();
+  });
+
+  it('Antariksh Defenders: the render layout matches, it counts down, moves, fires, kills and drops a hitch', () => {
+    expect(antarikshModule.AntarikshDefenders.render_length()).toBe(AntarikshSlot.length);
+    expect(antarikshModule.AntarikshDefenders.shields_length()).toBe(SHIELD_COUNT * SHIELD_WIDTH * SHIELD_HEIGHT);
+    expect(antarikshModule.AntarikshDefenders.stage_name(3)).toBe('Lunar Orbit');
+    const game = new antarikshModule.AntarikshDefenders();
+    const render = new Float32Array(antarikshMemory.buffer, game.render_pointer(), AntarikshSlot.length);
+    expect(render[AntarikshSlot.enemiesAlive]).toBe(45);
+    game.start();
+    game.debug_set_invincible(true);
+    for (let frame = 0; frame < 240; frame++) game.advance(1 / 60);
+    expect(game.phase()).toBe(2);
+    const startX = render[AntarikshSlot.playerX];
+    game.set_input(AntarikshButtons.right);
+    for (let frame = 0; frame < 30; frame++) game.advance(1 / 60);
+    expect(render[AntarikshSlot.playerX]).toBeGreaterThan(startX + 30);
+    game.set_input(AntarikshButtons.fire);
+    for (let frame = 0; frame < 300 && game.kills() === 0; frame++) { game.set_target_x(game.debug_nearest_enemy_x()); game.advance(1 / 60); }
+    expect(game.kills()).toBeGreaterThan(0);
+    expect(game.score()).toBeGreaterThan(0);
+    game.set_input(AntarikshButtons.left);
+    game.set_target_x(-1);
+    const beforeHitch = render[AntarikshSlot.playerX];
+    game.advance(3);
+    expect(beforeHitch - render[AntarikshSlot.playerX]).toBeLessThan(3);
+    game.free();
+  });
+
+  it('Antariksh Defenders saves are validated', () => {
+    expect(parseAntarikshSave({ wave: 3, score: 2400, lives: 2 })).toEqual({ wave: 3, score: 2400, lives: 2 });
+    expect(parseAntarikshSave({ wave: 0, score: 0, lives: 3 })).toBeNull();
+    expect(parseAntarikshSave({ wave: 2, score: 10, lives: 0 })).toBeNull();
+    expect(parseAntarikshSave({ wave: 2, score: -5, lives: 3 })).toBeNull();
+    expect(parseAntarikshSave('nope')).toBeNull();
   });
 
   it('Connect Four: plays, detects a win and the hard AI blocks a threat in a worker-sized budget', () => {

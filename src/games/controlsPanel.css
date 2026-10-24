@@ -20,6 +20,9 @@
 .controls-panel__pad { display: flex; gap: 3px; }
 .controls-panel__pad b { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px;
   border: 1.5px solid color-mix(in srgb, var(--text) 55%, transparent); }
+.controls-panel__drag { display: flex; align-items: center; gap: 2px; height: 24px; padding: 0 5px; border-radius: 12px;
+  border: 1.5px solid color-mix(in srgb, var(--text) 55%, transparent); font-size: 9px; }
+.controls-panel__drag span { width: 30px; height: 2px; border-radius: 1px; background: color-mix(in srgb, var(--text) 55%, transparent); }
 .controls-panel__button { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font: 800 8.5px/1 system-ui, sans-serif;
   color: #fff; border: 1.5px solid rgba(255,255,255,0.5); }
 .controls-panel__where { flex: 1; text-align: center; font-size: 10px; color: var(--muted); }

@@ -1,0 +1,36 @@
+/* tslint:disable */
+/* eslint-disable */
+export const memory: WebAssembly.Memory;
+export const __wbg_antarikshdefenders_free: (a: number, b: number) => void;
+export const antarikshdefenders_advance: (a: number, b: number) => number;
+export const antarikshdefenders_debug_drop_capsule: (a: number, b: number) => void;
+export const antarikshdefenders_debug_launch_mystery: (a: number) => void;
+export const antarikshdefenders_debug_nearest_enemy_x: (a: number) => number;
+export const antarikshdefenders_debug_set_invincible: (a: number, b: number) => void;
+export const antarikshdefenders_debug_set_wave: (a: number, b: number) => void;
+export const antarikshdefenders_debug_thin_formation: (a: number, b: number) => void;
+export const antarikshdefenders_enemies_alive: (a: number) => number;
+export const antarikshdefenders_formation_y: (a: number) => number;
+export const antarikshdefenders_kills: (a: number) => number;
+export const antarikshdefenders_lives: (a: number) => number;
+export const antarikshdefenders_march_interval: (a: number) => number;
+export const antarikshdefenders_new: () => number;
+export const antarikshdefenders_phase: (a: number) => number;
+export const antarikshdefenders_player_x: (a: number) => number;
+export const antarikshdefenders_power: (a: number) => number;
+export const antarikshdefenders_render_length: () => number;
+export const antarikshdefenders_render_pointer: (a: number) => number;
+export const antarikshdefenders_restart: (a: number) => void;
+export const antarikshdefenders_restore: (a: number, b: number, c: number, d: number) => number;
+export const antarikshdefenders_score: (a: number) => number;
+export const antarikshdefenders_seed: (a: number, b: number) => void;
+export const antarikshdefenders_set_input: (a: number, b: number) => void;
+export const antarikshdefenders_set_target_x: (a: number, b: number) => void;
+export const antarikshdefenders_shield_cells_left: (a: number) => number;
+export const antarikshdefenders_shields_length: () => number;
+export const antarikshdefenders_shields_pointer: (a: number) => number;
+export const antarikshdefenders_stage_name: (a: number, b: number) => void;
+export const antarikshdefenders_start: (a: number) => void;
+export const antarikshdefenders_wave: (a: number) => number;
+export const __wbindgen_add_to_stack_pointer: (a: number) => number;
+export const __wbindgen_export: (a: number, b: number, c: number) => void;

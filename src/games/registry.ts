@@ -212,6 +212,18 @@ export const games: GameDefinition[] = [
     releaseYear: 2026,
     component: lazy(() => import('./junglestrike/JungleStrike')),
   },
+  {
+    id: 'antariksh-defenders',
+    title: 'Antariksh Defenders',
+    tagline: 'Guard the launch pad from Earth orbit to Mars.',
+    description: 'A classic fixed shooter with Indian space-mission flair: fly a saffron-and-white launcher along the pad and shoot down marching formations of asteroids, space debris and rogue alien drones before they reach your satellite shields. The formation speeds up as it thins and shoots back; shields erode cell by cell; a comet or alien mothership crosses the top for bonus points and a capsule (triple shot or a short shield). The journey runs Low Earth Orbit → Lunar Orbit → Mars Approach → Deep Space, each wave faster, lower and trigger-happier. Mission-control countdown, 3 lives, an extra ship every 5,000 points, a saved high score. The game logic runs in Rust compiled to WebAssembly.',
+    categories: ['Arcade'],
+    status: 'playable',
+    artwork: { gradientFrom: '#050b1f', gradientTo: '#ff9933', accentColor: '#ffffff', glyph: '🚀' },
+    controls: '←/→ or A/D move; Space, Z or ↑ fire (hold); P pause; M mute; drag pad and FIRE button on phones',
+    releaseYear: 2026,
+    component: lazy(() => import('./antariksh/AntarikshDefenders')),
+  },
 ];
 
 /** Genre filter chips on the home page, in this order (only genres that have a playable game are shown). */

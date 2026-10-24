@@ -4,7 +4,7 @@ A Netflix-style home for browser games — dark UI, a big hero banner, and a wra
 
 **Live:** https://abhi1kush.github.io/kush-games/
 
-Built with **React + TypeScript + Vite**; Breakout, Connect Four, Solitaire, Checkers, Kush Jump and Jungle Strike run their game logic in **Rust compiled to WebAssembly**. Deployed to GitHub Pages from the `gh-pages` branch.
+Built with **React + TypeScript + Vite**; Breakout, Connect Four, Solitaire, Checkers, Kush Jump, Jungle Strike and Antariksh Defenders run their game logic in **Rust compiled to WebAssembly**. Deployed to GitHub Pages from the `gh-pages` branch.
 
 ## Features
 
@@ -41,6 +41,7 @@ Built with **React + TypeScript + Vite**; Breakout, Connect Four, Solitaire, Che
 | Checkers (vs computer, 2 players, or online with a friend; Rust/WebAssembly) | ✅ Playable |
 | Kush Jump — side-scrolling platformer, one stage (Rust/WebAssembly) | ✅ Playable |
 | Jungle Strike — side-scrolling run-and-gun shooter, one stage (Rust/WebAssembly) | ✅ Playable |
+| Antariksh Defenders — fixed shooter with Indian space-mission flair, Earth orbit → Moon → Mars (Rust/WebAssembly) | ✅ Playable |
 
 ### Snake
 
@@ -149,7 +150,7 @@ A connect-the-dots path puzzle in the style of the "same color / connect two dot
 - **Difficulty:** boards grow 5×5 → 6×6 → 7×7 → 8×8/9×9 → 10×12 (≈ 30px cells on a 375×667 phone). For each level the generator keeps the candidate closest to a rising hardness target, from: share of the board solvable by forced moves alone, solver guesses, average path length and bends, how far paths wander from the direct route, and short (≤ 3 cell) pairs. `npx vite-node scripts/color-trails-metrics.ts 1 5 10 20 30 40 60` prints the table.
 - **Colors:** a color-blind friendlier palette, and every color also has its own small symbol inside its dots.
 
-### Rust/WebAssembly games: Breakout, Connect Four, Solitaire, Checkers, Kush Jump, Jungle Strike
+### Rust/WebAssembly games: Breakout, Connect Four, Solitaire, Checkers, Kush Jump, Jungle Strike, Antariksh Defenders
 
 The UI is React + TypeScript; the rules, physics and AI are Rust crates in `wasm/` (one crate per game, a Cargo workspace), built with `wasm-pack --target web` into `src/wasm/<crate>/`. Each game's `.wasm` is only fetched when that game opens (the hub downloads none). Data crosses the boundary as small typed arrays and integers — never JSON.
 
@@ -178,166 +179,6 @@ Size settings: `opt-level = "z"`, `lto`, `codegen-units = 1`, `panic = "abort"`,
   - Rust (`wasm/jungle_strike`) owns everything: 8-way aim (running + up/down = diagonals, standing + down = lie flat, any direction in the air, forward/up in water), somersault jump (small hitbox), one-way platforms, bridges, water, enemies, bullets and particles in fixed-size pools (32 enemies, 40 player bullets, 48 enemy bullets, 96 particles — no allocation after start), scoring, checkpoint, continues and the boss. Same hitch rules as Breakout/Kush Jump: fixed 1/120 s steps, at most 50 ms simulated per frame, gaps over 100 ms dropped and 0.3 s of protection afterwards. The wasm is ~35 KB (≈16 KB gzipped) and loads only when the game opens; JS reads one `Float32Array` render buffer straight from wasm memory each frame.
   - One canvas (240 units tall, 256–480 wide), forward-only camera; the sky/mountains and palm silhouettes are two pre-rendered parallax strips, ground/ledge/plank/gate are pre-rendered sprites (rebuilt only on resize), only on-screen platforms and objects are drawn.
   - Keyboard: arrows/WASD move and aim, Z/J/Space jump, X/K fire (hold for auto-fire), P pause, M mute, Enter/any key starts. Phones: an 8-way stick plus JUMP and FIRE (several fingers at once), below the stage in portrait and over its corners in landscape. The start screen shows a compact controls card (key caps on keyboards, a labelled sketch of the stick and buttons on touch screens, both on hybrids; `src/games/ControlsPanel.tsx`) with the R/S/L weapon legend; the pause screen has a “? Controls” button that opens the same card. Saves checkpoint, lives, score, weapon and continues (`kush-games:jungle-strike:save:v1`) on the checkpoint, a lost life, game over, pause, tab hidden, `pagehide` and leaving. `cargo test -p jungle_strike` includes a bot that plays the whole stage without cheats. `?jungleStrikeTest` exposes `window.__jungleStrikeTest` (teleport, invincibility, weapon, spawn hooks and frame timings) for `e2e/jungle-strike.mjs`.
-
-#### Toolchain
-
-```bash
-curl https://sh.rustup.rs -sSf | sh            # Rust stable (tested with 1.99)
-rustup target add wasm32-unknown-unknown
-cargo install wasm-pack                          # 0.13+ (downloads wasm-bindgen and wasm-opt/binaryen itself)
-```
-
-`npm run build` runs `npm run build:wasm` (`scripts/build-wasm.mjs`, prints the sizes) and then `tsc -b && vite build`. The built `src/wasm/` output is committed, so without `wasm-pack` the script warns and keeps the committed files — `npm ci && npm run build` works either way. `npm run test:rust` runs the cargo tests.
-
-### Colour themes
-
-The ⚙ button in the top-right corner (hub header and game pages) opens a theme picker:
-
-- **Lagoon** (default for anyone who hasn't picked a theme) — `#163235` page background, `#106967` cards / panels / game bar, `#4fbc9c` logo and accents, `#32bfda` focus rings, links and selected-option highlights, `#efca7c` primary buttons, selected chips and badges (with dark `#163235` text on it). Body text is near-white `#f2fbf8` and secondary text `#cfe9e3`, both ≥ 4.5:1 on both teals (`src/theme.test.ts` checks the contrast pairs).
-
-- **Netflix Red** — the dark Netflix-style look with red accents.
-
-Themes are CSS custom properties (`:root` and `:root[data-theme="lagoon"]` in `src/styles.css`); hub, cards, chips, buttons, the player bar, shared game chrome and the online-room UI use the variables, while game boards, canvases and SVG thumbnails keep their own art. The tab icon (a tall ribbon "K" with gradient-shaded bar, arm and leg: reds on near-black, or greens `#4fbc9c` → `#1f5c4a` on `#163235` in Lagoon; the 32 px PNG uses a higher-contrast variant) and the header avatar follow the theme too; `node scripts/build-favicons.mjs [preview.png]` redraws `public/favicon*.svg|png` and `apple-touch-icon*.png` (bump `ICON_VERSION` in `src/theme.ts` and the `?v=` in `index.html` after changing them). The choice is saved as `kush-games:theme:save:v1` (the usual versioned envelope) and `index.html` ships with Lagoon (attribute, theme-color, icons) and an inline script switches to a saved Netflix Red before the first paint. Any explicit choice, including Lagoon, is saved. The panel closes on an outside tap or Esc; on a game page Esc closes the panel first and only the next Esc leaves the game. `node e2e/theme.mjs <url> /tmp` checks it.
-
-### Shared sound setting
-
-The newer games (Minesweeper, Sudoku, Tic-Tac-Toe, Memory Match, Flappy Wings, Arrow Out, Color Trails, Breakout, Connect Four, Solitaire, Checkers, Kush Jump and Jungle Strike) share `src/games/sharedSound.tsx`: generated Web Audio sounds and one 🔊/🔇 button saved as `kush-games-muted` (`M` toggles). Snake, Blocks and Chess keep their own mute settings.
-
-### Chess
-
-`src/games/chess/` has chess you can play against a friend over the internet, or on one device.
-
-- **Rules:** [`chess.js`](https://github.com/jhlywa/chess.js) handles legal moves, check, checkmate, stalemate, threefold repetition, insufficient material, the fifty-move rule, castling, en passant and promotion. `match.ts` wraps it: a match is just the list of moves in UCI (`e2e4`, `e7e8q`) plus resignation or an agreed draw.
-- **Board:** `Board.tsx` draws 64 memoised squares. Tap a piece to see its legal squares (dots, or rings for captures), then tap where it should go. The last move and a king in check are highlighted. A pawn reaching the last rank opens a promotion picker. The board flips for Black. Pieces are Unicode glyphs coloured with CSS, so there are no images.
-- **Online:** built on the shared online module (see *Online play with a friend* below). The host chooses White or Black; each rematch swaps colours. Chess keeps its PeerJS id prefix `kushchess-` and its save key.
-- **Pass and play:** two players on one device, with Undo, Flip and New game.
-- **Saving:** the game is saved under `kush-games:chess:save:v1`, including the room code and your role. A refresh restores the board and re-joins the room (a refreshed host re-opens the same room). A finished pass-and-play game isn't kept. *Leave room* / *Exit* clears the save.
-- **Sound:** small Web Audio sounds for a move, a capture and check, with a 🔊/🔇 toggle saved as `kush-games-chess-muted`.
-- **Browser test:** `node e2e/chess-online.mjs [url]` plays a local game, then two browser contexts (a 1280px host and a 375px phone guest) play an online game: moves both ways, reloads on both sides, draw offer/decline/accept, resign, game over + New game on both ends, rematch request/accept (colours swap), both pressing New game at once, and leave. If WebRTC can't connect on the test machine, it still checks the PeerJS server part, then runs the same two-browser test over the relay transport in `e2e/relay.mjs`.
-
-### Online play with a friend (Chess, Connect Four, Checkers)
-
-`src/games/online/` holds everything the three games share; each game only adds a small rules adapter (`OnlineRules`: move format, legality, whose turn, finished on the board).
-
-| Game | Move on the wire | Checked by | Host plays in game 1 |
-|---|---|---|---|
-| Chess | UCI, e.g. `e2e4`, `e7e8q` | chess.js (`chess/match.ts`) | White or Black (chosen) |
-| Connect Four | column `"0"`–`"6"` | Rust/wasm rules (`connectfour/rules.ts`) | Red (moves first) |
-| Checkers | path of squares, e.g. `22-15-6` for a double jump | Rust/wasm legal-move list, so forced captures and full multi-jumps are enforced (`checkers/rules.ts`) | Dark (moves first); the guest's board is flipped |
-
-- **Rooms** (`room.ts`): 5-character codes (no 0/O/1/I/L); the host registers the PeerJS id `kushchess-` / `kushc4-` / `kushcheckers-` + code on the free public PeerJS broker. Share link `#/play/<game>?room=CODE` with **Copy link** and **Share…**; opening it joins automatically, or type the code.
-- **Transport** (`peerTransport.ts`): a WebRTC data channel with PeerJS's default ICE servers, a heartbeat, reconnects, and clear states: *Waiting for friend*, *Connected*, *Opponent left — reconnecting*, and a "try another network" hint when a direct connection is impossible. No game server.
-- **Protocol** (`protocol.ts`, version 2): `hello` (protocol + game id), full `sync` on every (re)connect (newer game wins; a longer move list wins over its prefix; otherwise the host's version), `move` with ply + game number (validated on receipt; anything odd triggers a sync), `resign`, `draw-offer/accept/decline`, `rematch-offer/accept/decline`, `ping`.
-- **Match** (`match.ts`): the move list plus resignation / agreed draw / pending draw offer (cancelled by the next move) / pending rematch request. A rematch swaps colours, so the other player moves first next game. If both players press New game, it starts at once.
-- **UI** (`OnlineUI.tsx`, `online.css`): room panel; *½ Offer draw* and *🏳 Resign* (with "Really resign?"); incoming offers with Accept / Decline; a game-over banner above the board on **both** ends with the result and **↻ New game**; the other side then sees "Friend wants a rematch — Accept / Decline".
-- **Saving:** Chess keeps the room in `kush-games:chess:save:v1`; Connect Four and Checkers use a second slot (`kush-games:connect-four-online:save:v1`, `kush-games:checkers-online:save:v1`) so a local game in progress isn't overwritten. A refresh rejoins the room; the hub shows ▶ Continue; *Leave room* clears it.
-- **Sounds:** opponent moves use the game's move sound; a chime on connect, a ping for incoming offers and a jingle at game over (shared mute; Chess keeps its own mute).
-- **Tests:** `online/protocol.test.ts`, `online/session.test.ts` (sync, reconnect, reload, draw offer/decline/auto-cancel/accept, resign, rematch handshake incl. crossing requests and decline) and `online/gameRules.test.ts` (Connect Four and Checkers rules through the real wasm). Browser: `node e2e/online-games.mjs [url]` checks the real PeerJS broker for both games, then plays Connect Four and Checkers between a desktop host and a 375px phone guest over the relay transport (`window.__kushTestTransport`, test-only; `__kushChessTestTransport` still works).
-
-### Where 2048 came from
-
-The 2048 game was copied from [abhi1kush/2048](https://github.com/abhi1kush/2048) (commit `f37ad66`) into `src/games/game2048/`:
-
-- `game.ts` — game logic (same behaviour; local variable names expanded for readability)
-- `game.test.ts` — the original unit tests, unchanged
-- `Game2048.tsx` — the original `App.tsx` turned into a component
-- `game2048.css` — the original styles, scoped under `.game-2048` so they don't leak into the rest of the site
-
-Controls: arrow keys / WASD, or swipe on the board on mobile.
-
-## Saved games
-
-Every playable game saves its game in progress to `localStorage` and restores it after a reload, Back, or closing the tab. Settings and best scores were already saved and still are.
-
-[`src/games/persistence.ts`](src/games/persistence.ts) is the shared helper:
-
-- One versioned key per game: `kush-games:<gameId>:save:v1`, holding `{ version, savedAt, data }`.
-- Loading never throws. Corrupt JSON, a different version, or data that fails the game's own check is discarded (and removed), and a fresh game is shown. Saves from older versions are removed. Bump the version when a save's shape changes.
-- `save` writes at once, `saveThrottled` writes at most once per second (newest data wins), and `flush`/`clear` do what they say. Storage errors (full or blocked) are ignored, so the game keeps working.
-- `hasSavedGame(id)` drives the home page's **Continue** badge.
-
-| Game | What is saved | When |
-| --- | --- | --- |
-| Chess | moves, game number, colours, resign/draw state, mode, room code and role | after every change (moves are rare) |
-| 2048 | tiles (value, row, column), score, won, keep-playing | after every move (and *Keep going*) |
-| Snake | body, direction, apple, score, length, apples eaten, speed setting + step interval, status | on every apple and pause at once; at most once per second while moving; on `pagehide`, tab hidden, and leaving the game |
-| Minesweeper | difficulty, mine positions, cell states (hidden/open/flagged), time | after every move; on `pagehide`, tab hidden and leaving |
-| Sudoku | puzzle, solution, numbers, notes, undo history, mistakes, hints, time | as soon as a puzzle is made, after every change; on `pagehide`, tab hidden and leaving |
-| Tic-Tac-Toe | board, who started, opponent, difficulty (the tally is kept separately) | after every move |
-| Memory Match | card faces, matched cards, open card, moves, time | after every flip; on `pagehide`, tab hidden and leaving |
-| Arrow Out | level number, arrows that have left (in order), lives, mistakes, hints | after every tap, undo and hint; after a win the next level is saved |
-| Color Trails | level number, every drawn path, moves, last color drawn, hints | after every drag, undo and hint; after a win the next level is saved |
-| Flappy Wings | bird position and speed, pipes, score, distance, random seed | at most once per second while flying; at once on pause, `pagehide`, tab hidden and leaving |
-| Breakout | level, score, lives, each brick's remaining hits | only when play stops: a lost life, level clear, pause, `pagehide`, tab hidden and leaving the game (never during a rally) |
-| Connect Four | moves played, opponent, difficulty, who started (tally kept separately) | after every move |
-| Solitaire | deal seed, Draw 1/3, the list of actions (3 bytes each), time | after every action; time on `pagehide` / tab hidden |
-| Checkers | moves played (as legal-move indexes), opponent, difficulty (tally kept separately) | after every move |
-| Jungle Strike | checkpoint reached, lives, score, weapon, continues | checkpoint, a life lost, game over, pause, `pagehide`, tab hidden and leaving (cleared on stage clear) |
-| Kush Jump | checkpoint reached, lives, score, coins | checkpoint reached, a life lost, pause, `pagehide`, tab hidden and leaving (cleared on game over / stage clear) |
-| Blocks | board cells, current piece (type, position, rotation), next queue, 7-bag and random-generator state (so the piece order carries on), hold + can-hold, score, lines, level, timers | on every lock, line clear, hold and pause; on `pagehide`, tab hidden, and leaving the game |
-
-Restoring:
-
-- 2048 comes back as it was.
-- Minesweeper, Sudoku, Tic-Tac-Toe and Memory Match come back as they were, with a *Saved game restored* note (the Minesweeper and Memory clocks wait for your next move).
-- A Snake, Blocks, Flappy Wings or Breakout game comes back **paused**, with a *Saved game restored* overlay and **Resume** / **New game** buttons.
-- A finished game is never restored. Game Over clears the save, so the next visit starts fresh.
-- *New Game* / *New game* / *Play again* clear the save and start over.
-- The Blocks test parameters (`?blocksSetup`, `?blocksSeed`) never load or write saves, so the tests stay deterministic.
-- The save logic for each game lives in its `save.ts`, with tests in `save.test.ts` (round trip, rejected bad data, and the Blocks piece order carrying on after a restore). Saving doesn't re-render React: Snake and Blocks still show 0 React commits while playing.
-
-## Adding a game
-
-1. Create a folder with a component that has a default export, e.g. `src/games/snake/Snake.tsx`.
-   It gets the whole screen below the Back bar, so make it fill its container.
-2. Add (or update) one entry in [`src/games/registry.ts`](src/games/registry.ts):
-
-```ts
-{
-  id: 'snake',                       // used in #/play/snake
-  title: 'Snake',
-  tagline: 'Eat, grow, don’t bite your tail.',
-  description: '…',
-  categories: ['Arcade'],            // which rows it shows up in
-  status: 'playable',                // or 'coming-soon'
-  artwork: { gradientFrom: '#0f9b0f', gradientTo: '#023020', accentColor: '#b8ff9f', glyph: '🐍' },
-  controls: 'Arrow keys, or swipe',
-  releaseYear: 2026,
-  component: lazy(() => import('./snake/Snake')),
-},
-```
-
-That's it — the rows, modal and player all read from the registry. Each game is lazy-loaded, so it only downloads when someone plays it.
-
-## Development
-
-```bash
-npm install
-npm run dev        # http://localhost:5173/kush-games/
-npm test           # unit tests (game logic for every game, saved games, registry, routing) + wasm integration tests
-npm run test:rust  # cargo tests for the four Rust crates
-npm run build      # build:wasm, then type-check + production build into dist/
-```
-
-Browser check (needs Chrome at `/usr/bin/google-chrome` or `CHROME_PATH`):
-
-```bash
-npm run e2e -- https://abhi1kush.github.io/kush-games/ /tmp
-node e2e/new-games.mjs https://abhi1kush.github.io/kush-games/ /tmp   # Minesweeper, Sudoku, Tic-Tac-Toe, Memory, Flappy smoke tests
-node e2e/four-games.mjs https://abhi1kush.github.io/kush-games/ /tmp  # Breakout, Connect Four, Solitaire, Checkers at 1280 and 375 px
-node e2e/chess-online.mjs https://abhi1kush.github.io/kush-games/ /tmp  # Chess local + online (two browsers)
-node e2e/online-games.mjs https://abhi1kush.github.io/kush-games/ /tmp  # Connect Four + Checkers online (add --peerjs-only for the broker check)
-node e2e/kush-jump.mjs https://abhi1kush.github.io/kush-games/ /tmp     # Kush Jump: move, jump, stomp, checkpoint reload, finish, phone layouts
-node e2e/jungle-strike.mjs https://abhi1kush.github.io/kush-games/ /tmp # Jungle Strike: move, shoot, kill, power-up, checkpoint reload, perf, boss, phones
-```
-
-## Deploying
-
-```bash
-npm run deploy
-```
-
-This builds the site and pushes `dist/` to the `gh-pages` branch using the [`gh-pages`](https://www.npmjs.com/package/gh-pages) package.
-GitHub Pages is configured to serve from the `gh-pages` branch (root). The Vite `base` is `/kush-games/`.
-
-No GitHub Actions workflow is used.
+- **Antariksh Defenders** — an original fixed shooter inspired by Indian space exploration (no agency names, logos, emblems or real mission names). You fly a white-and-saffron launcher with green bands and strap-on boosters along the pad; a formation of asteroids (10 pts), space-debris clusters (20) and rogue alien drones (30) marches side to side, steps down at the edges and speeds up as it thins (a 4-note march tick that speeds up with it). Four satellites with solar-panel wings shield you and erode cell by cell (a 24 × 16 grid each, ragged craters from both sides). A comet (Earth/Moon legs) or an alien mothership (Mars/deep space) crosses the top for 50–300 points and drops a capsule: **T** triple shot or **S** a one-hit shield bubble (9 s each; enemies very rarely drop one too). Mission-control countdown (T-3, T-2, T-1, LIFTOFF) at the start; the journey runs Low Earth Orbit → Earth Departure → Lunar Orbit → Lunar Far Side → Mars Transfer → Mars Approach → Deep Space (repeating, still harder), with Earth, Moon, Mars and nebula backdrops. Each wave starts lower, marches faster, fires more often with more bullets allowed, aims more at you, and from wave 3 the second-lowest enemy of a column can fire too; formations vary (full, wide, chevron, ring, checker). 3 lives, an extra ship every 5 000 points, game over when the formation reaches the shields' line or the last ship is lost; high score saved separately (`kush-games-antariksh-defenders-best`).
+  - Rust (`wasm/antariksh_defenders`) owns everything (formation, shots, shields, mothership, capsules, particles in fixed pools: 55 enemies, 8 + 10 bullets, 160 particles, 2 capsules), with the same hitch rules (1/120 s steps, ≤ 50 ms per frame, gaps over 100 ms dropped with 0.3 s of protection). The wasm is ~36 KB (≈16.5 KB gzipped) and loads only when the game opens; JS reads a `Float32Array` render buffer and the shield bytes straight from wasm memory. Sprites and backdrops are pre-rendered per scale; the shield strip repaints only when a shield is hit.
+  - Keyboard: ←/→ or A/D move, Space, Z or ↑ fire (hold to keep firing at the allowed rate: 2 shots in flight, 6 with triple shot), P pause, M mute, Esc back to the hub. Phones: a wide drag pad (the ship follows your thumb relative to where you touched) plus a big FIRE button, several fingers at once; touching the playfield itself flies the ship to your finger. Portrait puts the controls under the playfield; landscape puts them either side. Saves wave, score and lives (`kush-games:antariksh-defenders:save:v1`) on a new wave, a lost life, pause, tab hidden, `pagehide` and leaving; a reload resumes at the start of that wave; cleared on game over. `?antarikshTest` exposes `window.__antarikshTest` for `e2e/antariksh-defenders.mjs`.

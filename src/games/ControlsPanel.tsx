@@ -5,8 +5,8 @@ import './controlsPanel.css';
 /** One row of key caps and what they do. */
 export interface KeyRow { keys: string[]; label: string; }
 /** The on-screen touch layout, left to right as it appears on the phone. */
-export interface TouchLayout { leftControl: 'stick' | 'pad'; leftLabel: string; buttons: { name: string; label: string; color: string }[]; }
-export interface ControlsGuide { keyRows: KeyRow[]; touch: TouchLayout; touchTips?: string[]; weapons?: { letter: string; name: string; color: string }[]; }
+export interface TouchLayout { leftControl: 'stick' | 'pad' | 'drag'; leftLabel: string; buttons: { name: string; label: string; color: string }[]; }
+export interface ControlsGuide { keyRows: KeyRow[]; touch: TouchLayout; touchTips?: string[]; weapons?: { letter: string; name: string; color: string }[]; weaponsLabel?: string; }
 
 /** Which kinds of input to explain: touch on coarse pointers, keys when a fine pointer exists or touch is unknown (both on hybrids). */
 function detectInputs(): { showsKeys: boolean; showsTouch: boolean } {
@@ -44,7 +44,9 @@ export function ControlsPanel({ guide, stopsClicks = false, testId }: { guide: C
           <span className="controls-panel__touch-left">
             {guide.touch.leftControl === 'stick'
               ? <span className="controls-panel__stick" aria-hidden="true"><span /></span>
-              : <span className="controls-panel__pad" aria-hidden="true"><b>◀</b><b>▶</b></span>}
+              : guide.touch.leftControl === 'drag'
+                ? <span className="controls-panel__drag" aria-hidden="true"><b>◀</b><span /><b>▶</b></span>
+                : <span className="controls-panel__pad" aria-hidden="true"><b>◀</b><b>▶</b></span>}
             <small>{guide.touch.leftLabel}</small>
           </span>
           <span className="controls-panel__where">
@@ -64,7 +66,7 @@ export function ControlsPanel({ guide, stopsClicks = false, testId }: { guide: C
       {showsTouch && guide.touchTips && <p className="controls-panel__tips">{guide.touchTips.join(' · ')}</p>}
       {guide.weapons && (
         <p className="controls-panel__weapons" data-testid={`${testId}-weapons`}>
-          <span>Capsules drop</span>
+          <span>{guide.weaponsLabel ?? 'Capsules drop'}</span>
           {guide.weapons.map(weapon => (
             <span key={weapon.letter} className="controls-panel__weapon"><b style={{ background: weapon.color }}>{weapon.letter}</b>{weapon.name}</span>
           ))}
