@@ -145,7 +145,7 @@ try {
   } else check(false, 'found two same-colour neighbours for the invalid-swap test');
 
   // specials: show one of each, then fire a striped + wrapped combo
-  await game(page, 'game.debug_place(36, 2, 1); game.debug_place(45, 4, 2); game.debug_place(54, 5, 3); game.debug_place(62, 0, 4); game.debug_place(0, 0, 1); game.debug_place(1, 3, 3);');
+  await game(page, 'game.debug_place(36, 2, 1); game.debug_place(45, 4, 2); game.debug_place(54, 5, 3); game.debug_place(62, 0, 4); game.debug_place(0, 0, 1); game.debug_place(1, 3, 3); window.__mithaiTest.redraw();');
   await page.waitForTimeout(150);
   await page.screenshot({ path: `${screenshotDirectory}/kush-games-match3-specials.png` });
   console.log(`saved ${screenshotDirectory}/kush-games-match3-specials.png`);

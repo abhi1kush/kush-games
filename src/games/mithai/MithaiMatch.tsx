@@ -256,7 +256,7 @@ function MithaiGame({ memory }: { memory: WebAssembly.Memory }) {
     if (!isTest) return;
     perfRef.current = { workMilliseconds: new Float64Array(1200), frameMilliseconds: new Float64Array(1200), count: 0, draws: 0 };
     const testWindow = window as unknown as { __mithaiTest?: unknown };
-    testWindow.__mithaiTest = { game: gameRef.current, views: readView, perf: perfRef.current, RenderSlot };
+    testWindow.__mithaiTest = { game: gameRef.current, views: readView, perf: perfRef.current, RenderSlot, redraw: () => { needsDrawRef.current = true; } };
     return () => { delete testWindow.__mithaiTest; };
   }, [isTest, readView]);
 
