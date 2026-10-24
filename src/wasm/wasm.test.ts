@@ -10,6 +10,7 @@ import * as antarikshModule from './antariksh_defenders/antariksh_defenders.js';
 import * as mithaiModule from './mithai_match/mithai_match.js';
 import * as ludoModule from './ludo/ludo.js';
 import * as snakesModule from './snakes_ladders/snakes_ladders.js';
+import * as fleetModule from './fleet_clash/fleet_clash.js';
 import { decodeMoves } from '../games/checkers/engine';
 import { RenderSlot } from '../games/breakout/engine';
 import { Buttons, Phase as KushJumpPhase, RenderSlot as KushJumpSlot } from '../games/kushjump/engine';
@@ -24,6 +25,7 @@ import { TurnAuthority } from '../games/online/turnRoom/authority';
 import { ludoSpec } from '../games/ludo/spec';
 import { BOARD_JUMPS, decodeSnapshot as decodeSnakes, EnginePhase as SnakesPhase, jumpTarget } from '../games/snakesladders/engine';
 import { snakesSpec } from '../games/snakesladders/spec';
+import { computerShot, replayLocal, type LocalGame } from '../games/fleetclash/local';
 
 const wasmBytes = (name: string) => readFileSync(new URL(`./${name}/${name}_bg.wasm`, import.meta.url));
 let breakoutMemory: WebAssembly.Memory;
@@ -42,11 +44,12 @@ beforeAll(() => {
   mithaiMemory = mithaiModule.initSync({ module: wasmBytes('mithai_match') }).memory;
   ludoModule.initSync({ module: wasmBytes('ludo') });
   snakesModule.initSync({ module: wasmBytes('snakes_ladders') });
+  fleetModule.initSync({ module: wasmBytes('fleet_clash') });
 });
 
 describe('wasm bindings', () => {
   it('every game .wasm stays small (< 40 KB raw)', () => {
-    for (const name of ['breakout', 'checkers', 'connect_four', 'kush_jump', 'jungle_strike', 'antariksh_defenders', 'mithai_match', 'ludo', 'snakes_ladders']) expect(wasmBytes(name).length, name).toBeLessThan(40 * 1024);
+    for (const name of ['breakout', 'checkers', 'connect_four', 'kush_jump', 'jungle_strike', 'antariksh_defenders', 'mithai_match', 'ludo', 'snakes_ladders', 'fleet_clash']) expect(wasmBytes(name).length, name).toBeLessThan(40 * 1024);
   });
 
   it('Kush Jump: runs right through the render buffer, survives a hitch and finishes at the flag', () => {
@@ -273,6 +276,29 @@ describe('wasm bindings', () => {
       expect(jumpsSeen).toBeGreaterThan(0);
       expect(authority.state.events.some(event => event.kind === 'ladder' || event.kind === 'snake')).toBe(true);
       engine.free();
+    }
+  });
+  it('Fleet Clash: random fleets, shots and every computer level win a whole local game', () => {
+    const board = new fleetModule.FleetBoard();
+    board.randomize(99);
+    expect(board.is_complete()).toBe(true);
+    const code = Array.from(board.code());
+    expect(fleetModule.FleetBoard.from_code(Uint8Array.from(code))).toBeTruthy();
+    expect(fleetModule.FleetBoard.from_code(Uint8Array.from([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]))).toBeUndefined();
+    board.free();
+    for (const level of [0, 1, 2]) {
+      const fleets = [1, 2].map(seed => { const fleet = new fleetModule.FleetBoard(); fleet.randomize(seed * 31 + level); const value = Array.from(fleet.code()); fleet.free(); return value; });
+      // the human fires at every square in order; the computer plays its turns
+      const game: LocalGame = { mode: 'computer', level, first: 0, names: ['You', 'Computer'], fleets: [fleets[0], fleets[1]], shots: [], seed: 1234 + level };
+      let state = replayLocal(game);
+      let next = 0;
+      while (state.winner === null && game.shots.length < 200) {
+        game.shots.push(state.turn === 0 ? next++ : computerShot(game, state));
+        state = replayLocal(game);
+      }
+      expect(state.winner).not.toBeNull();
+      const computerShots = state.seas[1].shots;
+      expect(new Set(game.shots.filter((_, index) => index % 2 === 1)).size).toBe(computerShots);
     }
   });
 });

@@ -248,6 +248,18 @@ export const games: GameDefinition[] = [
     releaseYear: 2026,
     component: lazy(() => import('./snakesladders/SnakesLadders')),
   },
+  {
+    id: 'fleet-clash',
+    title: 'Fleet Clash',
+    tagline: 'Hide your fleet, hunt theirs: the naval guessing duel.',
+    description: 'A naval guessing duel on a 10 × 10 sea. Place your five ships — Carrier, Destroyer, Frigate, Submarine and Patrol boat — by dragging and turning them (or scatter them at random), then take turns firing at the enemy waters: splashes for misses, fire for hits, and a sinking wreck when a ship goes down. Play the computer on Easy, Medium or Hard (it hunts and then finishes off ships, Hard plays the odds), pass and play on one device with a hand-over screen, or challenge a friend online with a room link: fleets stay hidden — each browser seals its fleet with a fingerprint and answers shots by itself, and both fleets are revealed and checked at the end. Fleets, shots and the computer player run in Rust compiled to WebAssembly.',
+    categories: ['Strategy', 'Classic Board'],
+    status: 'playable',
+    artwork: { gradientFrom: '#082c50', gradientTo: '#0f5c8c', accentColor: '#ff9933', glyph: '⚓' },
+    controls: 'Drag ships to place, tap to turn (R), Random; tap a square (or arrows + Enter) to fire; M mute',
+    releaseYear: 2026,
+    component: lazy(() => import('./fleetclash/FleetClash')),
+  },
 ];
 
 /** Genre filter chips on the home page, in this order (only genres that have a playable game are shown). */

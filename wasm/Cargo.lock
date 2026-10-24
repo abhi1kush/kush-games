@@ -43,6 +43,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "fleet_clash"
+version = "0.1.0"
+dependencies = [
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "jungle_strike"
 version = "0.1.0"
 dependencies = [
