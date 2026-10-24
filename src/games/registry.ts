@@ -224,6 +224,18 @@ export const games: GameDefinition[] = [
     releaseYear: 2026,
     component: lazy(() => import('./mithai/MithaiMatch')),
   },
+  {
+    id: 'ludo',
+    title: 'Ludo',
+    tagline: 'Roll, race and capture: the classic board game for 2–4 players.',
+    description: 'Classic Ludo for 2 to 4 players: roll a 6 to bring a token out, race it round the board and up your home column, capture opponents by landing on them (stars are safe), and finish 1st, 2nd and 3rd. Play online in a room of up to 4 — share the link, the host starts the game and can remove players, anyone can leave, and if the host leaves another player takes over. A turn timer keeps things moving: miss a turn and the game plays for you; three missed turns and you are out. Or pass and play on one device with computer players. The rules and dice run in Rust compiled to WebAssembly.',
+    categories: ['Classic Board'],
+    status: 'playable',
+    artwork: { gradientFrom: '#1b2a4a', gradientTo: '#3a1747', accentColor: '#f5b800', glyph: '🎲' },
+    controls: 'Tap the dice (or Space) to roll, then tap a glowing token (or 1–4) to move it; M mute',
+    releaseYear: 2026,
+    component: lazy(() => import('./ludo/Ludo')),
+  },
 ];
 
 /** Genre filter chips on the home page, in this order (only genres that have a playable game are shown). */

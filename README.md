@@ -4,7 +4,7 @@ A Netflix-style home for browser games — dark UI, a big hero banner, and a wra
 
 **Live:** https://abhi1kush.github.io/kush-games/
 
-Built with **React + TypeScript + Vite**; Breakout, Connect Four, Checkers, Kush Jump, Jungle Strike, Antariksh Defenders and Mithai Match run their game logic in **Rust compiled to WebAssembly**. Deployed to GitHub Pages from the `gh-pages` branch.
+Built with **React + TypeScript + Vite**; Breakout, Connect Four, Checkers, Kush Jump, Jungle Strike, Antariksh Defenders, Mithai Match and Ludo run their game logic in **Rust compiled to WebAssembly**. Deployed to GitHub Pages from the `gh-pages` branch.
 
 ## Features
 
@@ -42,6 +42,7 @@ Built with **React + TypeScript + Vite**; Breakout, Connect Four, Checkers, Kush
 | Jungle Strike — side-scrolling run-and-gun shooter, one stage (Rust/WebAssembly) | ✅ Playable |
 | Antariksh Defenders — fixed shooter with Indian space-mission flair, Earth orbit → Moon → Mars (Rust/WebAssembly) | ✅ Playable |
 | Mithai Match — sweet-shop match-3 puzzle with specials, combos and 20 levels (Rust/WebAssembly) | ✅ Playable |
+| Ludo — 2–4 players online (room link, host can remove players, host migration, turn timer) or pass and play with computer players (Rust/WebAssembly) | ✅ Playable |
 
 ### Snake
 
@@ -150,7 +151,7 @@ A connect-the-dots path puzzle in the style of the "same color / connect two dot
 - **Difficulty:** boards grow 5×5 → 6×6 → 7×7 → 8×8/9×9 → 10×12 (≈ 30px cells on a 375×667 phone). For each level the generator keeps the candidate closest to a rising hardness target, from: share of the board solvable by forced moves alone, solver guesses, average path length and bends, how far paths wander from the direct route, and short (≤ 3 cell) pairs. `npx vite-node scripts/color-trails-metrics.ts 1 5 10 20 30 40 60` prints the table.
 - **Colors:** a color-blind friendlier palette, and every color also has its own small symbol inside its dots.
 
-### Rust/WebAssembly games: Breakout, Connect Four, Checkers, Kush Jump, Jungle Strike, Antariksh Defenders, Mithai Match
+### Rust/WebAssembly games: Breakout, Connect Four, Checkers, Kush Jump, Jungle Strike, Antariksh Defenders, Mithai Match, Ludo
 
 The UI is React + TypeScript; the rules, physics and AI are Rust crates in `wasm/` (one crate per game, a Cargo workspace), built with `wasm-pack --target web` into `src/wasm/<crate>/`. Each game's `.wasm` is only fetched when that game opens (the hub downloads none). Data crosses the boundary as small typed arrays and integers — never JSON.
 
@@ -184,3 +185,9 @@ Size settings: `opt-level = "z"`, `lto`, `codegen-units = 1`, `panic = "abort"`,
   - 20 levels with move limits and goals — reach a score, collect a number of one sweet, clear rose jelly (single and double layers), or break stones (1 or 2 hits, chipped by neighbouring matches and blasts) and chained sweets (a match frees them) — with holes in some boards. Moves get tighter and boards busier as you go (a greedy-bot test in `wasm/mithai_match/src/tests.rs` checks every level is beatable and that spare moves and win rate fall from early to late levels). 1–3 stars per level by score, leftover moves pay a 250-point bonus each; a winding level map unlocks the next stop. Progress (unlocked level, stars and best score per level) is saved (`kush-games:mithai-match:save:v1`); a level in progress is not.
   - Rust (`wasm/mithai_match`) owns the board, matching, special creation and combos, gravity/refill/cascades, the seeded RNG and level rules, with fixed pools (64 clearing ghosts, 200 sparks, 24 effects) and the usual hitch rules (1/120 s steps, gaps over 100 ms dropped). The wasm is ~40 KB (≈18 KB gzipped) and loads only when the game opens; JS reads one `Float32Array` render buffer from wasm memory, draws a single canvas from pre-rendered piece sprites and skips drawing entirely while the board is settled. The board chrome follows the hub theme; the sweets keep their own colours.
   - Click (or tap) a sweet then a neighbour, or drag/swipe a sweet onto its neighbour; P pause (the pause screen can show the controls card), M mute, Esc back to the hub. Portrait stacks the HUD above the board; phones held sideways put it beside the board. `?mithaiTest` exposes `window.__mithaiTest` for `e2e/mithai-match.mjs`.
+- **Ludo** — classic Ludo for 2–4 players: a 6 brings a token out and gives another roll (three 6s in a row lose the turn), landing on an opponent sends it home and gives another roll (★ squares and start squares are safe), tokens go up their coloured column and need an exact roll to reach the centre (also another roll), and play continues until 1st, 2nd and 3rd are decided. The board is drawn on a canvas once per size (yards, track, stars, home columns, centre triangles) and only repainted when a token moves; tokens hop square by square, captured tokens fly home with a burst, and the 3D CSS dice tumbles on the yard of whoever's turn it is, inside a ring timer. Generated sounds respect the shared mute.
+  - Rust (`wasm/ludo`, 23.6 KB raw / 10.9 KB gzipped) owns the rules, the dice RNG, missed-turn strikes, the auto-move choice and a 56-byte snapshot that is what the host broadcasts.
+  - **Online rooms** (up to 4) use the shared PeerJS room links (`#/play/ludo?room=CODE`, PeerJS id `kushludo-<code>`). The creator hosts and is authoritative: guests only send intents (roll, move, leave, rename, new game) and the host checks them against its own wasm rules and dice. Lobby with copy/share link, player colours, editable names (saved), Start at 2+. The host can remove a player in the lobby or mid-game (their tokens go; they're banned from the room by player id and the link shows “removed” in that browser). Anyone can leave (with a confirm): tokens are removed and the game goes on — the last player left wins.
+  - **Turn timer**: 20 s to roll and 20 s to move (ring + countdown). On a timeout the host rolls/moves for that player (a sensible legal move: finish, capture, leave the yard, reach safety…) and gives a strike shown by name (1/3, 2/3). Strikes add up over the game; the 3rd missed turn puts the player out. A disconnected player keeps their seat for 90 s and their turns keep timing out meanwhile; a refresh rejoins the same seat.
+  - **Host migration**: the room is the PeerJS id, which only one browser can hold. A host who leaves names the next player (join order) and that player claims the id right away; if the host just vanishes, guests wait 8 s and then try in join order, 5 s apart. The new host rebuilds the room from the last state it saw (players, strikes, snapshot) with a fresh dice seed and restarts the turn clock; a returning old host finds the id taken and rejoins as a guest.
+  - Pass and play on one device: 2–4 seats, each a player or a computer, no timer, saved between visits. `?ludoTest` exposes `window.__ludoTest` and `?ludoTurn=N` shortens the turn clock for `e2e/ludo.mjs`, which plays a real 4-context room (join, full room, kick + no rejoin, refresh, host leaves → migration, leave, 3 missed turns → out, finish, new game).

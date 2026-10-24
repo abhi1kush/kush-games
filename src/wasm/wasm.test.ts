@@ -8,6 +8,7 @@ import * as kushJumpModule from './kush_jump/kush_jump.js';
 import * as jungleStrikeModule from './jungle_strike/jungle_strike.js';
 import * as antarikshModule from './antariksh_defenders/antariksh_defenders.js';
 import * as mithaiModule from './mithai_match/mithai_match.js';
+import * as ludoModule from './ludo/ludo.js';
 import { decodeMoves } from '../games/checkers/engine';
 import { RenderSlot } from '../games/breakout/engine';
 import { Buttons, Phase as KushJumpPhase, RenderSlot as KushJumpSlot } from '../games/kushjump/engine';
@@ -17,6 +18,8 @@ import { Buttons as AntarikshButtons, RenderSlot as AntarikshSlot, SHIELD_COUNT,
 import { parseAntarikshSave } from '../games/antariksh/save';
 import { LEVEL_COUNT as MITHAI_LEVELS, levelInfo as mithaiLevelInfo, RenderSlot as MithaiSlot } from '../games/mithai/engine';
 import { emptyMithaiProgress, parseMithaiSave } from '../games/mithai/save';
+import { decodeSnapshot, EnginePhase, YARD } from '../games/ludo/engine';
+import { LudoAuthority } from '../games/ludo/authority';
 
 const wasmBytes = (name: string) => readFileSync(new URL(`./${name}/${name}_bg.wasm`, import.meta.url));
 let breakoutMemory: WebAssembly.Memory;
@@ -33,11 +36,12 @@ beforeAll(() => {
   jungleStrikeMemory = jungleStrikeModule.initSync({ module: wasmBytes('jungle_strike') }).memory;
   antarikshMemory = antarikshModule.initSync({ module: wasmBytes('antariksh_defenders') }).memory;
   mithaiMemory = mithaiModule.initSync({ module: wasmBytes('mithai_match') }).memory;
+  ludoModule.initSync({ module: wasmBytes('ludo') });
 });
 
 describe('wasm bindings', () => {
   it('every game .wasm stays small (< 40 KB raw)', () => {
-    for (const name of ['breakout', 'checkers', 'connect_four', 'kush_jump', 'jungle_strike', 'antariksh_defenders', 'mithai_match']) expect(wasmBytes(name).length, name).toBeLessThan(40 * 1024);
+    for (const name of ['breakout', 'checkers', 'connect_four', 'kush_jump', 'jungle_strike', 'antariksh_defenders', 'mithai_match', 'ludo']) expect(wasmBytes(name).length, name).toBeLessThan(40 * 1024);
   });
 
   it('Kush Jump: runs right through the render buffer, survives a hitch and finishes at the flag', () => {
@@ -213,5 +217,26 @@ describe('wasm bindings', () => {
     expect(game.level()).toBe(4);
     expect(game.phase()).toBe(0);
     game.free();
+  });
+
+  it('Ludo: the real rules engine plays a whole 4-player game of computer players through the authority', () => {
+    const engine = new ludoModule.Ludo(12345);
+    let now = 0;
+    let seed = 7;
+    const random = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+    const authority = LudoAuthority.createLocal(engine, [0, 1, 2, 3].map(seat => ({ seat, name: `CPU ${seat}`, isBot: true })), { now: () => now, random, turnSeconds: 0 });
+    const start = decodeSnapshot(authority.toState().snapshot)!;
+    expect(start.phase).toBe(EnginePhase.AwaitRoll);
+    expect(start.progress.flat().every(progress => progress === YARD)).toBe(true);
+    for (let step = 0; step < 40000 && authority.state.phase === 'playing'; step++) { now += 800; authority.tick(); }
+    const end = decodeSnapshot(authority.toState().snapshot)!;
+    expect(authority.state.phase).toBe('finished');
+    expect([...end.places].sort()).toEqual([1, 2, 3, 4]);
+    // snapshot round trip into a fresh engine
+    const copy = new ludoModule.Ludo(1);
+    expect(copy.restore(Uint8Array.from(authority.state.snapshot!))).toBe(true);
+    const restored = Array.from(copy.snapshot());
+    expect(restored.map((value, index) => value === authority.state.snapshot![index] ? -1 : index).filter(index => index >= 0)).toEqual([]);
+    engine.free(); copy.free();
   });
 });

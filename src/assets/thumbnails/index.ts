@@ -14,6 +14,7 @@ import thumbBreakout from './breakout.svg';
 import thumbConnectFour from './connect-four.svg';
 import thumbCheckers from './checkers.svg';
 import thumbKushJump from './kush-jump.svg';
+import thumbLudo from './ludo.svg';
 import thumbJungleStrike from './jungle-strike.svg';
 import thumbAntarikshDefenders from './antariksh-defenders.svg';
 import thumbMithaiMatch from './mithai-match.svg';
@@ -37,4 +38,5 @@ export const THUMBNAILS: Record<string, string> = {
   'jungle-strike': thumbJungleStrike,
   'antariksh-defenders': thumbAntarikshDefenders,
   'mithai-match': thumbMithaiMatch,
+  ludo: thumbLudo,
 };
