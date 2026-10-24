@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { homePath, navigate } from '../routing';
 import type { GenreChoice } from './GenreFilter';
+import KLogo from './KLogo';
 import ThemeSettings from './ThemeSettings';
 
 type NavLink = { label: string; target: 'top' | 'coming-soon' | GenreChoice };
@@ -41,7 +42,7 @@ export default function NavBar({ onShowGenre, hasComingSoon = false }: { onShowG
           </li>
         ))}
       </ul>
-      <div className="nav__profile" title="Player">K</div>
+      <div className="nav__profile" title="Player"><KLogo /></div>
       <ThemeSettings />
     </nav>
   );

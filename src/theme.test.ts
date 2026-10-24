@@ -50,4 +50,17 @@ describe('colour themes', () => {
     expect(html).toContain(`localStorage.getItem('${THEME_STORAGE_KEY}')`);
     expect(html).toContain("s.data.theme==='lagoon'");
   });
+
+  it('every theme has its favicon files, and the pre-paint script swaps the icon links (which come before it)', () => {
+    const publicFile = (name: string) => readFileSync(new URL(`../public/${name}`, import.meta.url));
+    for (const theme of THEMES) {
+      for (const name of [`favicon${theme.iconSuffix}.svg`, `favicon${theme.iconSuffix}-32.png`, `apple-touch-icon${theme.iconSuffix}.png`]) expect(publicFile(name).length, name).toBeGreaterThan(200);
+    }
+    const script = html.indexOf('<script>');
+    for (const id of ['favicon-png', 'favicon-svg', 'apple-touch-icon']) {
+      expect(html.indexOf(`id="${id}"`), id).toBeGreaterThan(0);
+      expect(html.indexOf(`id="${id}"`), id).toBeLessThan(script);
+    }
+    expect(html).toContain("'/$1-lagoon$2'");
+  });
 });

@@ -24,7 +24,10 @@
   --input-background: #1b1b1b;
   --player-background: #000000;
   --player-bar: rgba(0,0,0,0.92);
-  --profile: linear-gradient(135deg, #2575fc, #6a11cb);
+  --k-background: #141414;           /* the ribbon K (favicon + header avatar) */
+  --k-stem: #b1060f;
+  --k-arm: #c4070f;
+  --k-leg: #e50914;
   --page-gutter: clamp(16px, 4vw, 60px);
   --card-min: 190px;
   color-scheme: dark;
@@ -58,7 +61,10 @@
   --player-background: #163235;
   --player-bar: #106967;
   --chip-border: rgba(50,191,218,0.55);
-  --profile: linear-gradient(135deg, #32bfda, #4fbc9c);
+  --k-background: #163235;
+  --k-stem: #b08a3e;
+  --k-arm: #c9a55c;
+  --k-leg: #efca7c;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--background); color: var(--text); overflow-x: hidden; }
@@ -99,7 +105,7 @@ a { color: inherit; }
 .nav__links { display: flex; flex-wrap: wrap; gap: 2px clamp(10px, 1.6vw, 22px); list-style: none; margin: 0; padding: 0; flex: 1; min-width: 0; }
 .nav__links button { background: none; border: 0; padding: 4px 0; cursor: pointer; font-size: 14px; color: var(--text); white-space: nowrap; }
 .nav__links button:hover { color: var(--highlight); }
-.nav__profile { width: 32px; height: 32px; border-radius: 4px; background: var(--profile); color: #fff;
+.nav__profile { width: 32px; height: 32px; border-radius: 6px; box-shadow: 0 0 0 1px rgba(255,255,255,0.18); overflow: hidden;
   display: grid; place-items: center; font-weight: 800; flex-shrink: 0; }
 
 /* ---------- Hero ---------- */

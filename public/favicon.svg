@@ -1,14 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-<!-- Kush Games "K": three red ribbons. The bright leg folds over the darker stem and arm; soft shadows mark the folds.
-     Edges sit on even units so the 16 px rendering stays sharp. -->
 <defs>
-<linearGradient id="stemFold" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".55"/></linearGradient>
-<linearGradient id="armFold" x1="0" y1="1" x2=".45" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".6"/><stop offset=".7" stop-color="#000" stop-opacity="0"/></linearGradient>
+<linearGradient id="stemFold" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".5"/></linearGradient>
+<linearGradient id="armFold" x1="0" y1="1" x2=".45" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".55"/><stop offset=".7" stop-color="#000" stop-opacity="0"/></linearGradient>
 </defs>
 <rect width="32" height="32" rx="6" fill="#141414"/>
-<path d="M6 4h6v24.2l-6 1z" fill="#b1060f"/>
-<path d="M10 10h2v10H9z" fill="url(#stemFold)"/>
-<path d="M12 16 20 4h6l-9.6 16z" fill="#c4070f"/>
-<path d="M12 16 20 4h6l-9.6 16z" fill="url(#armFold)"/>
-<path d="M6 10h6.4L26 28l-6.4 1.2z" fill="#e50914"/>
+<path d="M6 2h6v26.8l-6 1.2z" fill="#b1060f"/>
+<path d="M10 8h2v12H9z" fill="url(#stemFold)"/>
+<path d="M12 15 20 2h6L16.4 20z" fill="#c4070f"/>
+<path d="M12 15 20 2h6L16.4 20z" fill="url(#armFold)"/>
+<path d="M6 8h6.4L26 28.8 19.6 30z" fill="#e50914"/>
 </svg>

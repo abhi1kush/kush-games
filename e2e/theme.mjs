@@ -25,6 +25,9 @@ const colors = page => page.evaluate(() => ({
   playButton: document.querySelector('.hero .button--play') ? getComputedStyle(document.querySelector('.hero .button--play')).backgroundColor : null,
   metaThemeColor: document.querySelector('meta[name="theme-color"]').content,
 }));
+const iconHrefs = page => page.evaluate(() => ['favicon-png', 'favicon-svg', 'apple-touch-icon'].map(id => document.getElementById(id).getAttribute('href') ?? ''));
+const iconsAre = (hrefs, suffix) => hrefs.length === 3 && hrefs.every(href => href.includes('v=3') && (suffix ? href.includes(suffix) : !href.includes('-lagoon')));
+const allServed = (page, hrefs) => page.evaluate(async list => (await Promise.all(list.map(href => fetch(href).then(response => response.status)))).every(status => status === 200), hrefs);
 const noOverflow = page => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
 const visibleGear = page => page.locator('.nav [data-testid=settings-button]');
 const playerGear = page => page.locator('.player [data-testid=settings-button]');
@@ -44,6 +47,9 @@ try {
   check(gearBox.width >= 40 && gearBox.height >= 40, `gear tap target ${gearBox.width}×${gearBox.height}`);
   const red = await colors(page);
   check(red.theme === 'netflix-red' && red.logo === 'rgb(229, 9, 20)' && red.background === 'rgb(20, 20, 20)', `default is Netflix Red (${JSON.stringify(red)})`);
+  const redIcons = await iconHrefs(page);
+  check(iconsAre(redIcons, ''), `red K favicon links by default (${redIcons.join(', ')})`);
+  check(await allServed(page, redIcons), 'red favicon files return 200');
   await gear.click();
   check(await page.getByTestId('settings-panel').isVisible(), 'gear opens the settings panel');
   check(await gear.getAttribute('aria-expanded') === 'true', 'aria-expanded is true while open');
@@ -59,6 +65,9 @@ try {
   check(lagoon.theme === 'lagoon' && lagoon.background === 'rgb(22, 50, 53)' && lagoon.logo === 'rgb(79, 188, 156)' && lagoon.playButton === 'rgb(239, 202, 124)',
     `Lagoon recolours the page without a reload (${JSON.stringify(lagoon)})`);
   check(lagoon.metaThemeColor === '#163235', 'browser theme-color follows');
+  const lagoonIcons = await iconHrefs(page);
+  check(iconsAre(lagoonIcons, '-lagoon'), `favicon switches to the Lagoon K instantly (${lagoonIcons.join(', ')})`);
+  check(await allServed(page, lagoonIcons), 'Lagoon favicon files return 200');
   await page.mouse.click(400, 500);
   check(!(await page.getByTestId('settings-panel').isVisible()), 'an outside click closes the panel');
   await page.evaluate(() => window.scrollTo(0, 0));
@@ -69,11 +78,13 @@ try {
 
   await page.reload({ waitUntil: 'networkidle' });
   check((await colors(page)).theme === 'lagoon', 'Lagoon persists after a reload');
+  check(iconsAre(await iconHrefs(page), '-lagoon'), 'Lagoon favicon persists after a reload');
   // before first paint: with the app's JavaScript blocked, the inline script alone must already apply the theme
   const bare = await desktop.newPage();
   await bare.route(/\/assets\/.*\.js$/, route => route.abort());
   await bare.goto(siteUrl, { waitUntil: 'domcontentloaded' });
   const bareState = await bare.evaluate(() => ({ theme: document.documentElement.dataset.theme, background: getComputedStyle(document.documentElement).getPropertyValue('--background').trim() }));
+  check(iconsAre(await iconHrefs(bare), '-lagoon'), 'the Lagoon favicon is set by index.html before the app runs');
   check(bareState.theme === 'lagoon', `theme applied by index.html before the app runs (${JSON.stringify(bareState)})`);
   await bare.close();
 
@@ -97,8 +108,10 @@ try {
   await page.getByTestId('theme-netflix-red').click();
   const back = await colors(page);
   check(back.theme === 'netflix-red' && back.background === 'rgb(20, 20, 20)' && back.logo === 'rgb(229, 9, 20)', 'switching back to Netflix Red works');
+  check(iconsAre(await iconHrefs(page), ''), 'favicon switches back to the red K');
   await page.reload({ waitUntil: 'networkidle' });
   check((await colors(page)).theme === 'netflix-red', 'Netflix Red persists after a reload');
+  check(iconsAre(await iconHrefs(page), ''), 'red favicon after a reload');
   await desktop.close();
 
   // ---------- phone ----------

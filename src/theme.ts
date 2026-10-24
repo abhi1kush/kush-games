@@ -15,6 +15,8 @@ export interface ThemeOption {
   swatches: string[];
   /** Browser UI colour (`<meta name="theme-color">`). */
   chromeColor: string;
+  /** Suffix of this theme's favicon files in public/ (made by scripts/build-favicons.mjs): favicon<suffix>.svg … */
+  iconSuffix: string;
 }
 
 export const THEME_IDS = ['netflix-red', 'lagoon'] as const;
@@ -22,8 +24,8 @@ export type ThemeId = typeof THEME_IDS[number];
 export const DEFAULT_THEME: ThemeId = 'netflix-red';
 
 export const THEMES: readonly ThemeOption[] = [
-  { id: 'netflix-red', name: 'Netflix Red', description: 'The classic dark look with red accents', swatches: ['#141414', '#181818', '#e50914', '#ffffff', '#46d369'], chromeColor: '#141414' },
-  { id: 'lagoon', name: 'Lagoon', description: 'Deep teal with green, cyan and gold', swatches: ['#163235', '#106967', '#4fbc9c', '#32bfda', '#efca7c'], chromeColor: '#163235' },
+  { id: 'netflix-red', name: 'Netflix Red', description: 'The classic dark look with red accents', swatches: ['#141414', '#181818', '#e50914', '#ffffff', '#46d369'], chromeColor: '#141414', iconSuffix: '' },
+  { id: 'lagoon', name: 'Lagoon', description: 'Deep teal with green, cyan and gold', swatches: ['#163235', '#106967', '#4fbc9c', '#32bfda', '#efca7c'], chromeColor: '#163235', iconSuffix: '-lagoon' },
 ];
 
 export const THEME_SAVE_ID = 'theme';
@@ -46,13 +48,26 @@ function readInitialTheme(): ThemeId {
 let currentTheme: ThemeId = readInitialTheme();
 const listeners = new Set<() => void>();
 
-/** Put a theme on the page: the data-theme attribute and the browser UI colour (the red K favicon is the same in every theme). */
+/** Bump to make browsers fetch the icons again after they change. */
+export const ICON_VERSION = 3;
+/** The tab / home-screen icon links in index.html and the file each one points to (before the theme suffix). */
+const ICON_LINKS: [id: string, name: string, extension: string][] = [
+  ['favicon-png', 'favicon', '-32.png'], ['favicon-svg', 'favicon', '.svg'], ['apple-touch-icon', 'apple-touch-icon', '.png'],
+];
+export const iconHref = (name: string, suffix: string, extension: string) => `${import.meta.env.BASE_URL}${name}${suffix}${extension}?v=${ICON_VERSION}`;
+
+/** Put a theme on the page: the data-theme attribute, the browser UI colour and the matching K favicon. */
 export function applyTheme(themeId: ThemeId) {
   if (typeof document === 'undefined') return;
   const theme = THEMES.find(option => option.id === themeId) ?? THEMES[0];
   const root = document.documentElement;
   if (theme.id === DEFAULT_THEME) delete root.dataset.theme; else root.dataset.theme = theme.id;
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme.chromeColor);
+  for (const [id, name, extension] of ICON_LINKS) {
+    const link = document.getElementById(id) as HTMLLinkElement | null;
+    const href = iconHref(name, theme.iconSuffix, extension);
+    if (link && !link.href.endsWith(href)) link.href = href;
+  }
 }
 
 export function setTheme(themeId: ThemeId) {
