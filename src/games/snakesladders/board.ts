@@ -199,14 +199,8 @@ function drawSnake(context: Context, curve: [Point, Point, Point, Point], unit: 
   context.restore();
 }
 
-/** Solid colour of the ellipse under every token. */
-export const TOKEN_BASE = '#1c1c1c';
-
 export function drawToken(context: Context, x: number, y: number, radius: number, seat: number, lift = 0) {
   const colors = SEATS[seat];
-  // the base under the token is a solid (opaque) dark disc, also while the token hops
-  context.fillStyle = TOKEN_BASE;
-  context.beginPath(); context.ellipse(x, y + radius * 0.55, radius * (0.9 - lift * 0.2), radius * 0.38, 0, 0, Math.PI * 2); context.fill();
   const top = y - lift * radius * 1.8;
   context.fillStyle = colors.dark;
   context.beginPath(); context.ellipse(x, top + radius * 0.38, radius * 0.82, radius * 0.4, 0, 0, Math.PI * 2); context.fill();

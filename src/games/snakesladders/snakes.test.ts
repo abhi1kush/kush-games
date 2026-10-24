@@ -37,19 +37,19 @@ describe('Snakes & Ladders boards and geometry', () => {
 });
 
 describe('token drawing', () => {
-  it('the ellipse under a token is opaque, resting or hopping', async () => {
-    const { drawToken, TOKEN_BASE } = await import('./board');
+  it('no ellipse is drawn under a token (only the token itself), resting or hopping', async () => {
+    const { drawToken } = await import('./board');
     for (const lift of [0, 0.5, 1]) {
-      const fills: string[] = [];
-      let style: unknown = '';
+      const ellipses: number[] = [];
       const gradient = { addColorStop() {} };
       const context = new Proxy({}, {
-        get: (_, key) => (key === 'fillStyle' ? style : key === 'fill' ? () => fills.push(String(style)) : key.toString().startsWith('create') ? () => gradient : () => undefined),
-        set: (_, key, value) => { if (key === 'fillStyle') style = value; return true; },
+        get: (_, key) => (key === 'ellipse' ? (_x: number, y: number) => ellipses.push(y) : key.toString().startsWith('create') ? () => gradient : () => undefined),
+        set: () => true,
       }) as CanvasRenderingContext2D;
       drawToken(context, 50, 50, 20, 0, lift);
-      expect(fills[0]).toBe(TOKEN_BASE);
-      expect(fills[0]).toMatch(/^#[0-9a-f]{6}$/i);
+      const top = 50 - lift * 20 * 1.8;
+      // the token's own base ring sits at top + 0.38 r; nothing may be drawn below it on the square
+      expect(ellipses.every(y => Math.abs(y - (top + 20 * 0.38)) < 1e-6)).toBe(true);
     }
   });
 });
