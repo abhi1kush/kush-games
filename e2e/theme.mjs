@@ -89,7 +89,8 @@ try {
   await page.keyboard.press('Escape');
   check(!(await page.getByTestId('settings-panel').isVisible()) && await page.getByTestId('player').isVisible(), 'Esc on a game page closes the panel and stays in the game');
   await page.keyboard.press('Escape');
-  check(await page.getByTestId('player').count() === 0, 'the next Esc still goes back to the hub');
+  // (navigation goes through a hashchange event, so give it a moment)
+  check(await page.getByTestId('player').waitFor({ state: 'detached', timeout: 3000 }).then(() => true, () => false), 'the next Esc still goes back to the hub');
 
   // switch back
   await visibleGear(page).click();
