@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
 <defs>
-<linearGradient id="bar" x1="7.6" y1="0" x2="13.3" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#efca7c"/><stop offset=".55" stop-color="#d4ad62"/><stop offset="1" stop-color="#b08a3e"/></linearGradient>
-<linearGradient id="arm" x1="14.6" y1="15.4" x2="20.4" y2="4.6" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#7a5a22"/><stop offset=".45" stop-color="#b08a3e"/><stop offset="1" stop-color="#efca7c"/></linearGradient>
-<linearGradient id="leg" x1="14.4" y1="13.6" x2="23.6" y2="29.2" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#efca7c"/><stop offset=".6" stop-color="#d4ad62"/><stop offset="1" stop-color="#b08a3e"/></linearGradient>
+<linearGradient id="bar" x1="7.6" y1="0" x2="13.3" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#4fbc9c"/><stop offset=".55" stop-color="#45ab8d"/><stop offset="1" stop-color="#348a70"/></linearGradient>
+<linearGradient id="arm" x1="14.6" y1="15.4" x2="20.4" y2="4.6" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#1f5c4a"/><stop offset=".45" stop-color="#348a70"/><stop offset="1" stop-color="#4fbc9c"/></linearGradient>
+<linearGradient id="leg" x1="14.4" y1="13.6" x2="23.6" y2="29.2" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#4fbc9c"/><stop offset=".6" stop-color="#45ab8d"/><stop offset="1" stop-color="#348a70"/></linearGradient>
 </defs>
 <rect width="32" height="32" rx="3.5" fill="#163235"/>
 <path d="M18.28 3.8H23.88L16.1 16.5 13.28 12.2V11.6Z" fill="url(#arm)"/>
