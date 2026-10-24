@@ -17,6 +17,7 @@ import thumbKushJump from './kush-jump.svg';
 import thumbLudo from './ludo.svg';
 import thumbSnakesLadders from './snakes-ladders.svg';
 import thumbFleetClash from './fleet-clash.svg';
+import thumbCarrom from './carrom.svg';
 import thumbJungleStrike from './jungle-strike.svg';
 import thumbAntarikshDefenders from './antariksh-defenders.svg';
 import thumbMithaiMatch from './mithai-match.svg';
@@ -43,4 +44,5 @@ export const THUMBNAILS: Record<string, string> = {
   ludo: thumbLudo,
   'snakes-ladders': thumbSnakesLadders,
   'fleet-clash': thumbFleetClash,
+  carrom: thumbCarrom,
 };

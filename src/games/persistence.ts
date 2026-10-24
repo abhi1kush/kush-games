@@ -38,7 +38,7 @@ export interface SaveSlot<Data> {
 /** Saves for the current versions; the home page uses this to show "Continue" badges. */
 export const SAVE_VERSIONS: Record<string, number> = {
   '2048': 1, snake: 1, blocks: 1, chess: 1, minesweeper: 1, sudoku: 1, 'tic-tac-toe': 1, 'memory-match': 1, 'flappy-wings': 1,
-  'arrow-out': 3, 'color-trails': 1, breakout: 1, 'connect-four': 1, checkers: 1, 'kush-jump': 1, 'jungle-strike': 1, 'antariksh-defenders': 1, 'mithai-match': 1, ludo: 1, 'snakes-ladders': 1, 'fleet-clash': 1,
+  'arrow-out': 3, 'color-trails': 1, breakout: 1, 'connect-four': 1, checkers: 1, 'kush-jump': 1, 'jungle-strike': 1, 'antariksh-defenders': 1, 'mithai-match': 1, ludo: 1, 'snakes-ladders': 1, 'fleet-clash': 1, carrom: 1,
 };
 
 /** Storage keys left behind by games that were removed from the hub; cleared once on startup. */
@@ -51,7 +51,7 @@ export function clearRemovedGameData(storage: KeyValueStorage | null = browserSt
 /** Games whose online room is saved in a second slot (so it doesn't replace the local game's save). */
 export const ONLINE_SAVE_VERSION = 1;
 export const onlineSaveGameId = (gameId: string) => `${gameId}-online`;
-export const GAMES_WITH_ONLINE_SAVE: readonly string[] = ['connect-four', 'checkers', 'fleet-clash'];
+export const GAMES_WITH_ONLINE_SAVE: readonly string[] = ['connect-four', 'checkers', 'fleet-clash', 'carrom'];
 
 export const saveKey = (gameId: string, version: number) => `kush-games:${gameId}:save:v${version}`;
 

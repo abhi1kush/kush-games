@@ -260,6 +260,18 @@ export const games: GameDefinition[] = [
     releaseYear: 2026,
     component: lazy(() => import('./fleetclash/FleetClash')),
   },
+  {
+    id: 'carrom',
+    title: 'Carrom',
+    tagline: 'Flick the striker, pocket your coins, cover the Queen.',
+    description: 'The classic Indian board game on a wooden board: nine white coins, nine black and the red Queen. Slide the striker along your baseline, pull back like a slingshot and let go — an aim line shows the first coin you will hit and a power ring shows how hard. Pocket your coins to shoot again, cover the Queen with your next coin, and avoid fouls (pocketing the striker, or the last coin before the Queen is covered). Play the computer on Easy, Medium or Hard, a friend on the same device, or a friend online with a room link. The physics (friction, cushions, pockets and collisions on a fixed time step), the rules and the computer player run in Rust compiled to WebAssembly.',
+    categories: ['Classic Board', 'Arcade'],
+    status: 'playable',
+    artwork: { gradientFrom: '#4a2010', gradientTo: '#8a4a22', accentColor: '#d6132a', glyph: '🎯' },
+    controls: 'Drag the striker sideways (or slider / ← →) to place it; pull back and release to shoot; ↑ ↓ aim + hold Space for power; M mute',
+    releaseYear: 2026,
+    component: lazy(() => import('./carrom/Carrom')),
+  },
 ];
 
 /** Genre filter chips on the home page, in this order (only genres that have a playable game are shown). */

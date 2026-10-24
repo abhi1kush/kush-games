@@ -11,6 +11,7 @@ import * as mithaiModule from './mithai_match/mithai_match.js';
 import * as ludoModule from './ludo/ludo.js';
 import * as snakesModule from './snakes_ladders/snakes_ladders.js';
 import * as fleetModule from './fleet_clash/fleet_clash.js';
+import * as carromModule from './carrom/carrom.js';
 import { decodeMoves } from '../games/checkers/engine';
 import { RenderSlot } from '../games/breakout/engine';
 import { Buttons, Phase as KushJumpPhase, RenderSlot as KushJumpSlot } from '../games/kushjump/engine';
@@ -26,6 +27,8 @@ import { ludoSpec } from '../games/ludo/spec';
 import { BOARD_JUMPS, decodeSnapshot as decodeSnakes, EnginePhase as SnakesPhase, jumpTarget } from '../games/snakesladders/engine';
 import { snakesSpec } from '../games/snakesladders/spec';
 import { computerShot, replayLocal, type LocalGame } from '../games/fleetclash/local';
+import { replay as replayCarrom, shotText as carromShotText } from '../games/carrom/engine';
+import { carromRules } from '../games/carrom/online';
 
 const wasmBytes = (name: string) => readFileSync(new URL(`./${name}/${name}_bg.wasm`, import.meta.url));
 let breakoutMemory: WebAssembly.Memory;
@@ -45,11 +48,12 @@ beforeAll(() => {
   ludoModule.initSync({ module: wasmBytes('ludo') });
   snakesModule.initSync({ module: wasmBytes('snakes_ladders') });
   fleetModule.initSync({ module: wasmBytes('fleet_clash') });
+  carromModule.initSync({ module: wasmBytes('carrom') });
 });
 
 describe('wasm bindings', () => {
   it('every game .wasm stays small (< 40 KB raw)', () => {
-    for (const name of ['breakout', 'checkers', 'connect_four', 'kush_jump', 'jungle_strike', 'antariksh_defenders', 'mithai_match', 'ludo', 'snakes_ladders', 'fleet_clash']) expect(wasmBytes(name).length, name).toBeLessThan(40 * 1024);
+    for (const name of ['breakout', 'checkers', 'connect_four', 'kush_jump', 'jungle_strike', 'antariksh_defenders', 'mithai_match', 'ludo', 'snakes_ladders', 'fleet_clash', 'carrom']) expect(wasmBytes(name).length, name).toBeLessThan(40 * 1024);
   });
 
   it('Kush Jump: runs right through the render buffer, survives a hitch and finishes at the flag', () => {
@@ -300,5 +304,27 @@ describe('wasm bindings', () => {
       const computerShots = state.seas[1].shots;
       expect(new Set(game.shots.filter((_, index) => index % 2 === 1)).size).toBe(computerShots);
     }
+  });
+
+  it('Carrom: computer players finish a game as a shot list that replays identically and passes the online rules', () => {
+    const board = new carromModule.Carrom();
+    const shots: string[] = [];
+    while (board.winner() === 255 && shots.length < 300) {
+      const [x, aimX, aimY, power] = board.ai_shot(2, shots.length + 7);
+      const text = carromShotText({ x, aimX, aimY, power });
+      // the rounded shot is what gets played (and sent online)
+      if (!carromRules.legalMove(shots, text)) { const fallback = carromShotText({ x: 500, aimX: 500, aimY: 500, power: 600 }); expect(carromRules.legalMove(shots, fallback)).toBe(fallback); shots.push(fallback); }
+      else shots.push(text);
+      const shot = shots[shots.length - 1].slice(1).split('.').map(Number);
+      expect(board.shoot(shot[0], shot[1], shot[2], shot[3])).toBe(true);
+      board.settle();
+    }
+    expect(board.winner()).not.toBe(255);
+    expect(carromRules.isLegalLine(shots)).toBe(true);
+    expect(carromRules.isOverOnBoard(shots)).toBe(true);
+    const again = replayCarrom(shots)!;
+    expect([again.winner(), again.points(), again.pocketed(0), again.pocketed(1)]).toEqual([board.winner(), board.points(), board.pocketed(0), board.pocketed(1)]);
+    expect(carromRules.isLegalLine([...shots.slice(0, 3), 's100.500.500.500'])).toBe(false); // striker off the baseline
+    again.free(); board.free();
   });
 });
