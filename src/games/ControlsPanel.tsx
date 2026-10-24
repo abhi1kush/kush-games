@@ -5,7 +5,7 @@ import './controlsPanel.css';
 /** One row of key caps and what they do. */
 export interface KeyRow { keys: string[]; label: string; }
 /** The on-screen touch layout, left to right as it appears on the phone. */
-export interface TouchLayout { leftControl: 'stick' | 'pad' | 'drag'; leftLabel: string; buttons: { name: string; label: string; color: string }[]; }
+export interface TouchLayout { leftControl: 'stick' | 'pad' | 'drag'; leftLabel: string; buttons: { name: string; label: string; color: string }[]; where?: string; }
 export interface ControlsGuide { keyRows: KeyRow[]; touch: TouchLayout; touchTips?: string[]; weapons?: { letter: string; name: string; color: string }[]; weaponsLabel?: string; }
 
 /** Which kinds of input to explain: touch on coarse pointers, keys when a fine pointer exists or touch is unknown (both on hybrids). */
@@ -49,10 +49,10 @@ export function ControlsPanel({ guide, stopsClicks = false, testId }: { guide: C
                 : <span className="controls-panel__pad" aria-hidden="true"><b>◀</b><b>▶</b></span>}
             <small>{guide.touch.leftLabel}</small>
           </span>
-          <span className="controls-panel__where">
+          {guide.touch.where ? <span className="controls-panel__where">{guide.touch.where}</span> : <span className="controls-panel__where">
             <span className="controls-panel__where-portrait">buttons below the screen</span>
             <span className="controls-panel__where-landscape">buttons on the screen corners</span>
-          </span>
+          </span>}
           <span className="controls-panel__touch-right">
             {guide.touch.buttons.map(button => (
               <span key={button.name} className="controls-panel__touch-button">

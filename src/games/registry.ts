@@ -224,6 +224,18 @@ export const games: GameDefinition[] = [
     releaseYear: 2026,
     component: lazy(() => import('./antariksh/AntarikshDefenders')),
   },
+  {
+    id: 'mithai-match',
+    title: 'Mithai Match',
+    tagline: 'Swap the sweets, line up three, clear the counter.',
+    description: 'A sweet-shop match-3 puzzle: swap neighbouring Indian sweets (laddoo, jalebi, barfi, kaju katli, gulab jamun and sandesh, each with its own shape and colour) to line up three or more. Cleared sweets fall and refill for chain-reaction combos. Four in a row makes a striped sweet that clears a line, an L or T makes a wrapped sweet that blasts 3×3, five in a row makes a sprinkle bomb that clears a whole colour, and swapping two specials together sets off a bigger blast. 20 levels with move limits and goals (score, collect sweets, clear rose jelly, break stones and chains), 1 to 3 stars each, and a level map that remembers your progress. The game logic runs in Rust compiled to WebAssembly.',
+    categories: ['Puzzle'],
+    status: 'playable',
+    artwork: { gradientFrom: '#3a0b1e', gradientTo: '#b8461b', accentColor: '#ffd23f', glyph: '🍬' },
+    controls: 'Click or tap a sweet then a neighbour, or drag/swipe it, to swap; P pause; M mute',
+    releaseYear: 2026,
+    component: lazy(() => import('./mithai/MithaiMatch')),
+  },
 ];
 
 /** Genre filter chips on the home page, in this order (only genres that have a playable game are shown). */

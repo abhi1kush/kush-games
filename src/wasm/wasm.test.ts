@@ -8,6 +8,7 @@ import * as solitaireModule from './solitaire/solitaire.js';
 import * as kushJumpModule from './kush_jump/kush_jump.js';
 import * as jungleStrikeModule from './jungle_strike/jungle_strike.js';
 import * as antarikshModule from './antariksh_defenders/antariksh_defenders.js';
+import * as mithaiModule from './mithai_match/mithai_match.js';
 import { decodeMoves } from '../games/checkers/engine';
 import { decodeLayout } from '../games/solitaire/engine';
 import { RenderSlot } from '../games/breakout/engine';
@@ -16,12 +17,15 @@ import { Buttons as StrikeButtons, PLATFORM_COUNT, RenderSlot as StrikeSlot } fr
 import { parseJungleStrikeSave } from '../games/junglestrike/save';
 import { Buttons as AntarikshButtons, RenderSlot as AntarikshSlot, SHIELD_COUNT, SHIELD_HEIGHT, SHIELD_WIDTH } from '../games/antariksh/engine';
 import { parseAntarikshSave } from '../games/antariksh/save';
+import { LEVEL_COUNT as MITHAI_LEVELS, levelInfo as mithaiLevelInfo, RenderSlot as MithaiSlot } from '../games/mithai/engine';
+import { emptyMithaiProgress, parseMithaiSave } from '../games/mithai/save';
 
 const wasmBytes = (name: string) => readFileSync(new URL(`./${name}/${name}_bg.wasm`, import.meta.url));
 let breakoutMemory: WebAssembly.Memory;
 let kushJumpMemory: WebAssembly.Memory;
 let jungleStrikeMemory: WebAssembly.Memory;
 let antarikshMemory: WebAssembly.Memory;
+let mithaiMemory: WebAssembly.Memory;
 
 beforeAll(() => {
   breakoutMemory = breakoutModule.initSync({ module: wasmBytes('breakout') }).memory;
@@ -31,11 +35,12 @@ beforeAll(() => {
   kushJumpMemory = kushJumpModule.initSync({ module: wasmBytes('kush_jump') }).memory;
   jungleStrikeMemory = jungleStrikeModule.initSync({ module: wasmBytes('jungle_strike') }).memory;
   antarikshMemory = antarikshModule.initSync({ module: wasmBytes('antariksh_defenders') }).memory;
+  mithaiMemory = mithaiModule.initSync({ module: wasmBytes('mithai_match') }).memory;
 });
 
 describe('wasm bindings', () => {
   it('every game .wasm stays small (< 40 KB raw)', () => {
-    for (const name of ['breakout', 'checkers', 'connect_four', 'solitaire', 'kush_jump', 'jungle_strike', 'antariksh_defenders']) expect(wasmBytes(name).length, name).toBeLessThan(40 * 1024);
+    for (const name of ['breakout', 'checkers', 'connect_four', 'solitaire', 'kush_jump', 'jungle_strike', 'antariksh_defenders', 'mithai_match']) expect(wasmBytes(name).length, name).toBeLessThan(40 * 1024);
   });
 
   it('Kush Jump: runs right through the render buffer, survives a hitch and finishes at the flag', () => {
@@ -122,6 +127,48 @@ describe('wasm bindings', () => {
     expect(parseAntarikshSave({ wave: 2, score: 10, lives: 0 })).toBeNull();
     expect(parseAntarikshSave({ wave: 2, score: -5, lives: 3 })).toBeNull();
     expect(parseAntarikshSave('nope')).toBeNull();
+  });
+
+  it('Mithai Match: the render layout matches, a hinted swap scores and spends a move, specials fire, hitches are dropped', () => {
+    const { MithaiMatch } = mithaiModule;
+    expect(MithaiMatch.render_length()).toBe(MithaiSlot.length);
+    expect(MithaiMatch.level_count()).toBe(MITHAI_LEVELS);
+    expect(mithaiLevelInfo(0).moves).toBeGreaterThan(mithaiLevelInfo(14).moves - 10);
+    const game = new MithaiMatch();
+    const render = new Float32Array(mithaiMemory.buffer, game.render_pointer(), MithaiSlot.length);
+    game.start_level(0, 42);
+    game.begin();
+    const moves = game.moves_left();
+    const hint = game.hint_move();
+    expect(hint).toBeGreaterThanOrEqual(0);
+    game.tap(Math.floor(hint / 64));
+    expect(render[MithaiSlot.selected]).toBe(Math.floor(hint / 64));
+    game.tap(hint % 64);
+    for (let frame = 0; frame < 600 && game.phase() !== 1; frame++) game.advance(1 / 60);
+    expect(game.moves_left()).toBe(moves - 1);
+    expect(game.score()).toBeGreaterThan(0);
+    for (let cell = 0; cell < 64; cell++) expect(render[MithaiSlot.cells + cell * MithaiSlot.cellStride]).toBeLessThan(6);
+    // a striped sweet swapped with a wrapped one clears three rows and three columns
+    game.debug_place(27, 0, 1);
+    game.debug_place(28, 1, 3);
+    const before = game.score();
+    game.swipe(27, 1);
+    for (let frame = 0; frame < 900 && game.phase() !== 1 && game.phase() !== 7 && game.phase() !== 8; frame++) game.advance(1 / 60);
+    expect(game.score() - before).toBeGreaterThan(500);
+    game.advance(5);
+    expect(render[MithaiSlot.phaseSeconds]).toBeLessThan(0.2);
+    game.free();
+  });
+
+  it('Mithai Match progress saves are validated', () => {
+    const progress = emptyMithaiProgress();
+    progress.unlocked = 3;
+    progress.stars[0] = 3;
+    expect(parseMithaiSave(progress)).toEqual(progress);
+    expect(parseMithaiSave({ ...progress, unlocked: 20 })).toBeNull();
+    expect(parseMithaiSave({ ...progress, stars: [4, ...progress.stars.slice(1)] })).toBeNull();
+    expect(parseMithaiSave({ ...progress, best: [1] })).toBeNull();
+    expect(parseMithaiSave(null)).toBeNull();
   });
 
   it('Connect Four: plays, detects a win and the hard AI blocks a threat in a worker-sized budget', () => {
