@@ -9,12 +9,12 @@
   width: min(100%, calc(var(--stage-height) * 2)); min-height: 180px; border-radius: 10px; overflow: hidden; background: #5ec8ff; contain: layout paint;
   box-shadow: 0 10px 30px rgba(0,0,0,0.45); }
 .kush-jump__canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; touch-action: none; }
-.kush-jump__overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; border: 0;
-  background: rgba(5,8,20,0.55); color: #fff; font: inherit; cursor: pointer; padding: 12px; text-align: center; }
-.kush-jump__overlay.is-light { background: rgba(5,8,20,0.25); }
-.kush-jump__overlay b { font-size: clamp(20px, 5vw, 30px); font-weight: 900; text-shadow: 0 2px 0 rgba(0,0,0,0.4); }
-.kush-jump__overlay .kush-jump__title { font-size: clamp(28px, 8vw, 54px); letter-spacing: 0.04em; color: #ffd23f; text-shadow: 0 3px 0 #c4500a, 0 6px 14px rgba(0,0,0,0.4); }
-.kush-jump__overlay span { font-size: 14px; color: #eef; text-shadow: 0 1px 2px rgba(0,0,0,0.6); }
+.kush-jump__overlay { overflow-y: auto; position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; border: 0;
+  background: rgba(var(--background-rgb), 0.6); color: var(--text-strong); font: inherit; cursor: pointer; padding: 12px; text-align: center; }
+.kush-jump__overlay.is-light { background: rgba(var(--background-rgb), 0.3); }
+.kush-jump__overlay > b { font-size: clamp(20px, 5vw, 30px); font-weight: 900; text-shadow: 0 2px 0 rgba(0,0,0,0.4); }
+.kush-jump__overlay > .kush-jump__title { font-size: clamp(28px, 8vw, 54px); letter-spacing: 0.04em; color: #ffd23f; text-shadow: 0 3px 0 #c4500a, 0 6px 14px rgba(0,0,0,0.4); }
+.kush-jump__overlay > span { font-size: 14px; color: #eef; text-shadow: 0 1px 2px rgba(0,0,0,0.6); }
 .kush-jump__hint { padding: 6px 12px; border-radius: 999px; background: rgba(0,0,0,0.45); font-weight: 700; }
 .kush-jump__restored { padding: 3px 10px; border-radius: 999px; background: rgba(70,211,105,0.3); }
 /* touch controls: only on touch screens */
@@ -39,4 +39,10 @@
   .kush-jump__touch > * { pointer-events: auto; }
   .kush-jump__key { opacity: 0.8; width: 58px; height: 58px; }
   .kush-jump__key--jump { width: 66px; height: 66px; }
+}
+/* short stages (phones sideways): smaller title so the controls card fits */
+@media (max-height: 480px) {
+  .kush-jump__overlay { gap: 5px; }
+  .kush-jump__overlay > .kush-jump__title { font-size: 30px; }
+  .kush-jump__overlay > span { font-size: 12px; }
 }

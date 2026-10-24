@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import { readStoredJson, saveStoredJson } from '../random';
 import { MuteButton, useSharedMute } from '../sharedSound';
+import { type ControlsGuide, ControlsPanel, ControlsToggle } from '../ControlsPanel';
 import { BACKDROP_WIDTH, createBackdrop, createTileSprites, drawCheckpoint, drawDebrisPiece, drawEntity, drawGoal, drawHero, type TileSprites } from './art';
 import {
   Buttons, CHECKPOINT_COLUMN, createMemoryViews, EffectKind, EntityKind, EntityState, Events, FLAG_COLUMN, FLAG_TOP_ROW, FORT_DOOR_COLUMN, GROUND_ROW,
@@ -46,6 +47,18 @@ const EVENT_SOUNDS: [number, SoundKind][] = [
   [Events.shrink, 'shrink'], [Events.brickBreak, 'brickBreak'], [Events.stomp, 'stomp'], [Events.kick, 'kick'], [Events.coin, 'coin'],
   [Events.powerUpAppears, 'powerUpAppears'], [Events.bump, 'bump'], [Events.jump, 'jump'], [Events.checkpoint, 'checkpoint'], [Events.rescue, 'rescue'],
 ];
+
+const CONTROLS_GUIDE: ControlsGuide = {
+  keyRows: [
+    { keys: ['←', '→'], label: 'Move (A / D)' },
+    { keys: ['Space', '/', '↑', '/', 'Z'], label: 'Jump · hold to jump higher' },
+    { keys: ['Shift', '/', 'X'], label: 'Run' },
+    { keys: ['P'], label: 'Pause' },
+    { keys: ['M'], label: 'Mute' },
+    { keys: ['Esc'], label: 'Back to the hub' },
+  ],
+  touch: { leftControl: 'pad', leftLabel: 'Move', buttons: [{ name: 'RUN', label: 'Hold to run', color: 'rgba(46,196,182,0.5)' }, { name: 'JUMP', label: 'Hold = higher', color: 'rgba(255,122,26,0.6)' }] },
+};
 
 const pad = (value: number, digits: number) => String(Math.max(0, Math.floor(value))).padStart(digits, '0');
 
@@ -182,6 +195,7 @@ function KushJumpGame({ memory }: { memory: WebAssembly.Memory }) {
   const stageRef = useRef<HTMLDivElement>(null);
   const [phase, setPhase] = useState<Phase>(Phase.Ready);
   const [isPaused, setIsPaused] = useState(false);
+  const [showsPauseControls, setShowsPauseControls] = useState(false);
   const [wasRestored, setWasRestored] = useState(initialSave !== null);
   const [bestScore, setBestScore] = useState(() => readStoredJson<number>(BEST_SCORE_STORAGE_KEY, 0));
   const { isMuted, isMutedRef, toggleMute } = useSharedMute();
@@ -219,6 +233,7 @@ function KushJumpGame({ memory }: { memory: WebAssembly.Memory }) {
     primeAudio();
     isPausedRef.current = false;
     setIsPaused(false);
+    setShowsPauseControls(false);
     needsDrawRef.current = true;
   }, []);
 
@@ -357,17 +372,22 @@ function KushJumpGame({ memory }: { memory: WebAssembly.Memory }) {
         <div className="kush-jump__stage" ref={stageRef}>
           <canvas ref={canvasRef} className="kush-jump__canvas" data-testid="kush-jump-canvas" aria-label="Kush Jump stage" onPointerDown={() => { if (showsOverlay) advanceOverlay(); }} />
           {showsOverlay && (
-            <button type="button" className={`kush-jump__overlay${phase === Phase.Ready && !isPaused ? ' is-light' : ''}`} onClick={advanceOverlay} data-testid="kush-jump-overlay">
-              {isPaused ? <><b>Paused</b><span>Tap or press P to resume</span></>
+            <div className={`kush-jump__overlay${phase === Phase.Ready && !isPaused ? ' is-light' : ''}`} onClick={advanceOverlay} data-testid="kush-jump-overlay" role="presentation">
+              {isPaused ? <>
+                  <b>Paused</b><span>Tap or press P to resume</span>
+                  <ControlsToggle isOpen={showsPauseControls} onToggle={() => setShowsPauseControls(open => !open)} testId="kush-jump-controls-toggle" />
+                  {showsPauseControls && <ControlsPanel guide={CONTROLS_GUIDE} stopsClicks testId="kush-jump-pause-controls" />}
+                </>
                 : phase === Phase.Ready ? <>
                   <b className="kush-jump__title">KUSH JUMP</b>
                   <span>Stage 1 · Sunny Hills · ♥×{game.lives()}{game.checkpoint_reached() ? ' · from the checkpoint' : ''}</span>
                   {wasRestored && <span className="kush-jump__restored" data-testid="restored">💾 Saved progress restored</span>}
+                  <ControlsPanel guide={CONTROLS_GUIDE} testId="kush-jump-controls" />
                   <span className="kush-jump__hint">Press any key or tap to start</span>
                 </>
                 : phase === Phase.Cleared ? <><b>Stage clear!</b><span data-testid="kush-jump-final-score">Score {game.score()} · Best {Math.max(bestScore, game.score())}</span><span className="kush-jump__hint">Tap to play again</span></>
                 : <><b>Game over</b><span>Score {game.score()}</span><span className="kush-jump__hint">Tap to play again</span></>}
-            </button>
+            </div>
           )}
         </div>
         <TouchControls buttonsRef={touchButtonsRef} onPress={button => {

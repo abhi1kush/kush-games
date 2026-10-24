@@ -9,13 +9,13 @@
   width: min(100%, calc(var(--stage-height) * 2)); min-height: 180px; border-radius: 10px; overflow: hidden; background: #0b1a33; contain: layout paint;
   box-shadow: 0 10px 30px rgba(0,0,0,0.45); border: 1px solid var(--surface-2); }
 .jungle-strike__canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; touch-action: none; }
-.jungle-strike__overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+.jungle-strike__overlay { overflow-y: auto; position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
   background: rgba(var(--background-rgb), 0.62); color: var(--text-strong); cursor: pointer; padding: 12px; text-align: center; }
 .jungle-strike__overlay.is-light { background: rgba(var(--background-rgb), 0.3); }
-.jungle-strike__overlay b { font-size: clamp(20px, 5vw, 30px); font-weight: 900; text-shadow: 0 2px 0 rgba(0,0,0,0.4); }
-.jungle-strike__overlay .jungle-strike__title { font-size: clamp(26px, 7.5vw, 52px); letter-spacing: 0.05em; color: #ffd23f; font-style: italic;
+.jungle-strike__overlay > b { font-size: clamp(20px, 5vw, 30px); font-weight: 900; text-shadow: 0 2px 0 rgba(0,0,0,0.4); }
+.jungle-strike__overlay > .jungle-strike__title { font-size: clamp(26px, 7.5vw, 52px); letter-spacing: 0.05em; color: #ffd23f; font-style: italic;
   text-shadow: 0 3px 0 #b3261e, 0 6px 14px rgba(0,0,0,0.5); }
-.jungle-strike__overlay span { font-size: 14px; color: var(--text); text-shadow: 0 1px 2px rgba(0,0,0,0.6); }
+.jungle-strike__overlay > span { font-size: 14px; color: var(--text); text-shadow: 0 1px 2px rgba(0,0,0,0.6); }
 .jungle-strike__hint { padding: 6px 12px; border-radius: 999px; background: rgba(0,0,0,0.45); font-weight: 700; }
 .jungle-strike__restored { padding: 3px 10px; border-radius: 999px; background: color-mix(in srgb, var(--success) 30%, transparent); }
 .jungle-strike__choices { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
@@ -47,4 +47,10 @@
   .jungle-strike__key { opacity: 0.75; width: 60px; height: 60px; }
   .jungle-strike__key--fire { width: 68px; height: 68px; }
   .jungle-strike__key--jump { margin-bottom: 18px; }
+}
+/* short stages (phones sideways): smaller title so the controls card fits */
+@media (max-height: 480px) {
+  .jungle-strike__overlay { gap: 5px; }
+  .jungle-strike__overlay > .jungle-strike__title { font-size: 30px; }
+  .jungle-strike__overlay > span { font-size: 12px; }
 }

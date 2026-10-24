@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import { readStoredJson, saveStoredJson } from '../random';
 import { MuteButton, useSharedMute } from '../sharedSound';
+import { type ControlsGuide, ControlsPanel, ControlsToggle } from '../ControlsPanel';
 import {
   BACKDROP_WIDTH, CANOPY_WIDTH, createBackdrop, createCanopy, createTerrainSprites, drawBullet, drawBushSniper, drawCheckpoint, drawEnemyBullet, drawEntity,
   drawHero, drawMedal, drawParticle, drawTiled, drawWater, type TerrainSprites,
@@ -175,6 +176,7 @@ function JungleStrikeGame({ memory }: { memory: WebAssembly.Memory }) {
   const stageRef = useRef<HTMLDivElement>(null);
   const [phase, setPhase] = useState<Phase>(Phase.Ready);
   const [isPaused, setIsPaused] = useState(false);
+  const [showsPauseControls, setShowsPauseControls] = useState(false);
   const [wasRestored, setWasRestored] = useState(initialSave !== null);
   const [bestScore, setBestScore] = useState(() => readStoredJson<number>(BEST_SCORE_STORAGE_KEY, 0));
   const { isMuted, isMutedRef, toggleMute } = useSharedMute();
@@ -220,6 +222,7 @@ function JungleStrikeGame({ memory }: { memory: WebAssembly.Memory }) {
     primeAudio();
     isPausedRef.current = false;
     setIsPaused(false);
+    setShowsPauseControls(false);
     needsDrawRef.current = true;
   }, []);
 
@@ -380,11 +383,16 @@ function JungleStrikeGame({ memory }: { memory: WebAssembly.Memory }) {
           {showsOverlay && (
             <div className={`jungle-strike__overlay${phase === Phase.Ready && !isPaused ? ' is-light' : ''}`} data-testid="jungle-strike-overlay"
               onClick={phase === Phase.GameOver && !isPaused ? undefined : advanceOverlay} role="presentation">
-              {isPaused ? <><b>Paused</b><span>Tap or press P to resume</span></>
+              {isPaused ? <>
+                  <b>Paused</b><span>Tap or press P to resume</span>
+                  <ControlsToggle isOpen={showsPauseControls} onToggle={() => setShowsPauseControls(open => !open)} testId="jungle-strike-controls-toggle" />
+                  {showsPauseControls && <ControlsPanel guide={CONTROLS_GUIDE} stopsClicks testId="jungle-strike-pause-controls" />}
+                </>
                 : phase === Phase.Ready ? <>
                   <b className="jungle-strike__title">JUNGLE STRIKE</b>
                   <span>Stage 1 · Green Hell Ridge · ♥×{game.lives()}{game.checkpoint_reached() ? ' · from the checkpoint' : ''}</span>
                   {wasRestored && <span className="jungle-strike__restored" data-testid="restored">💾 Saved progress restored</span>}
+                  <ControlsPanel guide={CONTROLS_GUIDE} testId="jungle-strike-controls" />
                   <span className="jungle-strike__hint">Press any key or tap to start</span>
                 </>
                 : phase === Phase.Cleared ? <>
@@ -416,6 +424,22 @@ function JungleStrikeGame({ memory }: { memory: WebAssembly.Memory }) {
     </div>
   );
 }
+
+const CONTROLS_GUIDE: ControlsGuide = {
+  keyRows: [
+    { keys: ['←', '↑', '→', '↓'], label: 'Move · aim 8 ways (WASD)' },
+    { keys: ['Z', '/', 'J'], label: 'Jump' },
+    { keys: ['X', '/', 'K'], label: 'Fire · hold to auto-fire' },
+    { keys: ['↓'], label: 'Lie flat (standing still)' },
+    { keys: ['↓', '+', 'Z'], label: 'Drop through a ledge' },
+    { keys: ['P'], label: 'Pause' },
+    { keys: ['M'], label: 'Mute' },
+    { keys: ['Esc'], label: 'Back to the hub' },
+  ],
+  touch: { leftControl: 'stick', leftLabel: 'Move · aim', buttons: [{ name: 'JUMP', label: 'Jump', color: 'rgba(79,188,156,0.6)' }, { name: 'FIRE', label: 'Hold to fire', color: 'rgba(229,57,53,0.65)' }] },
+  touchTips: ['Stick ↓ = lie flat', '↓ + JUMP drops through a ledge'],
+  weapons: [{ letter: 'R', name: 'Rapid', color: '#4fc3f7' }, { letter: 'S', name: 'Spread', color: '#ff7043' }, { letter: 'L', name: 'Laser', color: '#b388ff' }],
+};
 
 const DIRECTION_BITS = [Buttons.right, Buttons.right | Buttons.down, Buttons.down, Buttons.down | Buttons.left, Buttons.left, Buttons.left | Buttons.up, Buttons.up, Buttons.up | Buttons.right];
 const STICK_BITS = Buttons.left | Buttons.right | Buttons.up | Buttons.down;

@@ -41,6 +41,11 @@ try {
   await page.getByTestId('kush-jump-canvas').waitFor();
   check(await phaseOf(page) === '0', 'loads on the Ready screen');
   check(await page.getByTestId('kush-jump-overlay').textContent().then(text => text.includes('KUSH JUMP')), 'title overlay shown');
+  const startControls = page.getByTestId('kush-jump-controls');
+  const startControlsText = await startControls.textContent();
+  check(await startControls.isVisible() && await startControls.getAttribute('data-keys') === 'true' && ['Move', 'hold to jump higher', 'Run', 'Pause', 'Mute', 'Back to the hub'].every(text => startControlsText.includes(text)),
+    'desktop: controls panel with key caps on the start screen');
+  await page.screenshot({ path: `${screenshotDirectory}/kush-games-kush-jump-start-desktop.png` });
   const canvasBox = await page.getByTestId('kush-jump-canvas').boundingBox();
   check(canvasBox.width >= 900 && canvasBox.height >= 400, `desktop canvas ${Math.round(canvasBox.width)}×${Math.round(canvasBox.height)}`);
 
@@ -91,6 +96,8 @@ try {
   // pause and mute
   await page.keyboard.press('p');
   check(await page.getByTestId('kush-jump').getAttribute('data-paused') === 'true', 'P pauses');
+  await page.getByTestId('kush-jump-controls-toggle').click();
+  check(await page.getByTestId('kush-jump-pause-controls').isVisible() && await page.getByTestId('kush-jump').getAttribute('data-paused') === 'true', '“? Controls” shows the controls on the pause screen, still paused');
   const pausedX = (await hero(page)).x;
   await page.waitForTimeout(300);
   check((await hero(page)).x === pausedX, 'nothing moves while paused');
@@ -136,6 +143,11 @@ try {
   await mobile.goto(gameUrl, { waitUntil: 'networkidle' });
   await mobile.getByTestId('kush-jump-canvas').waitFor();
   check(await mobile.getByTestId('kush-jump-touch').isVisible(), 'touch buttons visible on a phone');
+  const mobileStage = await mobile.getByTestId('kush-jump-canvas').boundingBox();
+  const mobileControls = await mobile.getByTestId('kush-jump-controls').boundingBox();
+  check(await mobile.getByTestId('kush-jump-controls-touch').isVisible() && mobileControls.y + mobileControls.height <= mobileStage.y + mobileStage.height && mobileControls.x >= 0
+    && mobileControls.x + mobileControls.width <= 375, 'phone: touch diagram (◀ ▶, RUN, JUMP) fits inside the start screen');
+  await mobile.screenshot({ path: `${screenshotDirectory}/kush-games-kush-jump-start-mobile.png` });
   check(await noOverflow(mobile), 'no horizontal scroll at 375px');
   const stageBox = await mobile.getByTestId('kush-jump-canvas').boundingBox();
   const jumpBox = await mobile.getByTestId('touch-jump').boundingBox();

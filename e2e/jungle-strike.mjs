@@ -62,6 +62,13 @@ try {
   await page.getByTestId('jungle-strike-canvas').waitFor();
   check(await phaseOf(page) === '0', 'loads on the Ready screen');
   check(await page.getByTestId('jungle-strike-overlay').textContent().then(text => text.includes('JUNGLE STRIKE')), 'title overlay shown');
+  const startControls = page.getByTestId('jungle-strike-controls');
+  check(await startControls.isVisible(), 'controls panel shown on the start screen');
+  const startControlsText = await startControls.textContent();
+  check(await startControls.getAttribute('data-keys') === 'true' && ['Jump', 'Fire', 'Lie flat', 'Drop through a ledge', 'auto-fire', 'Pause', 'Mute', 'Back to the hub'].every(text => startControlsText.includes(text)),
+    'desktop: key caps for move/aim, jump, fire (hold), lie flat, drop through, P, M, Esc');
+  check(await page.getByTestId('jungle-strike-controls-weapons').textContent().then(text => /R\s*Rapid/.test(text) && /S\s*Spread/.test(text) && /L\s*Laser/.test(text)), 'weapon legend R / S / L');
+  await page.screenshot({ path: `${screenshotDirectory}/kush-games-jungle-strike-start-desktop.png` });
   const canvasBox = await page.getByTestId('jungle-strike-canvas').boundingBox();
   check(canvasBox.width >= 700 && canvasBox.height >= 350, `desktop canvas ${Math.round(canvasBox.width)}×${Math.round(canvasBox.height)}`);
 
@@ -151,8 +158,14 @@ try {
   await page.keyboard.down('ArrowRight'); await page.waitForTimeout(250); await page.keyboard.up('ArrowRight');
   check((await state(page)).x === pausedX, 'nothing moves while paused');
   check(await page.evaluate(key => localStorage.getItem(key) !== null, SAVE_KEY), 'pausing saves progress');
+  check(!(await page.getByTestId('jungle-strike-pause-controls').isVisible()), 'pause screen starts with the controls folded away');
+  await page.getByTestId('jungle-strike-controls-toggle').click();
+  check(await page.getByTestId('jungle-strike-pause-controls').isVisible(), '“? Controls” shows the controls on the pause screen');
+  await page.getByTestId('jungle-strike-pause-controls').click();
+  check(await page.getByTestId('jungle-strike').getAttribute('data-paused') === 'true', 'reading the controls (clicking the card) keeps the game paused');
   await page.keyboard.press('p');
   check(await page.getByTestId('jungle-strike').getAttribute('data-paused') === 'false', 'P resumes');
+  check(!(await page.getByTestId('jungle-strike-pause-controls').isVisible()), 'resuming hides the controls');
   await page.keyboard.press('m');
   check(await page.getByTestId('mute').getAttribute('aria-pressed') === 'true', 'M mutes');
   await page.keyboard.press('m');
@@ -236,6 +249,12 @@ try {
   const stickBox = await mobile.getByTestId('touch-stick').boundingBox();
   check(stageBox.width >= 330 && stageBox.x >= 0 && stageBox.x + stageBox.width <= 375, `portrait canvas ${Math.round(stageBox.width)}×${Math.round(stageBox.height)}`);
   check(fireBox.y + fireBox.height <= 667 && stickBox.y >= stageBox.y + stageBox.height - 1 && stickBox.x >= 0, 'stick and buttons below the canvas, on screen');
+  const mobileControls = mobile.getByTestId('jungle-strike-controls');
+  const mobileControlsBox = await mobileControls.boundingBox();
+  check(await mobile.getByTestId('jungle-strike-controls-touch').isVisible() && mobileControlsBox.y >= stageBox.y && mobileControlsBox.y + mobileControlsBox.height <= stageBox.y + stageBox.height
+    && mobileControlsBox.x >= stageBox.x && mobileControlsBox.x + mobileControlsBox.width <= stageBox.x + stageBox.width, 'phone: touch diagram (stick, JUMP, FIRE) fits inside the start screen');
+  check(await mobile.getByTestId('jungle-strike-controls-weapons').isVisible(), 'phone: weapon legend shown');
+  await mobile.screenshot({ path: `${screenshotDirectory}/kush-games-jungle-strike-start-mobile.png` });
   await mobile.getByTestId('touch-fire').tap();
   check(await waitFor(async () => await phaseOf(mobile) === '1', 2000), 'tapping FIRE starts play');
   await game(mobile, 'game.debug_set_invincible(true)');
@@ -252,6 +271,11 @@ try {
   console.log(`saved ${screenshotDirectory}/kush-games-jungle-strike-mobile.png`);
   await mobile.getByTestId('touch-fire').dispatchEvent('pointerup', firePointer);
   await mobile.getByTestId('touch-stick').dispatchEvent('pointerup', stickPointer);
+  await mobile.getByTestId('jungle-strike-pause').tap();
+  await mobile.getByTestId('jungle-strike-controls-toggle').tap();
+  const pauseControlsBox = await mobile.getByTestId('jungle-strike-pause-controls').boundingBox();
+  check(pauseControlsBox && await mobile.getByTestId('jungle-strike').getAttribute('data-paused') === 'true' && await noOverflow(mobile), 'phone: controls open from the pause screen');
+  await mobile.getByTestId('jungle-strike-pause').tap();
   check(mobileState.x > mobileStart + 20 && mobileAim === 7 && mobileState.bullets > 0, `stick + FIRE together: runs (${mobileStart.toFixed(0)} → ${mobileState.x.toFixed(0)}), aims up-right (${mobileAim}) and shoots (${mobileState.bullets})`);
   await phone.close();
 
@@ -265,6 +289,9 @@ try {
   check(await noOverflow(landscape), 'no horizontal scroll in landscape');
   check(landscapeBox.height >= 240 && landscapeBox.y + landscapeBox.height <= 390, `landscape canvas ${Math.round(landscapeBox.width)}×${Math.round(landscapeBox.height)} fits the screen`);
   check(await landscape.getByTestId('touch-fire').isVisible() && await landscape.getByTestId('touch-stick').isVisible(), 'landscape controls visible');
+  const landscapePanel = await landscape.getByTestId('jungle-strike-controls').boundingBox();
+  check(landscapePanel && landscapePanel.y >= landscapeBox.y && landscapePanel.y + landscapePanel.height <= landscapeBox.y + landscapeBox.height, 'landscape: the controls card fits inside the stage');
+  await landscape.screenshot({ path: `${screenshotDirectory}/kush-games-jungle-strike-start-landscape.png` });
   await landscape.getByTestId('jungle-strike-overlay').tap();
   await landscape.waitForTimeout(400);
   await landscape.screenshot({ path: `${screenshotDirectory}/kush-games-jungle-strike-landscape.png` });
