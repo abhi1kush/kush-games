@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createSaveSlot, hasSavedGame, KeyValueStorage, parseEnvelope, saveKey } from './persistence';
+import { clearRemovedGameData, createSaveSlot, hasSavedGame, KeyValueStorage, parseEnvelope, saveKey } from './persistence';
 
 function memoryStorage(): KeyValueStorage & { items: Map<string, string> } {
   const items = new Map<string, string>();
@@ -119,5 +119,14 @@ describe('save slots', () => {
     storage.setItem('kush-games:checkers-online:save:v1', JSON.stringify({ version: 1, savedAt: 0, data: { mode: 'online' } }));
     expect(hasSavedGame('checkers', storage)).toBe(true);
     expect(hasSavedGame('connect-four', storage)).toBe(false);
+  });
+
+  it('clears data left behind by removed games (Solitaire) and nothing else', () => {
+    const storage = memoryStorage();
+    storage.setItem('kush-games:solitaire:save:v1', '{}');
+    storage.setItem('kush-games-solitaire-stats', '{}');
+    storage.setItem('kush-games:snake:save:v1', '{}');
+    clearRemovedGameData(storage);
+    expect([...storage.items.keys()]).toEqual(['kush-games:snake:save:v1']);
   });
 });

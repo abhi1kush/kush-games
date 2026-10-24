@@ -10,4 +10,9 @@ describe('hash routing', () => {
     expect(parseHash('#/play/')).toEqual({ page: 'home' });
     expect(parseHash('#/play/chess?room=K7M2Q')).toEqual({ page: 'play', gameId: 'chess' });
   });
+
+  it('sends links to removed games (Solitaire) back to the hub', () => {
+    expect(parseHash(playPath('solitaire'))).toEqual({ page: 'home' });
+    expect(parseHash(infoPath('solitaire'))).toEqual({ page: 'home' });
+  });
 });

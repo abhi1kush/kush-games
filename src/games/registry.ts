@@ -165,18 +165,6 @@ export const games: GameDefinition[] = [
     component: lazy(() => import('./connectfour/ConnectFour')),
   },
   {
-    id: 'solitaire',
-    title: 'Solitaire',
-    tagline: 'Build the foundations from Ace to King.',
-    description: 'Classic Klondike: build the four foundations from ace to king. Draw 1 or Draw 3, drag or tap cards, undo, hints, safe auto-moves, timer and score. Dealing and rules run in Rust compiled to WebAssembly.',
-    categories: ['Puzzle', 'Classic Board'],
-    status: 'playable',
-    artwork: { gradientFrom: '#134e5e', gradientTo: '#71b280', accentColor: '#fffbe6', glyph: '🂡' },
-    controls: 'Drag or tap cards; D draw, U undo, H hint, N new deal',
-    releaseYear: 2026,
-    component: lazy(() => import('./solitaire/SolitaireGame')),
-  },
-  {
     id: 'checkers',
     title: 'Checkers',
     tagline: 'Jump, capture, crown.',

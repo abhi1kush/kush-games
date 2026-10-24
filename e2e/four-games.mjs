@@ -1,4 +1,4 @@
-// Smoke test for the four Rust/WebAssembly games (Breakout, Connect Four, Solitaire, Checkers) at 1280 and 375 px:
+// Smoke test for three Rust/WebAssembly board/arcade games (Breakout, Connect Four, Checkers) at 1280 and 375 px:
 // play a little, refresh and check the save is restored, check the hub's Continue badges; saves screenshots.
 // Usage: node e2e/four-games.mjs [siteUrl] [screenshotDirectory]
 import { readFileSync } from 'node:fs';
@@ -7,7 +7,7 @@ import { chromium } from 'playwright-core';
 const siteUrl = process.argv[2] ?? 'https://abhi1kush.github.io/kush-games/';
 const screenshotDirectory = process.argv[3] ?? '/workspace';
 const chromePath = process.env.CHROME_PATH ?? '/usr/bin/google-chrome';
-const GAME_IDS = ['breakout', 'connect-four', 'solitaire', 'checkers'];
+const GAME_IDS = ['breakout', 'connect-four', 'checkers'];
 let failures = 0;
 const check = (condition, message) => {
   console.log(`${condition ? 'PASS' : 'FAIL'} ${message}`);
@@ -100,58 +100,6 @@ async function testConnectFour(page, label, screenshotPath) {
   check(await noOverflow(page), `${label} connect four: no horizontal scroll`);
 }
 
-// ---------------- Solitaire ----------------
-async function dragTo(page, source, target) {
-  const from = await source.boundingBox(), to = await target.boundingBox();
-  await page.mouse.move(from.x + from.width / 2, from.y + Math.min(14, from.height / 2));
-  await page.mouse.down();
-  await page.mouse.move(from.x + from.width / 2 + 10, from.y + 20, { steps: 3 });
-  await page.mouse.move(to.x + to.width / 2, to.y + Math.min(to.height - 6, 40), { steps: 6 });
-  await page.mouse.up();
-}
-
-async function testSolitaire(page, label, screenshotPath) {
-  await openGame(page, 'solitaire', 'solitaire');
-  await page.getByTestId('sol-draw-1').click();
-  check(await page.getByTestId('sol-column').count() === 7, `${label} solitaire: 7 columns`);
-  const columnBoxes = await page.getByTestId('sol-column').evaluateAll(columns => columns.map(column => column.getBoundingClientRect().right));
-  check(Math.max(...columnBoxes) <= page.viewportSize().width, `${label} solitaire: all 7 columns fit (${Math.round(Math.max(...columnBoxes))} ≤ ${page.viewportSize().width})`);
-  const counts = await page.getByTestId('sol-column').evaluateAll(columns => columns.map(column => Number(column.dataset.count)));
-  check(counts.join() === '1,2,3,4,5,6,7' && await data(page, 'solitaire', 'stock') === '24', `${label} solitaire: Klondike deal (${counts.join()})`);
-  // play by following hints: drag the hinted card onto the hinted target (or draw when the hint says so)
-  let drags = 0, taps = 0, draws = 0;
-  for (let step = 0; step < 14 && drags + taps < 4; step++) {
-    await page.getByTestId('sol-hint').click();
-    if (await page.getByTestId('sol-no-moves').count()) break;
-    const hinted = page.locator('.sol-waste .sol-card.is-hinted, .sol-column .sol-card.is-hinted').first();
-    if (!(await hinted.count())) { await page.getByTestId('sol-stock').click(); draws++; continue; }
-    const movesBefore = Number(await data(page, 'solitaire', 'moves'));
-    if (drags <= taps) {
-      const target = page.locator('.sol-foundation.is-target, .sol-column.is-target').first();
-      await dragTo(page, hinted, target);
-      if (await waitFor(async () => Number(await data(page, 'solitaire', 'moves')) > movesBefore, 1500)) drags++;
-    } else {
-      await hinted.click();
-      if (await waitFor(async () => Number(await data(page, 'solitaire', 'moves')) > movesBefore, 1500)) taps++;
-    }
-  }
-  check(drags >= 1, `${label} solitaire: drag-and-drop moves cards (${drags} drags, ${taps} taps, ${draws} draws)`);
-  const moves = await data(page, 'solitaire', 'moves');
-  check(Number(moves) >= 2, `${label} solitaire: moves counted (${moves}, score ${await data(page, 'solitaire', 'score')})`);
-  await page.getByTestId('sol-stock').click();
-  await pause(1100);
-  if (screenshotPath) await page.screenshot({ path: screenshotPath });
-  const layoutBefore = await page.getByTestId('sol-table').evaluate(table => table.innerText);
-  const movesBeforeReload = await data(page, 'solitaire', 'moves');
-  await page.reload();
-  await page.waitForSelector('[data-testid=solitaire]');
-  check(await page.getByTestId('restored').count() === 1 && await data(page, 'solitaire', 'moves') === movesBeforeReload
-    && await page.getByTestId('sol-table').evaluate(table => table.innerText) === layoutBefore, `${label} solitaire: refresh restores the same table`);
-  await page.getByTestId('sol-undo').click();
-  check(Number(await data(page, 'solitaire', 'moves')) < Number(movesBeforeReload), `${label} solitaire: undo`);
-  check(await noOverflow(page), `${label} solitaire: no horizontal scroll`);
-}
-
 // ---------------- Checkers ----------------
 async function playCheckersMove(page) {
   const piece = page.locator('.checkers-piece.is-movable').first();
@@ -224,8 +172,8 @@ async function testHub(page, label, screenshotPath) {
 
 const browser = await chromium.launch({ executablePath: chromePath, args: ['--no-sandbox', '--autoplay-policy=no-user-gesture-required'] });
 const viewports = [
-  { label: 'desktop', viewport: { width: 1280, height: 860 }, shots: { breakout: 'kush-games-breakout.png', 'connect-four': 'kush-games-connect4.png', solitaire: 'kush-games-solitaire.png', checkers: 'kush-games-checkers.png', hub: 'kush-games-hub-14.png' } },
-  { label: 'mobile', viewport: { width: 375, height: 760 }, isMobile: true, hasTouch: true, shots: { breakout: 'mobile-breakout.png', 'connect-four': 'mobile-connect4.png', solitaire: 'mobile-solitaire.png', checkers: 'mobile-checkers.png' } },
+  { label: 'desktop', viewport: { width: 1280, height: 860 }, shots: { breakout: 'kush-games-breakout.png', 'connect-four': 'kush-games-connect4.png', checkers: 'kush-games-checkers.png', hub: 'kush-games-hub-14.png' } },
+  { label: 'mobile', viewport: { width: 375, height: 760 }, isMobile: true, hasTouch: true, shots: { breakout: 'mobile-breakout.png', 'connect-four': 'mobile-connect4.png', checkers: 'mobile-checkers.png' } },
 ];
 const mobileShots = [];
 for (const { label, viewport, isMobile, hasTouch, shots } of viewports) {
@@ -238,17 +186,16 @@ for (const { label, viewport, isMobile, hasTouch, shots } of viewports) {
   await page.evaluate(() => localStorage.clear());
   await testBreakout(page, label, shot('breakout'));
   await testConnectFour(page, label, shot('connect-four'));
-  await testSolitaire(page, label, shot('solitaire'));
   await testCheckers(page, label, shot('checkers'));
   await testHub(page, label, shot('hub'));
   if (isMobile) mobileShots.push(...GAME_IDS.map(shot));
   await context.close();
 }
 
-// four mobile screenshots side by side
-const composite = await browser.newPage({ viewport: { width: 4 * 375 + 5 * 16, height: 760 + 32 + 28 }, deviceScaleFactor: 1 });
+// mobile screenshots side by side
+const composite = await browser.newPage({ viewport: { width: 3 * 375 + 4 * 16, height: 760 + 32 + 28 }, deviceScaleFactor: 1 });
 const images = mobileShots.map(path => `data:image/png;base64,${readFileSync(path).toString('base64')}`);
-const titles = ['Breakout', 'Connect Four', 'Solitaire', 'Checkers'];
+const titles = ['Breakout', 'Connect Four', 'Checkers'];
 await composite.setContent(`<body style="margin:0;background:#0b0e1a;display:flex;gap:16px;padding:16px;font:600 14px system-ui;color:#cbd2ff">${
   images.map((source, index) => `<figure style="margin:0;width:375px"><figcaption style="height:28px">${titles[index]} · 375 px</figcaption><img src="${source}" style="width:375px;height:760px;border-radius:14px;display:block"></figure>`).join('')}</body>`);
 await composite.waitForLoadState('load');

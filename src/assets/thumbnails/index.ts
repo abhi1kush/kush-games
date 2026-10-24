@@ -12,7 +12,6 @@ import thumbArrowOut from './arrow-out.svg';
 import thumbColorTrails from './color-trails.svg';
 import thumbBreakout from './breakout.svg';
 import thumbConnectFour from './connect-four.svg';
-import thumbSolitaire from './solitaire.svg';
 import thumbCheckers from './checkers.svg';
 import thumbKushJump from './kush-jump.svg';
 import thumbJungleStrike from './jungle-strike.svg';
@@ -33,7 +32,6 @@ export const THUMBNAILS: Record<string, string> = {
   'color-trails': thumbColorTrails,
   'breakout': thumbBreakout,
   'connect-four': thumbConnectFour,
-  'solitaire': thumbSolitaire,
   'checkers': thumbCheckers,
   'kush-jump': thumbKushJump,
   'jungle-strike': thumbJungleStrike,

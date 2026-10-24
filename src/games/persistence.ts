@@ -38,8 +38,15 @@ export interface SaveSlot<Data> {
 /** Saves for the current versions; the home page uses this to show "Continue" badges. */
 export const SAVE_VERSIONS: Record<string, number> = {
   '2048': 1, snake: 1, blocks: 1, chess: 1, minesweeper: 1, sudoku: 1, 'tic-tac-toe': 1, 'memory-match': 1, 'flappy-wings': 1,
-  'arrow-out': 3, 'color-trails': 1, breakout: 1, 'connect-four': 1, solitaire: 1, checkers: 1, 'kush-jump': 1, 'jungle-strike': 1, 'antariksh-defenders': 1, 'mithai-match': 1,
+  'arrow-out': 3, 'color-trails': 1, breakout: 1, 'connect-four': 1, checkers: 1, 'kush-jump': 1, 'jungle-strike': 1, 'antariksh-defenders': 1, 'mithai-match': 1,
 };
+
+/** Storage keys left behind by games that were removed from the hub; cleared once on startup. */
+export const REMOVED_GAME_STORAGE_KEYS: readonly string[] = ['kush-games:solitaire:save:v1', 'kush-games-solitaire-draw', 'kush-games-solitaire-stats'];
+
+export function clearRemovedGameData(storage: KeyValueStorage | null = browserStorage()) {
+  for (const key of REMOVED_GAME_STORAGE_KEYS) { try { storage?.removeItem(key); } catch { /* storage unavailable */ } }
+}
 
 /** Games whose online room is saved in a second slot (so it doesn't replace the local game's save). */
 export const ONLINE_SAVE_VERSION = 1;

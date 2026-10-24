@@ -4,7 +4,7 @@ A Netflix-style home for browser games — dark UI, a big hero banner, and a wra
 
 **Live:** https://abhi1kush.github.io/kush-games/
 
-Built with **React + TypeScript + Vite**; Breakout, Connect Four, Solitaire, Checkers, Kush Jump, Jungle Strike, Antariksh Defenders and Mithai Match run their game logic in **Rust compiled to WebAssembly**. Deployed to GitHub Pages from the `gh-pages` branch.
+Built with **React + TypeScript + Vite**; Breakout, Connect Four, Checkers, Kush Jump, Jungle Strike, Antariksh Defenders and Mithai Match run their game logic in **Rust compiled to WebAssembly**. Deployed to GitHub Pages from the `gh-pages` branch.
 
 ## Features
 
@@ -37,7 +37,6 @@ Built with **React + TypeScript + Vite**; Breakout, Connect Four, Solitaire, Che
 | Color Trails | ✅ Playable |
 | Breakout (Rust/WebAssembly) | ✅ Playable |
 | Connect Four (vs computer, 2 players, or online with a friend; Rust/WebAssembly) | ✅ Playable |
-| Solitaire — Klondike (Rust/WebAssembly) | ✅ Playable |
 | Checkers (vs computer, 2 players, or online with a friend; Rust/WebAssembly) | ✅ Playable |
 | Kush Jump — side-scrolling platformer, one stage (Rust/WebAssembly) | ✅ Playable |
 | Jungle Strike — side-scrolling run-and-gun shooter, one stage (Rust/WebAssembly) | ✅ Playable |
@@ -151,7 +150,7 @@ A connect-the-dots path puzzle in the style of the "same color / connect two dot
 - **Difficulty:** boards grow 5×5 → 6×6 → 7×7 → 8×8/9×9 → 10×12 (≈ 30px cells on a 375×667 phone). For each level the generator keeps the candidate closest to a rising hardness target, from: share of the board solvable by forced moves alone, solver guesses, average path length and bends, how far paths wander from the direct route, and short (≤ 3 cell) pairs. `npx vite-node scripts/color-trails-metrics.ts 1 5 10 20 30 40 60` prints the table.
 - **Colors:** a color-blind friendlier palette, and every color also has its own small symbol inside its dots.
 
-### Rust/WebAssembly games: Breakout, Connect Four, Solitaire, Checkers, Kush Jump, Jungle Strike, Antariksh Defenders, Mithai Match
+### Rust/WebAssembly games: Breakout, Connect Four, Checkers, Kush Jump, Jungle Strike, Antariksh Defenders, Mithai Match
 
 The UI is React + TypeScript; the rules, physics and AI are Rust crates in `wasm/` (one crate per game, a Cargo workspace), built with `wasm-pack --target web` into `src/wasm/<crate>/`. Each game's `.wasm` is only fetched when that game opens (the hub downloads none). Data crosses the boundary as small typed arrays and integers — never JSON.
 
@@ -159,7 +158,6 @@ The UI is React + TypeScript; the rules, physics and AI are Rust crates in `wasm
 | --- | --- | --- |
 | breakout | 26.5 KB | 12.4 KB |
 | connect_four | 26.0 KB | 12.4 KB |
-| solitaire | 25.7 KB | 11.8 KB |
 | checkers | 31.1 KB | 14.6 KB |
 | kush_jump | 30.3 KB | 13.9 KB |
 
@@ -169,7 +167,6 @@ Size settings: `opt-level = "z"`, `lto`, `codegen-units = 1`, `panic = "abort"`,
   - **Phone hiccups:** a frame simulates at most 50 ms (slower frames play in slight slow motion); a gap over 100 ms (GC, a notification, a busy phone) is dropped — the game freezes instead of the ball jumping — and a ball lost within 0.3 s after such a freeze is served again without costing a life ("The screen froze for a moment — ball back, no life lost"). The ball moves in sub-steps of at most 3 units (half its radius), so it can't pass through the paddle or a brick at any speed; it never goes exactly vertical or flat, gets nudged if it bounces 8 s without touching a breakable brick, and is moved out if it ends up overlapping a brick.
   - **No work in the rally:** saving happens only when play stops (pause, tab hidden, leaving, a life lost, a level cleared); sounds are rate-limited (≤ 4 overlapping) and the audio context is created on the first touch. `node e2e/perf-breakout.mjs <url> --assert` plays ~80 s at 375 px with 4× and 6× CPU throttling and checks frame times, storage writes, React commits, ball jumps and that six simulated 300 ms freezes cost no life.
 - **Connect Four** — bitboards; negamax with alpha-beta, a transposition table, threat-first move ordering and iterative deepening under a node budget. Easy (shallow and a bit random), Medium (depth 5 with noise), Hard (as deep as 160 000 nodes allow — about 30–50 ms on a desktop, roughly 4× that on a mid-range phone). The search runs in a Web Worker. 2-player pass-and-play, drop animation, highlighted four, win/draw tally, undo.
-- **Solitaire** — Klondike with a seeded (mulberry32) deal, Draw 1 / Draw 3, drag-and-drop or tap a card to send it to its best spot, safe cards go to the foundations by themselves, undo (replays the action list), hint, timer, moves, Windows-style score and a CSS win cascade. Seven columns fit a 375 px screen.
 - **Checkers** — English draughts: compulsory captures, multi-jumps, crowning ends the move, draw after 40 moves each without a capture or man move. Negamax alpha-beta with a transposition table and capture extension, in a Web Worker; Easy/Medium/Hard (Hard: 120 000-node budget, ≈ 50 ms desktop). Legal moves are highlighted, pieces that must capture are ringed, moves animate along their path.
 - **Kush Jump** — an original side-scrolling platformer stage (own hero, enemies, art and sounds, all drawn with canvas paths / generated with Web Audio; no image or audio files). Stage 1 "Sunny Hills" is 214 tiles long: ground with three pits, ★ crates (coins; two hold a Sun Berry that makes Kush big — bigger hitbox, smashes bricks, survives one hit), a 6-coin brick, floating coins, six pipes of three heights, grumbles (walk, stomp them — stomp chains score 100→1000) and shellbugs (stomp → shell, kick it to slide and knock out others; it wakes after 8 s), stone stair pyramids, a midway checkpoint, a final staircase and a flag pole (higher grab = bigger bonus: 100–5000) before a fort, then the time left ×50 is counted into the score. 300-tick timer (2 ticks/s), 3 lives, extra life every 100 coins.
   - Rust (`wasm/kush_jump`) owns the level, physics (fixed 1/120 s step; acceleration, skid, run speed, variable jump height via lighter gravity while jump is held, jump buffering, coyote time, corner slip), enemies, scoring, checkpoint and goal sequence. JS sets the held buttons, calls `advance(seconds)` and draws from a `Float32Array` render buffer + the tile map in wasm memory. Same hitch rules as Breakout: a frame simulates at most 50 ms, gaps over 100 ms are dropped, and for 0.3 s after a dropped gap enemies can't hurt and a pit fall puts the hero back on the last safe ground.

@@ -4,13 +4,11 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import * as breakoutModule from './breakout/breakout.js';
 import * as checkersModule from './checkers/checkers.js';
 import * as connectFourModule from './connect_four/connect_four.js';
-import * as solitaireModule from './solitaire/solitaire.js';
 import * as kushJumpModule from './kush_jump/kush_jump.js';
 import * as jungleStrikeModule from './jungle_strike/jungle_strike.js';
 import * as antarikshModule from './antariksh_defenders/antariksh_defenders.js';
 import * as mithaiModule from './mithai_match/mithai_match.js';
 import { decodeMoves } from '../games/checkers/engine';
-import { decodeLayout } from '../games/solitaire/engine';
 import { RenderSlot } from '../games/breakout/engine';
 import { Buttons, Phase as KushJumpPhase, RenderSlot as KushJumpSlot } from '../games/kushjump/engine';
 import { Buttons as StrikeButtons, PLATFORM_COUNT, RenderSlot as StrikeSlot } from '../games/junglestrike/engine';
@@ -31,7 +29,6 @@ beforeAll(() => {
   breakoutMemory = breakoutModule.initSync({ module: wasmBytes('breakout') }).memory;
   checkersModule.initSync({ module: wasmBytes('checkers') });
   connectFourModule.initSync({ module: wasmBytes('connect_four') });
-  solitaireModule.initSync({ module: wasmBytes('solitaire') });
   kushJumpMemory = kushJumpModule.initSync({ module: wasmBytes('kush_jump') }).memory;
   jungleStrikeMemory = jungleStrikeModule.initSync({ module: wasmBytes('jungle_strike') }).memory;
   antarikshMemory = antarikshModule.initSync({ module: wasmBytes('antariksh_defenders') }).memory;
@@ -40,7 +37,7 @@ beforeAll(() => {
 
 describe('wasm bindings', () => {
   it('every game .wasm stays small (< 40 KB raw)', () => {
-    for (const name of ['breakout', 'checkers', 'connect_four', 'solitaire', 'kush_jump', 'jungle_strike', 'antariksh_defenders', 'mithai_match']) expect(wasmBytes(name).length, name).toBeLessThan(40 * 1024);
+    for (const name of ['breakout', 'checkers', 'connect_four', 'kush_jump', 'jungle_strike', 'antariksh_defenders', 'mithai_match']) expect(wasmBytes(name).length, name).toBeLessThan(40 * 1024);
   });
 
   it('Kush Jump: runs right through the render buffer, survives a hitch and finishes at the flag', () => {
@@ -199,24 +196,6 @@ describe('wasm bindings', () => {
     expect(copy.load(fresh.history())).toBe(true);
     expect(Array.from(copy.cells())).toEqual(Array.from(fresh.cells()));
     [game, fresh, copy].forEach(item => item.free());
-  });
-
-  it('Solitaire: same seed, same deal; moves replay from the action list', () => {
-    const first = new solitaireModule.Solitaire(1234, 1);
-    const second = new solitaireModule.Solitaire(1234, 1);
-    expect(Array.from(first.layout())).toEqual(Array.from(second.layout()));
-    const layout = decodeLayout(first.layout());
-    expect(layout.stockCount).toBe(24);
-    expect(layout.columns.map(column => column.cards.length)).toEqual([1, 2, 3, 4, 5, 6, 7]);
-    for (let step = 0; step < 25; step++) {
-      const hint = first.hint();
-      if (hint.length === 1) first.draw(); else if (hint.length === 3) first.move_cards(hint[0], hint[1], hint[2]); else break;
-    }
-    const copy = new solitaireModule.Solitaire(1, 1);
-    expect(copy.load(1234, 1, first.actions())).toBe(true);
-    expect(Array.from(copy.layout())).toEqual(Array.from(first.layout()));
-    expect(first.undo()).toBe(true);
-    [first, second, copy].forEach(item => item.free());
   });
 
   it('Breakout: JS reads positions straight from wasm memory after each advance', () => {
