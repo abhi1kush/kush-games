@@ -1,0 +1,53 @@
+.jal { max-width: 980px; margin: 0 auto; overflow-x: hidden; }
+.jal-hero { display: flex; align-items: center; gap: 14px; justify-content: center; }
+.jal-hero__title { text-align: center; }
+.jal-hero__title p { margin: 2px 0 0; color: #8fd3ff; font-weight: 800; letter-spacing: 0.04em; }
+.jal-play { font-size: 18px; padding: 12px 26px; }
+.jal-card { width: min(640px, 100%); padding: 14px 16px; border-radius: 14px; background: rgba(12, 26, 58, 0.82);
+  border: 1px solid rgba(110, 170, 255, 0.28); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); }
+.jal-card h2 { margin: 0 0 10px; font-size: 18px; display: flex; justify-content: space-between; align-items: center; }
+.jal-total { font-size: 14px; color: #ffd84d; }
+.jal-levels { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+.jal-level { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 0 6px; border-radius: 10px; cursor: pointer;
+  border: 1px solid rgba(120, 180, 255, 0.35); background: linear-gradient(180deg, #1f4c94, #143066); color: #fff; font-family: inherit; }
+.jal-level b { font-size: 17px; }
+.jal-level:hover:not(:disabled) { filter: brightness(1.2); }
+.jal-level.is-current { outline: 2px solid var(--primary, #e50914); }
+.jal-level.is-locked { opacity: 0.45; cursor: default; background: #1b2438; }
+.jal-stars { letter-spacing: 1px; color: rgba(255, 255, 255, 0.25); }
+.jal-stars--small { font-size: 11px; }
+.jal-stars--big { font-size: 40px; display: block; margin: 4px 0; }
+.jal-stars .is-lit { color: #ffd84d; text-shadow: 0 0 8px rgba(255, 216, 77, 0.6); }
+.jal-controls ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 14px; line-height: 1.4; color: #dce8ff; }
+.jal-keys { margin: 10px 0 0; font-size: 12px; color: #9fb4d8; }
+.jal-header { gap: 8px; }
+.jal-title { margin: 0 6px; font-size: 20px; font-weight: 900; }
+.jal-title small { font-size: 13px; color: #9fb4d8; font-weight: 700; }
+.jal-hud { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; justify-content: center; width: min(640px, 100%); }
+.jal-meter { flex: 1 1 220px; display: flex; align-items: center; gap: 8px; font-weight: 800; }
+.jal-meter__label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: #9fb4d8; }
+.jal-meter__bar { flex: 1; height: 14px; border-radius: 999px; background: rgba(255, 255, 255, 0.1); overflow: hidden; border: 1px solid rgba(140, 200, 255, 0.35); }
+.jal-meter__fill { display: block; height: 100%; background: linear-gradient(90deg, #1572d3, #4fc3ff); border-radius: 999px; }
+.jal-meter__fill.is-low { background: linear-gradient(90deg, #c2410c, #f97316); }
+.jal-meter b { min-width: 42px; text-align: right; font-variant-numeric: tabular-nums; }
+.jal-houses { display: flex; gap: 4px; align-items: center; font-size: 18px; }
+.jal-houses span { filter: grayscale(1) brightness(0.6); transition: filter 0.3s; }
+.jal-houses span.is-lit { filter: drop-shadow(0 0 6px #ffd84d); }
+.jal-houses b { font-size: 15px; margin-left: 4px; }
+.jal-status { margin: 0; display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; font-weight: 700; color: #cfe6ff; min-height: 34px; }
+.jal-stage { position: relative; width: 100%; display: flex; justify-content: center; padding: 10px 0; border-radius: 18px; overflow: hidden;
+  background: radial-gradient(circle at 50% 45%, rgba(146, 92, 255, 0.55), rgba(40, 16, 92, 0) 65%),
+    repeating-conic-gradient(from 0deg at 50% 45%, #3a1d7c 0deg 7deg, #2a145e 7deg 14deg); }
+.jal-canvas { display: block; touch-action: manipulation; cursor: pointer; max-width: 100%; }
+.jal-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 12px;
+  background: rgba(6, 10, 30, 0.55); animation: jal-fade 0.35s ease-out; }
+.jal-result { text-align: center; width: min(380px, 100%); }
+.jal-result h2 { justify-content: center; font-size: 22px; }
+.jal-result p { margin: 4px 0 12px; color: #dce8ff; }
+.jal-result--lost h2 { color: #ff8b97; }
+@keyframes jal-fade { from { opacity: 0; } to { opacity: 1; } }
+@media (max-width: 520px) {
+  .jal-levels { grid-template-columns: repeat(6, 1fr); gap: 5px; }
+  .jal-level b { font-size: 15px; }
+  .jal-title { font-size: 17px; }
+}

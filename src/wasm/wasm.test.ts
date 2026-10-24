@@ -12,6 +12,7 @@ import * as ludoModule from './ludo/ludo.js';
 import * as snakesModule from './snakes_ladders/snakes_ladders.js';
 import * as fleetModule from './fleet_clash/fleet_clash.js';
 import * as carromModule from './carrom/carrom.js';
+import * as jalPathModule from './jal_path/jal_path.js';
 import { decodeMoves } from '../games/checkers/engine';
 import { RenderSlot } from '../games/breakout/engine';
 import { Buttons, Phase as KushJumpPhase, RenderSlot as KushJumpSlot } from '../games/kushjump/engine';
@@ -37,6 +38,8 @@ let jungleStrikeMemory: WebAssembly.Memory;
 let antarikshMemory: WebAssembly.Memory;
 let mithaiMemory: WebAssembly.Memory;
 
+let jalPathMemory: WebAssembly.Memory;
+
 beforeAll(() => {
   breakoutMemory = breakoutModule.initSync({ module: wasmBytes('breakout') }).memory;
   checkersModule.initSync({ module: wasmBytes('checkers') });
@@ -49,11 +52,40 @@ beforeAll(() => {
   snakesModule.initSync({ module: wasmBytes('snakes_ladders') });
   fleetModule.initSync({ module: wasmBytes('fleet_clash') });
   carromModule.initSync({ module: wasmBytes('carrom') });
+  jalPathMemory = jalPathModule.initSync({ module: wasmBytes('jal_path') }).memory;
 });
 
 describe('wasm bindings', () => {
   it('every game .wasm stays small (< 40 KB raw)', () => {
-    for (const name of ['breakout', 'checkers', 'connect_four', 'kush_jump', 'jungle_strike', 'antariksh_defenders', 'mithai_match', 'ludo', 'snakes_ladders', 'fleet_clash', 'carrom']) expect(wasmBytes(name).length, name).toBeLessThan(40 * 1024);
+    for (const name of ['breakout', 'checkers', 'connect_four', 'kush_jump', 'jungle_strike', 'antariksh_defenders', 'mithai_match', 'ludo', 'snakes_ladders', 'fleet_clash', 'carrom', 'jal_path']) expect(wasmBytes(name).length, name).toBeLessThan(40 * 1024);
+  });
+
+  it('Jal Path: tiles read zero-copy (8 bytes each), a solved board waters all three houses, an unsolved one runs dry', () => {
+    expect(jalPathModule.JalPath.level_count()).toBe(18);
+    for (let level = 0; level < 18; level += 5) {
+      const game = new jalPathModule.JalPath(level);
+      const cells = game.width() * game.height();
+      const bytes = () => new Uint8Array(jalPathMemory.buffer, game.tiles_ptr(), cells * 8);
+      const fills = () => new Float32Array(jalPathMemory.buffer, game.tiles_ptr(), cells * 2);
+      expect(Array.from({ length: cells }, (_, cell) => bytes()[cell * 8 + 1]).some(kind => kind === 1)).toBe(true);
+      const ports = game.ports();
+      expect(ports.length).toBe(8);
+      game.debug_solve();
+      expect(game.connected_houses()).toBe(3);
+      expect(game.open_valve()).toBe(true);
+      for (let step = 0; step < 2400 && game.phase() === 1; step++) game.advance(50);
+      expect(game.phase(), `level ${level + 1}`).toBe(2);
+      expect(game.houses_full()).toBe(3);
+      expect(Array.from({ length: cells }, (_, cell) => fills()[cell * 2 + 1]).some(fill => fill >= 1)).toBe(true);
+      expect(game.stars()).toBeGreaterThanOrEqual(1);
+      game.free();
+    }
+    const dry = new jalPathModule.JalPath(0);
+    dry.open_valve();
+    for (let step = 0; step < 4000 && dry.phase() === 1; step++) dry.advance(50);
+    expect(dry.phase()).toBe(3);
+    expect(dry.tank()).toBe(0);
+    dry.free();
   });
 
   it('Kush Jump: runs right through the render buffer, survives a hitch and finishes at the flag', () => {

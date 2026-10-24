@@ -272,6 +272,18 @@ export const games: GameDefinition[] = [
     releaseYear: 2026,
     component: lazy(() => import('./carrom/Carrom')),
   },
+  {
+    id: 'jal-path',
+    title: 'Jal Path',
+    tagline: 'Save the thirsty village: turn the pipes before the tank runs dry.',
+    description: 'A pipe puzzle in 18 levels. Water waits in a tank beside a scrambled maze of straight, elbow, T and cross pipes; tap a pipe to turn it and join the tank to all three houses of the village. Rocks block the way, bolted pipes never turn, cracked pipes leak and open ends spill — and the tank only holds a little more than the best route needs. You get a planning countdown, then the valve opens and water creeps through the pipes (you can still turn dry ones ahead of it). Fill all three houses before the tank empties to win; leftover water earns stars. Later levels grow from 5 × 5 to 8 × 8 with more leaks, more bolted pipes, farther houses and less water. The board, rotation rules, water flow and tank run in Rust compiled to WebAssembly.',
+    categories: ['Puzzle'],
+    status: 'playable',
+    artwork: { gradientFrom: '#1b1060', gradientTo: '#14408c', accentColor: '#4fc3ff', glyph: '💧' },
+    controls: 'Tap a pipe to turn it (or arrows + Space); V open valve; P pause; R restart; M mute',
+    releaseYear: 2026,
+    component: lazy(() => import('./jalpath/JalPath')),
+  },
 ];
 
 /** Genre filter chips on the home page, in this order (only genres that have a playable game are shown). */
