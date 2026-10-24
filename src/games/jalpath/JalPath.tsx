@@ -11,6 +11,7 @@ import { emptyProgress, JalPath, LEVEL_COUNT, loadJalPathEngine, parseProgress, 
 import { cellAt, cellCenter, drawScene, isAnimating, type RotateAnimation, type Scene, type StaticLayer } from './render';
 import { type JalSound, playJalSound } from './sounds';
 import '../shared.css';
+import '../online/online.css';
 import './jalpath.css';
 
 /** After a win/loss keep animating this long (bubbles, glowing houses), then the loop sleeps. */
