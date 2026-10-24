@@ -53,8 +53,10 @@ export default function FleetClashOnline({ role, roomCode, initialMatch, isResto
   const friend = (1 - me) as 0 | 1;
   const friendColor = FLEET_COLORS[friend];
   const secretKey = `${roomCode}:${match.gameNumber}:${myColor}`;
-  const [secret, setSecret] = useState<Secret | null>(() => readSecret(secretKey));
-  useEffect(() => { setSecret(readSecret(secretKey)); }, [secretKey]);
+  // the secret belongs to one game: after a rematch the old fleet must never be used, not even for one render
+  const [stored, setStored] = useState<{ key: string; secret: Secret | null }>(() => ({ key: secretKey, secret: readSecret(secretKey) }));
+  const secret = stored.key === secretKey ? stored.secret : readSecret(secretKey);
+  useEffect(() => { setStored(current => (current.key === secretKey ? current : { key: secretKey, secret: readSecret(secretKey) })); }, [secretKey]);
   const [verified, setVerified] = useState<'checking' | 'ok' | 'bad' | null>(null);
   const [callout, setCallout] = useState<Callout | null>(null);
   const [confirmResign, setConfirmResign] = useState(false);
@@ -140,7 +142,7 @@ export default function FleetClashOnline({ role, roomCode, initialMatch, isResto
         notice={room.notice} actions={actions} swapText={`Next game ${friendColor === FLEET_COLORS[0] ? 'your friend fires' : 'you fire'} first.`} />
       {showPlacement ? (
         <PlacementBoard title="Place your fleet" playerColor={me === 0 ? NAVY : SAFFRON} readyLabel="⚓ Ready — seal my fleet" onSound={sound}
-          onReady={fleet => { unlockAudio(); const value = { fleet, salt: randomSalt() }; saveSecret(secretKey, value); setSecret(value); sound('turn'); }} />
+          onReady={fleet => { unlockAudio(); const value = { fleet, salt: randomSalt() }; saveSecret(secretKey, value); setStored({ key: secretKey, secret: value }); sound('turn'); }} />
       ) : secret && hasJoinedGame ? (
         <BattleView target={battle.seas[me]} incoming={battle.seas[friend] ?? emptySea()} myFleet={secret.fleet} revealFleet={friendReveal?.fleet ?? null}
           canFire={canFire} onFire={cell => { unlockAudio(); if (canFire && battle.seas[me].marks[cell] === 0) actions.playMove(`f${String(cell).padStart(2, '0')}`); }}
