@@ -19,6 +19,9 @@ pub const BASELINE_MIN: f32 = 182.0;
 pub const BASELINE_MAX: f32 = 818.0;
 const CENTRE: f32 = 500.0;
 
+/// The most fixed steps one `advance` call may run (an animation frame needs at most ~24).
+pub const MAX_STEPS_PER_CALL: u32 = 64;
+
 pub const PHASE_AIM: u8 = 0;
 pub const PHASE_MOVING: u8 = 1;
 pub const PHASE_OVER: u8 = 2;
@@ -144,17 +147,19 @@ impl Game {
         true
     }
 
-    /// Advances up to `steps` fixed steps; when everything rests the shot is scored. True while still moving.
+    /// Advances up to `steps` fixed steps (at most MAX_STEPS_PER_CALL, so a bad count — e.g. a negative number from
+    /// JavaScript wrapping to 4 billion — can never finish a whole shot in one frame); when everything rests the shot
+    /// is scored. True while still moving.
     pub fn advance(&mut self, steps: u32) -> bool {
         if self.phase != PHASE_MOVING { return false; }
-        for _ in 0..steps {
+        for _ in 0..steps.min(MAX_STEPS_PER_CALL) {
             let moving = self.world.step();
             if !moving || self.world.steps >= MAX_SHOT_STEPS { self.world.stop_all(); self.finish_shot(); return false; }
         }
         true
     }
 
-    pub fn settle(&mut self) { while self.advance(4000) {} }
+    pub fn settle(&mut self) { while self.advance(MAX_STEPS_PER_CALL) {} }
 
     /// A pocketed body goes back on the board, at the centre or the closest free spot to it.
     fn return_to_centre(&mut self, index: usize) {

@@ -125,3 +125,22 @@ export function aimContact(bodies: Float32Array, x: number, y: number, dx: numbe
   }
   return { kind: 'wall' as const, x: x + dx * wall, y: y + dy * wall };
 }
+
+/**
+ * Fixed-step clock for the animation. A requestAnimationFrame timestamp can be a little *earlier* than the moment the
+ * shot started (it is the start of the frame), so the gap is never negative; the first frame counts as one normal
+ * frame; a gap over 100 ms (background tab, hiccup) also counts as one normal frame; at most MAX_STEPS_PER_FRAME run.
+ */
+export interface FrameClock { last: number | null; carry: number; }
+export const NORMAL_FRAME_MS = 1000 / 60;
+export function frameSteps(clock: FrameClock, now: number): number {
+  let gap = clock.last === null ? NORMAL_FRAME_MS : now - clock.last;
+  clock.last = clock.last === null ? now : Math.max(clock.last, now);
+  if (!(gap >= 0)) gap = 0;
+  if (gap > 100) gap = NORMAL_FRAME_MS;
+  clock.carry += gap;
+  let steps = Math.floor(clock.carry / STEP_MS);
+  clock.carry -= steps * STEP_MS;
+  if (steps > MAX_STEPS_PER_FRAME) { steps = MAX_STEPS_PER_FRAME; clock.carry = 0; }
+  return Math.max(0, steps);
+}

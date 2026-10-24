@@ -63,7 +63,9 @@ const whiteOnBoard = page => page.evaluate(() => { const bodies = window.__carro
   // the computer's turn (if the break didn't pocket a white)
   if ((await state(page)).turn === 1) {
     check(await waitFor(async () => (await page.getByTestId('carrom-status').innerText()).includes('Computer is aiming')), 'the computer takes its turn');
+    const pulsesBefore = await page.evaluate(() => window.__carromTest.pulses());
     check(await waitFor(async () => { const value = await state(page); return value.turn === 0 && !value.animating && value.applied >= 2; }, 60000), 'the computer shoots and the turn comes back');
+    check(await page.evaluate(() => window.__carromTest.pulses()) > pulsesBefore, 'your turn after the computer is announced on the board (striker pulse)');
   }
   // a pocket: put a white coin by the bottom-left pocket and cut it in
   const white = await whiteOnBoard(page);
@@ -127,6 +129,28 @@ const whiteOnBoard = page => page.evaluate(() => { const bodies = window.__carro
   await settled(page, 1);
   check((await state(page)).turn === 1 && (await page.getByTestId('carrom').getAttribute('data-can-shoot')) === 'true', 'two players: after a miss Player 2 shoots from the top on the same device');
   check((await page.getByTestId('carrom-status').innerText()).includes('Player 2'), 'the status names Player 2');
+  // regression: every shot animates over many frames (shots fired at any moment of a frame) and every new turn —
+  // turn change or extra turn — rings the striker and lights the shooter's baseline
+  const pulsesBefore = await page.evaluate(() => window.__carromTest.pulses());
+  for (let shot = 0; shot < 12; shot++) {
+    await waitFor(async () => { const value = await state(page); return !value.animating && value.winner === null; }, 20000, 30);
+    await page.evaluate(mode => new Promise(resolve => {
+      const t = window.__carromTest; const turn = t.state().turn; const y = turn === 0 ? 300 : 700;
+      let x = 250; while (!t.canPlace(x) && x < 800) x += 13;
+      const go = () => { t.shoot(x, x + 30, y, 300); resolve(); };
+      if (mode === 0) requestAnimationFrame(() => setTimeout(go, 1)); else if (mode === 1) requestAnimationFrame(go); else setTimeout(go, Math.random() * 16);
+    }), shot % 3);
+    await page.waitForTimeout(40);
+  }
+  await waitFor(async () => !(await state(page)).animating, 20000, 30);
+  const frames = (await page.evaluate(() => window.__carromTest.frames())).slice(-12);
+  check(frames.length === 12 && frames.every(count => count >= 10), `every shot is animated on the board (frames per shot: ${frames.join(' ')})`);
+  const pulses = await page.evaluate(() => window.__carromTest.pulses());
+  check(pulses - pulsesBefore >= 12, `every new turn is announced with the striker pulse (${pulses - pulsesBefore} pulses for 12 shots)`);
+  await page.evaluate(() => window.__carromTest.shoot(400, 400, 1000, 60));
+  await waitFor(async () => !(await state(page)).animating, 20000, 30);
+  await page.waitForTimeout(350);
+  await page.screenshot({ path: `${screenshotDirectory}/kush-games-carrom-turn-fix.png` });
   await context.close();
 }
 

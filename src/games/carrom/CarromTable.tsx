@@ -9,8 +9,8 @@
 import { type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { drawFrame, paintBoard, toBoard, type Overlay, type View } from './board';
 import {
-  aimContact, BASELINE_MAX, BASELINE_MIN, BASELINE_Y, bodiesView, Carrom, lastOutcome, MAX_STEPS_PER_FRAME, type Outcome, PHASE_AIM, PHASE_MOVING, type Shot, shotText,
-  startShot, STEP_MS, STRIKER_R,
+  aimContact, BASELINE_MAX, BASELINE_MIN, BASELINE_Y, bodiesView, Carrom, frameSteps, type FrameClock, lastOutcome, type Outcome, PHASE_AIM, PHASE_MOVING, type Shot, shotText,
+  startShot, STRIKER_R,
 } from './engine';
 import type { CarromSound } from './sounds';
 
@@ -19,6 +19,7 @@ export interface TableState {
   queenState: number; queenOwner: 0 | 1; applied: number; animating: boolean;
 }
 
+const PULSE_MS = 1400;
 const FULL_PULL = 230; // board units of pull-back for full power
 const GLOW = ['#2ec4b6', '#e50914'] as const;
 
@@ -96,7 +97,7 @@ export function CarromTable({ shots, controllable, flipped, onShoot, onState, on
       const ai = props.current.preview;
       const x = ai ? ai.x : strikerX.current;
       const y = BASELINE_Y[turn];
-      overlay.striker = { x, y, bad: !game.can_place(x), glow: GLOW[turn] };
+      overlay.striker = { x, y, bad: !game.can_place(x), glow: GLOW[turn], pulse: pulse.current ? Math.min(1, (performance.now() - pulse.current.start) / PULSE_MS) : null };
       let direction: { dx: number; dy: number; power: number } | null = aim.current;
       if (ai) { const length = Math.hypot(ai.aimX - ai.x, ai.aimY - y) || 1; direction = { dx: (ai.aimX - ai.x) / length, dy: (ai.aimY - y) / length, power: ai.power / 1000 }; }
       else if (!direction && keyAim.current) direction = { dx: Math.sin(keyAim.current.angle), dy: -Math.cos(keyAim.current.angle) * (turn === 0 ? 1 : -1), power: keyAim.current.charging ?? 0 };
@@ -108,8 +109,28 @@ export function CarromTable({ shots, controllable, flipped, onShoot, onState, on
     drawFrame(canvas.getContext('2d')!, boardImage.current.canvas, v, bodies, overlay);
   }, [game]);
 
+  const startPulse = useCallback(() => {
+    if (game.phase() !== PHASE_AIM) return;
+    if (pulse.current) cancelAnimationFrame(pulse.current.frame);
+    pulseCount.current += 1;
+    const current = { start: performance.now(), frame: 0 };
+    pulse.current = current;
+    const tick = () => {
+      if (pulse.current !== current) return;
+      if (game.phase() !== PHASE_AIM || performance.now() - current.start > PULSE_MS) { pulse.current = null; draw(); return; }
+      draw();
+      current.frame = requestAnimationFrame(tick);
+    };
+    current.frame = requestAnimationFrame(tick);
+  }, [game, draw]);
+
   // ---------- playing the shot list ----------
   const frame = useRef(0);
+  // turn pulse: every new turn (after each shot, incl. extra turns, and when a board loads) rings the striker
+  const pulse = useRef<{ start: number; frame: number } | null>(null);
+  const pulseCount = useRef(0);
+  /** Frames drawn for each animated shot (test hook: every shot must play over many frames). */
+  const framesRef = useRef<number[]>([]);
   const sync = useCallback(() => {
     if (animatingRef.current) return;
     const target = shotsRef.current;
@@ -123,33 +144,27 @@ export function CarromTable({ shots, controllable, flipped, onShoot, onState, on
       appliedRef.current = valid;
       strikerX.current = bodiesView(game)[0];
       aim.current = null; keyAim.current = null;
-      publish(); draw();
+      publish(); draw(); startPulse();
       return;
     }
     if (target.length === applied.length) return;
     const text = target[applied.length];
     if (!startShot(game, text)) { appliedRef.current = [...applied, text]; publish(); return; } // an illegal shot is skipped
     animatingRef.current = true;
+    framesRef.current.push(0);
     aim.current = null; keyAim.current = null;
     props.current.sound('flick');
     publish();
-    let last = performance.now();
-    let carry = 0;
+    const clock: FrameClock = { last: null, carry: 0 };
     const run = (now: number) => {
-      let gap = now - last;
-      last = now;
-      if (gap > 100) gap = 1000 / 60; // dropped gap: don't fast-forward through a stall
-      carry += gap;
-      let steps = Math.floor(carry / STEP_MS);
-      carry -= steps * STEP_MS;
-      if (steps > MAX_STEPS_PER_FRAME) { steps = MAX_STEPS_PER_FRAME; carry = 0; }
-      const moving = game.advance(steps);
+      const moving = game.advance(frameSteps(clock, now));
       const impacts = game.take_impacts();
       const coin = impacts & 0xfff, cushion = (impacts >> 12) & 0xfff, pockets = impacts >>> 24;
       if (coin) props.current.click(coin, false);
       else if (cushion) props.current.click(cushion, true);
       if (pockets) props.current.sound('pocket');
       draw();
+      framesRef.current[framesRef.current.length - 1] += 1;
       if (moving && game.phase() === PHASE_MOVING) { frame.current = requestAnimationFrame(run); return; }
       animatingRef.current = false;
       appliedRef.current = [...appliedRef.current, text];
@@ -157,14 +172,16 @@ export function CarromTable({ shots, controllable, flipped, onShoot, onState, on
       const outcome = lastOutcome(game);
       props.current.onOutcome?.(outcome, appliedRef.current.length - 1);
       publish(); draw();
+      if (shotsRef.current.length === appliedRef.current.length) startPulse();
       sync();
     };
     frame.current = requestAnimationFrame(run);
-  }, [game, publish, draw]);
+  }, [game, publish, draw, startPulse]);
   const shotsRef = useRef(shots);
   shotsRef.current = shots;
   useEffect(() => { sync(); }, [shots, sync]);
-  useEffect(() => { publish(); }, [publish]);
+  useEffect(() => { publish(); startPulse(); }, [publish, startPulse]);
+  useEffect(() => () => { if (pulse.current) cancelAnimationFrame(pulse.current.frame); }, []);
   useEffect(() => () => cancelAnimationFrame(frame.current), []);
 
   // ---------- size ----------
@@ -283,6 +300,8 @@ export function CarromTable({ shots, controllable, flipped, onShoot, onState, on
       shoot: (x: number, aimX: number, aimY: number, power: number) => { strikerX.current = x; props.current.onShoot(shotText({ x, aimX, aimY, power })); },
       striker: () => strikerX.current,
       canPlace: (x: number) => game.can_place(x),
+      frames: () => [...framesRef.current],
+      pulses: () => pulseCount.current,
     };
     (window as unknown as Record<string, unknown>)[`__${testId}Test`] = hooks;
   }, [game, draw, testId]);

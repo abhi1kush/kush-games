@@ -150,3 +150,15 @@ fn computer_players_finish_whole_games_and_harder_is_better() {
     }
     println!("coins per level {pocketed_by_level:?}");
 }
+
+#[test]
+fn one_advance_call_never_plays_out_a_whole_shot() {
+    // a negative step count from JavaScript arrives as a huge u32: it must still be just one frame's worth
+    let mut game = Game::new();
+    assert!(game.shoot(500.0, 503.0, 500.0, 1000));
+    assert!(game.advance(u32::MAX), "still moving after one call");
+    assert_eq!(game.world.steps, MAX_STEPS_PER_CALL);
+    assert_eq!(game.phase, PHASE_MOVING);
+    game.settle();
+    assert_eq!(game.phase, PHASE_AIM);
+}

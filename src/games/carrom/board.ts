@@ -110,7 +110,7 @@ const COIN_STYLE = [
 
 export interface Overlay {
   /** striker on the baseline while aiming (bad = it overlaps a coin) */
-  striker?: { x: number; y: number; bad: boolean; glow: string } | null;
+  striker?: { x: number; y: number; bad: boolean; glow: string; /** 0…1 while a new turn is being announced */ pulse?: number | null } | null;
   aim?: { fromX: number; fromY: number; toX: number; toY: number; contact: { x: number; y: number; push?: readonly [number, number] } | null; power: number } | null;
 }
 
@@ -120,6 +120,17 @@ export function drawFrame(context: CanvasRenderingContext2D, board: HTMLCanvasEl
   context.clearRect(0, 0, context.canvas.width, context.canvas.height);
   context.drawImage(board, 0, 0);
   const scale = unit(view);
+  if (overlay.striker) {
+    // whose turn: the shooter's baseline glows (always while aiming)
+    const { striker } = overlay;
+    const [ax, ay] = toCanvas(view, BASELINE_MIN - 24, striker.y - 24);
+    const [bx, by] = toCanvas(view, BASELINE_MAX + 24, striker.y + 24);
+    context.save();
+    context.fillStyle = striker.glow; context.globalAlpha = 0.22;
+    context.shadowColor = striker.glow; context.shadowBlur = 14 * scale;
+    roundRect(context, Math.min(ax, bx), Math.min(ay, by), Math.abs(bx - ax), Math.abs(by - ay), 24 * scale); context.fill();
+    context.restore();
+  }
   for (let index = BODY_COUNT - 1; index >= 0; index--) {
     const base = index * BODY_STRIDE;
     if (bodies[base + 6] < 0.5 || hidden.includes(index)) continue;
@@ -158,6 +169,16 @@ export function drawFrame(context: CanvasRenderingContext2D, board: HTMLCanvasEl
       context.beginPath(); context.arc(cx, cy, (STRIKER_R + 12) * scale, 0, Math.PI * 2); context.strokeStyle = 'rgba(0,0,0,0.35)'; context.lineWidth = 9 * scale; context.stroke();
       context.beginPath(); context.arc(cx, cy, (STRIKER_R + 12) * scale, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * overlay.aim.power);
       context.strokeStyle = powerColor(overlay.aim.power); context.lineWidth = 9 * scale; context.lineCap = 'round'; context.stroke();
+    }
+    if (striker.pulse != null) {
+      // a new turn: two rings ripple out from the striker
+      for (const wave of [0, 0.35]) {
+        const t = (striker.pulse - wave) / (1 - wave);
+        if (t <= 0 || t >= 1) continue;
+        context.beginPath(); context.arc(cx, cy, STRIKER_R * scale * (1.15 + t * 2.4), 0, Math.PI * 2);
+        context.strokeStyle = striker.glow; context.globalAlpha = 1 - t; context.lineWidth = 6 * scale * (1 - t) + 1; context.stroke();
+        context.globalAlpha = 1;
+      }
     }
     drawDisc(context, 0, cx, cy, STRIKER_R * scale, striker.bad ? '#ff3b3b' : striker.glow);
   }
