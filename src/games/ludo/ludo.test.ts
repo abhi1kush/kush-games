@@ -4,10 +4,11 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { initSync, Ludo } from '../../wasm/ludo/ludo.js';
 import { MemoryBroker, MemoryRoomNetwork } from '../online/memoryRoomNetwork';
 import { hostPeerId } from '../online/room';
-import { LudoAuthority, RECONNECT_GRACE_MS } from './authority';
+import { TurnAuthority, RECONNECT_GRACE_MS } from '../online/turnRoom/authority';
+import { ludoSpec } from './spec';
 import { decodeSnapshot, EnginePhase, HOME_COLUMNS, rotatePoint, TRACK, tokenPoint, YARD } from './engine';
-import { cleanName, parseGuestMessage, parseRoomState } from './protocol';
-import { HOST_GRACE_MS, LudoRoom, type RoomView, type SavedRoom } from './room';
+import { cleanName, parseGuestMessage, parseRoomState } from '../online/turnRoom/protocol';
+import { HOST_GRACE_MS, TurnRoom, type RoomView, type SavedRoom } from '../online/turnRoom/room';
 
 beforeAll(() => { initSync({ module: readFileSync(new URL('../../wasm/ludo/ludo_bg.wasm', import.meta.url)) }); });
 
@@ -50,8 +51,8 @@ function createWorld() {
       networks.push(network);
       let view: RoomView | null = null;
       let saved: SavedRoom | null = null;
-      const room = new LudoRoom({
-        roomCode, myId, myName: name, startAsHost, savedState, network, timers: clock,
+      const room = new TurnRoom({
+        spec: ludoSpec, roomCode, myId, myName: name, startAsHost, savedState, network, timers: clock,
         createEngine: () => new Ludo(7) as never,
         authority: { now: () => time, random, turnSeconds },
         onView: next => { view = next; },
@@ -92,14 +93,14 @@ describe('Ludo board geometry and protocol', () => {
     expect(cleanName('')).toBe('Player');
     expect(parseGuestMessage({ t: 'move', token: 9 })).toBeNull();
     expect(parseGuestMessage({ t: 'join', protocol: 1, clientId: 'p-abcdefgh', name: 'A' })).toEqual({ t: 'join', protocol: 1, clientId: 'p-abcdefgh', name: 'A' });
-    expect(parseRoomState({ version: 1 })).toBeNull();
+    expect(parseRoomState({ version: 1 }, ludoSpec)).toBeNull();
   });
 });
 
 describe('Ludo authority (local pass-and-play)', () => {
   it('plays a whole game of computer players to a full finish order', () => {
     let time = 0;
-    const authority = LudoAuthority.createLocal(new Ludo(3) as never, [0, 1, 2, 3].map(seat => ({ seat, name: `Bot ${seat}`, isBot: true })), { now: () => time, random: Math.random, turnSeconds: 0 });
+    const authority = TurnAuthority.createLocal(ludoSpec, new Ludo(3) as never, [0, 1, 2, 3].map(seat => ({ seat, name: `Bot ${seat}`, isBot: true })), { now: () => time, random: Math.random, turnSeconds: 0 });
     for (let step = 0; step < 50_000 && authority.state.phase === 'playing'; step++) { time += 800; authority.tick(); }
     expect(authority.state.phase).toBe('finished');
     const places = decodeSnapshot(authority.state.snapshot)!.places;

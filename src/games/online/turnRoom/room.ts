@@ -1,16 +1,17 @@
 /**
- * One browser's side of an online Ludo room. It is either the host (runs the LudoAuthority and broadcasts the state)
+ * One browser's side of an online turn-game room (Ludo, Snakes & Ladders). It is either the host (runs the TurnAuthority and broadcasts the state)
  * or a guest (sends intents, shows the host's state) and can switch from guest to host:
  *
- * Host migration: every guest keeps the latest room state (including the 56-byte rules snapshot). If the host leaves
+ * Host migration: every guest keeps the latest room state (including the rules snapshot). If the host leaves
  * on purpose it names a successor, who takes over at once. If the host just disappears, the guests first wait
  * HOST_GRACE_MS (a refresh brings it back), then try to take over in join order, HOST_STAGGER_MS apart. Taking over
  * means claiming the room's PeerJS id; the broker lets only one browser hold it, so there's never two hosts, and
  * everyone else simply reconnects to the same id. A returning old host finds its id taken and rejoins as a guest.
  */
-import type { RoomNetwork, RoomNetworkStatus } from '../online/roomNetwork';
-import { type AuthorityOptions, LudoAuthority, type LudoEngine } from './authority';
-import { type GuestMessage, LUDO_PROTOCOL, parseGuestMessage, parseHostMessage, type RejectReason, type RoomState, successorsOf } from './protocol';
+import type { RoomNetwork, RoomNetworkStatus } from '../roomNetwork';
+import { type AuthorityOptions, TurnAuthority } from './authority';
+import { type GuestMessage, parseGuestMessage, parseHostMessage, type RejectReason, type RoomState, successorsOf } from './protocol';
+import type { TurnEngine, TurnGameSpec, TurnView } from './spec';
 
 export const HOST_GRACE_MS = 8_000;
 export const HOST_STAGGER_MS = 5_000;
@@ -38,7 +39,8 @@ export interface Timers {
   clearInterval(handle: unknown): void;
 }
 
-export interface LudoRoomOptions {
+export interface TurnRoomOptions {
+  spec: TurnGameSpec<TurnView>;
   roomCode: string;
   myId: string;
   myName: string;
@@ -46,16 +48,16 @@ export interface LudoRoomOptions {
   startAsHost: boolean;
   savedState: RoomState | null;
   network: RoomNetwork;
-  createEngine(): LudoEngine;
+  createEngine(): TurnEngine;
   authority: AuthorityOptions;
   timers: Timers;
   onView(view: RoomView): void;
   onSave(room: SavedRoom | null): void;
 }
 
-export class LudoRoom {
+export class TurnRoom {
   private role: 'host' | 'guest' = 'guest';
-  private authority: LudoAuthority | null = null;
+  private authority: TurnAuthority | null = null;
   private lastState: RoomState | null;
   private receivedAt = 0;
   private networkStatus: RoomNetworkStatus = 'starting';
@@ -70,7 +72,7 @@ export class LudoRoom {
   private name: string;
   private stopped = false;
 
-  constructor(private readonly options: LudoRoomOptions) {
+  constructor(private readonly options: TurnRoomOptions) {
     this.lastState = options.savedState;
     this.name = options.myName;
   }
@@ -127,7 +129,7 @@ export class LudoRoom {
       this.options.network.join();
     } else if (status === 'connected' && this.role === 'guest') {
       this.hostLostAt = null;
-      this.options.network.sendToHost({ t: 'join', protocol: LUDO_PROTOCOL, clientId: this.myId, name: this.name });
+      this.options.network.sendToHost({ t: 'join', protocol: this.options.spec.protocol, clientId: this.myId, name: this.name });
     } else if ((status === 'host-lost' || status === 'connecting') && this.role === 'guest' && this.hostLostAt === null && this.lastState) {
       this.hostLostAt = this.now;
     }
@@ -142,13 +144,13 @@ export class LudoRoom {
     this.explicitSuccessor = null;
     const engine = this.options.createEngine();
     if (mode === 'fresh' || !this.lastState) {
-      this.authority = LudoAuthority.createRoom(engine, this.options.roomCode, { clientId: this.myId, name: this.name }, this.options.authority);
+      this.authority = TurnAuthority.createRoom(this.options.spec, engine, this.options.roomCode, { clientId: this.myId, name: this.name }, this.options.authority);
     } else if (this.lastState.hostId === this.myId && mode === 'resume') {
-      this.authority = new LudoAuthority(engine, this.lastState, this.options.authority);
+      this.authority = new TurnAuthority(this.options.spec, engine, this.lastState, this.options.authority);
       // everyone reconnects after a host refresh
       for (const player of this.authority.state.players) if (player.clientId !== this.myId && !player.isBot) this.authority.setConnected(player.clientId, false);
     } else {
-      this.authority = LudoAuthority.adopt(engine, this.lastState, this.myId, this.options.authority);
+      this.authority = TurnAuthority.adopt(this.options.spec, engine, this.lastState, this.myId, this.options.authority);
     }
     this.peers.clear();
     this.options.timers.clearInterval(this.tickTimer);
@@ -202,7 +204,7 @@ export class LudoRoom {
     const message = parseGuestMessage(data);
     if (!message) return;
     if (message.t === 'join') {
-      if (message.protocol !== LUDO_PROTOCOL) { this.reject(peer, 'version'); return; }
+      if (message.protocol !== this.options.spec.protocol) { this.reject(peer, 'version'); return; }
       const result = authority.join(message.clientId, message.name);
       if (!result.ok) {
         if (result.reason === 'kicked') { this.options.network.sendToGuest(peer, { t: 'kicked' }); this.options.network.closeGuest(peer); }
@@ -228,6 +230,7 @@ export class LudoRoom {
       case 'rename': { const before = authority.state.version; authority.rename(clientId, message.name); return authority.state.version !== before; }
       case 'rematch': return authority.rematch(clientId);
       case 'leave': return authority.leave(clientId) !== undefined;
+      case 'variant': return authority.setVariant(clientId, message.value);
       default: return false;
     }
   }
@@ -249,7 +252,7 @@ export class LudoRoom {
   // ---------- guest side ----------
   private handleHostMessage(data: unknown) {
     if (this.role !== 'guest' || this.ending) return;
-    const message = parseHostMessage(data);
+    const message = parseHostMessage(data, this.options.spec);
     if (!message) return;
     switch (message.t) {
       case 'state':
@@ -287,6 +290,7 @@ export class LudoRoom {
   roll() { this.act({ t: 'roll' }); }
   move(token: number) { this.act({ t: 'move', token }); }
   rematch() { this.act({ t: 'rematch' }); }
+  setVariant(value: number) { this.act({ t: 'variant', value }); }
   rename(name: string) { this.name = name; this.act({ t: 'rename', name }); this.save(); }
 
   /** Host only. */

@@ -1,11 +1,10 @@
 /**
- * Ludo room messages and the room state the host broadcasts. Guests only ever send intents (roll, move a token,
+ * Turn-based dice-game rooms (Ludo, Snakes & Ladders): messages and the room state the host broadcasts. Guests only ever send intents (roll, move a token,
  * leave, rename, rematch); the host checks them against its own copy of the rules and its own dice.
  */
-import { normalizeRoomCode } from '../online/room';
-import { decodeSnapshot, SNAPSHOT_LENGTH } from './engine';
+import { normalizeRoomCode } from '../room';
+import type { TurnGameSpec } from './spec';
 
-export const LUDO_PROTOCOL = 1;
 export const MAX_PLAYERS = 4;
 export const NAME_MAX_LENGTH = 16;
 
@@ -20,7 +19,7 @@ export interface RoomPlayer {
   wantsRematch: boolean;
 }
 export interface RoomEvent { id: number; text: string; kind: EventKind; }
-export type EventKind = 'info' | 'capture' | 'home' | 'finish' | 'strike' | 'forfeit' | 'leave' | 'kick' | 'host' | 'join' | 'six' | 'start' | 'over';
+export type EventKind = 'info' | 'capture' | 'home' | 'finish' | 'strike' | 'forfeit' | 'leave' | 'kick' | 'host' | 'join' | 'six' | 'start' | 'over' | 'ladder' | 'snake';
 export interface TurnClock { remainingMs: number; totalMs: number; key: string; }
 
 export interface RoomState {
@@ -34,6 +33,8 @@ export interface RoomState {
   snapshot: number[] | null;
   clock: TurnClock | null;
   turnSeconds: number;
+  /** Game option picked by the host in the lobby (Snakes & Ladders: which board). */
+  variant: number;
   events: RoomEvent[];
 }
 
@@ -44,7 +45,8 @@ export type GuestMessage =
   | { t: 'move'; token: number }
   | { t: 'leave' }
   | { t: 'rename'; name: string }
-  | { t: 'rematch' };
+  | { t: 'rematch' }
+  | { t: 'variant'; value: number };
 export type HostMessage =
   | { t: 'state'; state: RoomState }
   | { t: 'kicked' }
@@ -70,12 +72,13 @@ export function parseGuestMessage(data: unknown): GuestMessage | null {
     case 'roll': case 'leave': case 'rematch': return { t: data.t };
     case 'move': return isInteger(data.token, 0, 3) ? { t: 'move', token: data.token } : null;
     case 'rename': return { t: 'rename', name: cleanName(data.name) };
+    case 'variant': return isInteger(data.value, 0, 31) ? { t: 'variant', value: data.value } : null;
     default: return null;
   }
 }
 
 const STATUSES: readonly PlayerStatus[] = ['lobby', 'playing', 'finished', 'left', 'kicked', 'forfeited'];
-const EVENT_KINDS: readonly EventKind[] = ['info', 'capture', 'home', 'finish', 'strike', 'forfeit', 'leave', 'kick', 'host', 'join', 'six', 'start', 'over'];
+const EVENT_KINDS: readonly EventKind[] = ['info', 'capture', 'home', 'finish', 'strike', 'forfeit', 'leave', 'kick', 'host', 'join', 'six', 'start', 'over', 'ladder', 'snake'];
 
 function parsePlayer(value: unknown): RoomPlayer | null {
   if (!isRecord(value) || !isClientId(value.clientId) || !isInteger(value.seat, 0, 3) || !STATUSES.includes(value.status as PlayerStatus)) return null;
@@ -86,7 +89,7 @@ function parsePlayer(value: unknown): RoomPlayer | null {
 }
 
 /** Validate a room state from the network or storage (the shape, not the game: only the host can change that). */
-export function parseRoomState(value: unknown): RoomState | null {
+export function parseRoomState(value: unknown, spec: Pick<TurnGameSpec, 'snapshotLength' | 'decode'>): RoomState | null {
   if (!isRecord(value) || !isInteger(value.version, 0, Number.MAX_SAFE_INTEGER) || !isClientId(value.hostId) || !isInteger(value.gameNumber, 0, 1e6)) return null;
   const roomCode = typeof value.roomCode === 'string' ? (value.roomCode === 'LOCAL' ? 'LOCAL' : normalizeRoomCode(value.roomCode)) : null;
   if (!roomCode || !['lobby', 'playing', 'finished'].includes(value.phase as string)) return null;
@@ -98,9 +101,9 @@ export function parseRoomState(value: unknown): RoomState | null {
   const banned = Array.isArray(value.banned) ? value.banned.filter(isClientId).slice(0, 50) : [];
   let snapshot: number[] | null = null;
   if (value.snapshot !== null && value.snapshot !== undefined) {
-    if (!Array.isArray(value.snapshot) || value.snapshot.length !== SNAPSHOT_LENGTH || !value.snapshot.every(byte => isInteger(byte, 0, 255))) return null;
+    if (!Array.isArray(value.snapshot) || value.snapshot.length !== spec.snapshotLength || !value.snapshot.every(byte => isInteger(byte, 0, 255))) return null;
     snapshot = [...value.snapshot] as number[];
-    if (!decodeSnapshot(snapshot)) return null;
+    if (!spec.decode(snapshot)) return null;
   }
   let clock: TurnClock | null = null;
   if (isRecord(value.clock) && isInteger(value.clock.remainingMs, 0, 600_000) && isInteger(value.clock.totalMs, 1, 600_000) && typeof value.clock.key === 'string') {
@@ -111,14 +114,15 @@ export function parseRoomState(value: unknown): RoomState | null {
     .slice(-12).map(event => ({ id: event.id, text: event.text.slice(0, 140), kind: event.kind })) : [];
   return {
     version: value.version, roomCode, hostId: value.hostId, phase: value.phase as RoomState['phase'], gameNumber: value.gameNumber,
-    players: players as RoomPlayer[], banned, snapshot, clock, turnSeconds: isInteger(value.turnSeconds, 0, 120) ? value.turnSeconds : 20, events,
+    players: players as RoomPlayer[], banned, snapshot, clock, turnSeconds: isInteger(value.turnSeconds, 0, 120) ? value.turnSeconds : 20,
+    variant: isInteger(value.variant, 0, 31) ? value.variant : 0, events,
   };
 }
 
-export function parseHostMessage(data: unknown): HostMessage | null {
+export function parseHostMessage(data: unknown, spec: Pick<TurnGameSpec, 'snapshotLength' | 'decode'>): HostMessage | null {
   if (!isRecord(data) || typeof data.t !== 'string') return null;
   switch (data.t) {
-    case 'state': { const state = parseRoomState(data.state); return state ? { t: 'state', state } : null; }
+    case 'state': { const state = parseRoomState(data.state, spec); return state ? { t: 'state', state } : null; }
     case 'kicked': return { t: 'kicked' };
     case 'rejected': return ['full', 'in-progress', 'kicked', 'left', 'version'].includes(data.reason as string) ? { t: 'rejected', reason: data.reason as RejectReason } : null;
     case 'host-leaving': return { t: 'host-leaving', successor: isClientId(data.successor) ? data.successor : null };

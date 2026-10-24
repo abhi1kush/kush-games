@@ -19,7 +19,8 @@ import { parseAntarikshSave } from '../games/antariksh/save';
 import { LEVEL_COUNT as MITHAI_LEVELS, levelInfo as mithaiLevelInfo, RenderSlot as MithaiSlot } from '../games/mithai/engine';
 import { emptyMithaiProgress, parseMithaiSave } from '../games/mithai/save';
 import { decodeSnapshot, EnginePhase, YARD } from '../games/ludo/engine';
-import { LudoAuthority } from '../games/ludo/authority';
+import { TurnAuthority } from '../games/online/turnRoom/authority';
+import { ludoSpec } from '../games/ludo/spec';
 
 const wasmBytes = (name: string) => readFileSync(new URL(`./${name}/${name}_bg.wasm`, import.meta.url));
 let breakoutMemory: WebAssembly.Memory;
@@ -224,7 +225,7 @@ describe('wasm bindings', () => {
     let now = 0;
     let seed = 7;
     const random = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
-    const authority = LudoAuthority.createLocal(engine, [0, 1, 2, 3].map(seat => ({ seat, name: `CPU ${seat}`, isBot: true })), { now: () => now, random, turnSeconds: 0 });
+    const authority = TurnAuthority.createLocal(ludoSpec, engine, [0, 1, 2, 3].map(seat => ({ seat, name: `CPU ${seat}`, isBot: true })), { now: () => now, random, turnSeconds: 0 });
     const start = decodeSnapshot(authority.toState().snapshot)!;
     expect(start.phase).toBe(EnginePhase.AwaitRoll);
     expect(start.progress.flat().every(progress => progress === YARD)).toBe(true);

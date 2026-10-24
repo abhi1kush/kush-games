@@ -7,7 +7,7 @@ const FACES: [number, string][] = [[1, 'front'], [2, 'right'], [6, 'back'], [5, 
 
 export interface DiceClock { remainingMs: number; totalMs: number; key: string; }
 
-export function Dice({ value, rollId, canRoll, onRoll, clock, color, isWaiting, label }: {
+export function Dice({ value, rollId, canRoll, onRoll, clock, color, isWaiting, label, testPrefix }: {
   value: number;
   rollId: number;
   canRoll: boolean;
@@ -17,6 +17,8 @@ export function Dice({ value, rollId, canRoll, onRoll, clock, color, isWaiting, 
   /** Dice not rolled yet this turn (shown a little faded). */
   isWaiting: boolean;
   label: string;
+  /** data-testid prefix, e.g. "ludo" → ludo-dice */
+  testPrefix: string;
 }) {
   const spins = useRef(0);
   const lastRoll = useRef(rollId);
@@ -33,24 +35,24 @@ export function Dice({ value, rollId, canRoll, onRoll, clock, color, isWaiting, 
   const turnY = spins.current * 360 + faceY;
   const seconds = useCountdown(clock);
   return (
-    <div className={`ludo-dice${canRoll ? ' can-roll' : ''}${isRolling ? ' is-rolling' : ''}${isWaiting ? ' is-waiting' : ''}`} style={{ ['--seat' as string]: color }}>
+    <div className={`turn-dice${canRoll ? ' can-roll' : ''}${isRolling ? ' is-rolling' : ''}${isWaiting ? ' is-waiting' : ''}`} style={{ ['--seat' as string]: color }}>
       {clock && (
-        <svg className="ludo-dice__ring" viewBox="0 0 100 100" aria-hidden="true">
-          <circle cx="50" cy="50" r="45" className="ludo-dice__ring-track" />
-          <circle key={`${clock.key}-${clock.remainingMs}`} cx="50" cy="50" r="45" className="ludo-dice__ring-time"
+        <svg className="turn-dice__ring" viewBox="0 0 100 100" aria-hidden="true">
+          <circle cx="50" cy="50" r="45" className="turn-dice__ring-track" />
+          <circle key={`${clock.key}-${clock.remainingMs}`} cx="50" cy="50" r="45" className="turn-dice__ring-time"
             style={{ animationDuration: `${clock.totalMs}ms`, animationDelay: `${-(clock.totalMs - clock.remainingMs)}ms` }} />
         </svg>
       )}
-      <button type="button" className="ludo-dice__button" onClick={onRoll} disabled={!canRoll} aria-label={label} data-testid="ludo-dice" data-value={value} data-roll={rollId}>
-        <span className="ludo-dice__cube" style={{ transform: `rotateX(${turnX}deg) rotateY(${turnY}deg)` }}>
+      <button type="button" className="turn-dice__button" onClick={onRoll} disabled={!canRoll} aria-label={label} data-testid={`${testPrefix}-dice`} data-value={value} data-roll={rollId}>
+        <span className="turn-dice__cube" style={{ transform: `rotateX(${turnX}deg) rotateY(${turnY}deg)` }}>
           {FACES.map(([face, side]) => (
-            <span key={face} className={`ludo-dice__face ludo-dice__face--${side}`}>
+            <span key={face} className={`turn-dice__face turn-dice__face--${side}`}>
               {Array.from({ length: 9 }, (_, index) => <i key={index} className={PIPS[face].includes(index) ? 'is-pip' : ''} />)}
             </span>
           ))}
         </span>
       </button>
-      {clock && seconds !== null && <span className={`ludo-dice__seconds${seconds <= 5 ? ' is-low' : ''}`} data-testid="ludo-seconds">{seconds}</span>}
+      {clock && seconds !== null && <span className={`turn-dice__seconds${seconds <= 5 ? ' is-low' : ''}`} data-testid={`${testPrefix}-seconds`}>{seconds}</span>}
     </div>
   );
 }

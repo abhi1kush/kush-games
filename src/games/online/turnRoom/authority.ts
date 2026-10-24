@@ -3,35 +3,20 @@
  * strikes, leaving, removing players and rematches. Guests' intents and the local (pass-and-play) UI both go through
  * here, so online and local games follow exactly the same rules. Time comes from `now()` so tests can drive it.
  */
-import { EnginePhase, decodeSnapshot, type GameView, MAX_STRIKES, NoMoveReason, placeText, SEAT_ORDER, SEATS } from './engine';
 import { cleanName, type EventKind, isSeated, MAX_PLAYERS, type RejectReason, type RoomPlayer, type RoomState, successorsOf } from './protocol';
+import { MAX_STRIKES, placeText, type TurnEngine, type TurnGameSpec, TurnPhase as EnginePhase, type TurnView } from './spec';
 
-/** What the authority needs from the wasm `Ludo` class. */
-export interface LudoEngine {
-  start(seatsMask: number, first: number): boolean;
-  roll(): number;
-  move_token(token: number): boolean;
-  pass_turn(): boolean;
-  timeout(): number;
-  remove_seat(seat: number): boolean;
-  choose_move(): number;
-  phase(): number;
-  current(): number;
-  legal_mask(): number;
-  snapshot(): Uint8Array;
-  restore(bytes: Uint8Array): boolean;
-  reseed(seed: number): void;
-}
+export type { TurnEngine };
 
 export interface AuthorityOptions {
   now(): number;
   random(): number;
   /** Seconds to roll and to move; 0 turns the clock off (local games). */
   turnSeconds: number;
+  /** Starting variant for a new room / local game. */
+  variant?: number;
 }
 
-/** How long the dice stay up after a roll that can't be used, before the turn passes. */
-export const NO_MOVE_PAUSE_MS = 1300;
 /** Computer players think this long. */
 export const BOT_DELAY_MS = 750;
 /** A player who drops out mid-game keeps their seat this long (their turns still time out meanwhile). */
@@ -42,7 +27,7 @@ const EVENT_LIMIT = 12;
 
 export type JoinResult = { ok: true } | { ok: false; reason: RejectReason };
 
-export class LudoAuthority {
+export class TurnAuthority<View extends TurnView = TurnView> {
   state: RoomState;
   private deadline = 0;
   private passAt = 0;
@@ -50,7 +35,7 @@ export class LudoAuthority {
   private turnKey = '';
   private disconnectedAt = new Map<string, number>();
 
-  constructor(private readonly engine: LudoEngine, state: RoomState, private readonly options: AuthorityOptions) {
+  constructor(private readonly spec: TurnGameSpec<View>, private readonly engine: TurnEngine, state: RoomState, private readonly options: AuthorityOptions) {
     this.state = { ...state, players: state.players.map(player => ({ ...player })), banned: [...state.banned], events: [...state.events], clock: null };
     if (state.snapshot) engine.restore(Uint8Array.from(state.snapshot));
     engine.reseed(Math.floor(options.random() * 0xffffffff));
@@ -60,23 +45,23 @@ export class LudoAuthority {
   }
 
   /** A new online room with its creator in the first seat. */
-  static createRoom(engine: LudoEngine, roomCode: string, host: { clientId: string; name: string }, options: AuthorityOptions) {
+  static createRoom<V extends TurnView>(spec: TurnGameSpec<V>, engine: TurnEngine, roomCode: string, host: { clientId: string; name: string }, options: AuthorityOptions) {
     const state: RoomState = {
-      version: 1, roomCode, hostId: host.clientId, phase: 'lobby', gameNumber: 0, banned: [], snapshot: null, clock: null, turnSeconds: options.turnSeconds,
-      players: [{ clientId: host.clientId, name: cleanName(host.name), seat: SEAT_ORDER[0], connected: true, isBot: false, status: 'lobby', wantsRematch: false }],
+      version: 1, roomCode, hostId: host.clientId, phase: 'lobby', gameNumber: 0, banned: [], snapshot: null, clock: null, turnSeconds: options.turnSeconds, variant: options.variant ?? 0,
+      players: [{ clientId: host.clientId, name: cleanName(host.name), seat: spec.seatOrder[0], connected: true, isBot: false, status: 'lobby', wantsRematch: false }],
       events: [],
     };
-    return new LudoAuthority(engine, state, options);
+    return new TurnAuthority(spec, engine, state, options);
   }
 
   /** Pass-and-play: everybody on this device (some may be computer players); the game starts right away. */
-  static createLocal(engine: LudoEngine, seats: { seat: number; name: string; isBot: boolean }[], options: AuthorityOptions) {
+  static createLocal<V extends TurnView>(spec: TurnGameSpec<V>, engine: TurnEngine, seats: { seat: number; name: string; isBot: boolean }[], options: AuthorityOptions) {
     const state: RoomState = {
-      version: 1, roomCode: 'LOCAL', hostId: 'local-host', phase: 'lobby', gameNumber: 0, banned: [], snapshot: null, clock: null, turnSeconds: options.turnSeconds,
-      players: seats.map(({ seat, name, isBot }) => ({ clientId: `local-${seat}`, name: cleanName(name, SEATS[seat].name), seat, connected: true, isBot, status: 'lobby', wantsRematch: false })),
+      version: 1, roomCode: 'LOCAL', hostId: 'local-host', phase: 'lobby', gameNumber: 0, banned: [], snapshot: null, clock: null, turnSeconds: options.turnSeconds, variant: options.variant ?? 0,
+      players: seats.map(({ seat, name, isBot }) => ({ clientId: `local-${seat}`, name: cleanName(name, spec.seatNames[seat]), seat, connected: true, isBot, status: 'lobby', wantsRematch: false })),
       events: [],
     };
-    const authority = new LudoAuthority(engine, state, options);
+    const authority = new TurnAuthority(spec, engine, state, options);
     authority.startGame();
     return authority;
   }
@@ -85,9 +70,9 @@ export class LudoAuthority {
    * Host migration: this browser takes over a room from the last state it saw. The dice get a fresh seed, the turn
    * clock restarts, and the old host (if it didn't leave on purpose) keeps its seat for the reconnect grace period.
    */
-  static adopt(engine: LudoEngine, previous: RoomState, myId: string, options: AuthorityOptions) {
+  static adopt<V extends TurnView>(spec: TurnGameSpec<V>, engine: TurnEngine, previous: RoomState, myId: string, options: AuthorityOptions) {
     const oldHostId = previous.hostId;
-    const authority = new LudoAuthority(engine, { ...previous, version: previous.version + 1000 }, options);
+    const authority = new TurnAuthority(spec, engine, { ...previous, version: previous.version + 1000 }, options);
     const state = authority.state;
     state.hostId = myId;
     const me = authority.player(myId);
@@ -102,7 +87,7 @@ export class LudoAuthority {
   }
 
   player(clientId: string) { return this.state.players.find(player => player.clientId === clientId); }
-  get view(): GameView | null { return decodeSnapshot(this.state.snapshot); }
+  get view(): View | null { return this.spec.decode(this.state.snapshot); }
   private get now() { return this.options.now(); }
 
   private log(text: string, kind: EventKind) {
@@ -112,7 +97,7 @@ export class LudoAuthority {
 
   private changed() { this.state.version += 1; }
 
-  private seatName(seat: number) { return this.state.players.find(player => player.seat === seat && player.status !== 'left' && player.status !== 'kicked')?.name ?? SEATS[seat].name; }
+  private seatName(seat: number) { return this.state.players.find(player => player.seat === seat && player.status !== 'left' && player.status !== 'kicked')?.name ?? this.spec.seatNames[seat]; }
 
   /** Copy the engine into the state; restart clocks when the turn moves on; finish places; game over. */
   private syncTurn(force = false) {
@@ -126,7 +111,7 @@ export class LudoAuthority {
     if (key !== this.turnKey || force) {
       this.turnKey = key;
       if (view.phase === EnginePhase.AwaitRoll || view.phase === EnginePhase.AwaitMove) this.deadline = this.now + this.options.turnSeconds * 1000;
-      if (view.phase === EnginePhase.NoMove) this.passAt = this.now + NO_MOVE_PAUSE_MS;
+      if (view.phase === EnginePhase.Resolving) this.passAt = this.now + this.spec.resolveMs(view);
       this.botAt = this.now + BOT_DELAY_MS;
     }
     if (view.phase === EnginePhase.Over && this.state.phase === 'playing') {
@@ -136,19 +121,11 @@ export class LudoAuthority {
     }
   }
 
-  /** Describe what the last engine action did (captures, homes, finishes) by comparing snapshots. */
-  private describe(before: GameView, after: GameView) {
-    const move = after.lastMove;
-    if (move && move.id !== before.lastMove?.id) {
-      const mover = this.seatName(move.seat);
-      for (const capture of move.captures) this.log(`${mover} captured ${this.seatName(capture.seat)}’s token!`, 'capture');
-      if (move.to === 56) this.log(`${mover} brought a token home`, 'home');
-    }
+  /** Log what the last engine action did (the game's own descriptions, then finishing places). */
+  private describe(before: View, after: View) {
+    this.spec.describe(before, after, seat => this.seatName(seat), (text, kind) => this.log(text, kind));
     for (let seat = 0; seat < 4; seat++) {
       if (after.places[seat] > 0 && before.places[seat] === 0 && after.active & (1 << seat)) this.log(`${this.seatName(seat)} finished ${placeText(after.places[seat])}!`, 'finish');
-    }
-    if (after.phase === EnginePhase.NoMove && after.noMoveReason === NoMoveReason.ThreeSixes && after.rollId !== before.rollId) {
-      this.log(`${this.seatName(after.current)} rolled three 6s — turn lost`, 'six');
     }
   }
 
@@ -187,7 +164,7 @@ export class LudoAuthority {
     if (seated.length >= MAX_PLAYERS) return { ok: false, reason: 'full' };
     if (this.state.phase === 'finished') this.backToLobby();
     const taken = new Set(this.state.players.filter(isSeated).map(player => player.seat));
-    const seat = SEAT_ORDER.find(candidate => !taken.has(candidate))!;
+    const seat = this.spec.seatOrder.find(candidate => !taken.has(candidate))!;
     this.state.players = [...this.state.players.filter(player => player.clientId !== clientId),
       { clientId, name: cleanName(name), seat, connected: true, isBot: false, status: 'lobby', wantsRematch: false }];
     this.log(`${cleanName(name)} joined`, 'join');
@@ -224,6 +201,7 @@ export class LudoAuthority {
     const mask = seated.reduce((bits, player) => bits | (1 << player.seat), 0);
     const first = seated[Math.floor(this.options.random() * seated.length)].seat;
     this.engine.reseed(Math.floor(this.options.random() * 0xffffffff));
+    this.engine.set_variant?.(this.state.variant);
     if (!this.engine.start(mask, first)) return false;
     this.state.players = this.state.players.filter(player => player.status === 'lobby');
     for (const player of this.state.players) { player.status = 'playing'; player.wantsRematch = false; }
@@ -242,6 +220,14 @@ export class LudoAuthority {
     this.state.snapshot = null;
     this.state.players = this.state.players.filter(player => (player.connected || player.isBot) && player.status !== 'left' && player.status !== 'kicked');
     for (const player of this.state.players) { player.status = 'lobby'; player.wantsRematch = false; }
+  }
+
+  /** The host picks the variant (board) in the lobby. */
+  setVariant(byId: string, value: number): boolean {
+    if (byId !== this.state.hostId || this.state.phase === 'playing' || value < 0 || value >= this.spec.variantCount || value === this.state.variant) return false;
+    this.state.variant = value;
+    this.changed();
+    return true;
   }
 
   // ---------- turns ----------
@@ -348,7 +334,7 @@ export class LudoAuthority {
     if (this.state.phase !== 'playing') return changed;
     const phase = this.engine.phase();
     const player = this.currentPlayer();
-    if (phase === EnginePhase.NoMove) {
+    if (phase === EnginePhase.Resolving) {
       if (now >= this.passAt) { this.runEngine(() => this.engine.pass_turn()); changed = true; }
       return changed;
     }

@@ -1,9 +1,9 @@
-/** Generated Ludo sounds (no audio files); they all respect the shared mute setting. */
-import { playSound } from '../sharedSound';
+/** Generated sounds for the turn games (Ludo, Snakes & Ladders) (no audio files); they all respect the shared mute setting. */
+import { playSound } from '../../sharedSound';
 
-export type LudoSound = 'roll' | 'hop' | 'capture' | 'home' | 'six' | 'turn' | 'strike' | 'forfeit' | 'finish' | 'win' | 'join' | 'leave' | 'tick' | 'start';
+export type TurnSound = 'roll' | 'hop' | 'capture' | 'home' | 'six' | 'turn' | 'strike' | 'forfeit' | 'finish' | 'win' | 'join' | 'leave' | 'tick' | 'start' | 'ladder' | 'snake';
 
-export function playLudoSound(kind: LudoSound, isMuted: boolean, step = 0) {
+export function playTurnSound(kind: TurnSound, isMuted: boolean, step = 0) {
   switch (kind) {
     case 'roll':
       playSound({ noises: [0, 0.07, 0.15, 0.24, 0.34].map((startSeconds, index) => ({ durationSeconds: 0.05, volume: 0.09 - index * 0.012, filterFrequency: 1800 + index * 300, filterType: 'bandpass' as BiquadFilterType, startSeconds })) }, isMuted);
@@ -46,6 +46,12 @@ export function playLudoSound(kind: LudoSound, isMuted: boolean, step = 0) {
       return;
     case 'leave':
       playSound({ tones: [{ frequency: 660, durationSeconds: 0.1, volume: 0.05 }, { frequency: 440, durationSeconds: 0.16, volume: 0.05, startSeconds: 0.09 }] }, isMuted);
+      return;
+    case 'ladder':
+      playSound({ tones: [523, 587, 659, 698, 784, 880, 988, 1047].map((frequency, index) => ({ frequency, durationSeconds: 0.07, volume: 0.05, startSeconds: index * 0.06, type: 'triangle' as OscillatorType })) }, isMuted);
+      return;
+    case 'snake':
+      playSound({ tones: [{ frequency: 900, endFrequency: 140, durationSeconds: 0.7, volume: 0.06, type: 'sawtooth' }], noises: [{ durationSeconds: 0.5, volume: 0.04, filterFrequency: 3000, filterType: 'highpass' }] }, isMuted);
       return;
     case 'start':
       playSound({ tones: [392, 523, 659, 784].map((frequency, index) => ({ frequency, durationSeconds: 0.12, volume: 0.06, startSeconds: index * 0.09, type: 'triangle' as OscillatorType })) }, isMuted);

@@ -4,10 +4,9 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { drawBoard, drawToken, toPixels } from './board';
-import { Dice, type DiceClock } from './Dice';
+import { Dice } from '../online/turnRoom/Dice';
+import type { TurnBoardProps } from '../online/turnRoom/TurnGameApp';
 import { EnginePhase, type GameView, HOME, hopPath, MAX_STRIKES, placeText, REMOVED, rotatePoint, SEATS, tokenPoint, YARD, yardCentre } from './engine';
-import type { RoomPlayer } from './protocol';
-import type { LudoSound } from './sounds';
 
 const HOP_MS = 150;
 const CAPTURE_MS = 520;
@@ -25,21 +24,7 @@ interface Animation {
   captureSounded: boolean;
 }
 
-export interface BoardViewProps {
-  view: GameView;
-  players: RoomPlayer[];
-  rotation: number;
-  /** Seats whose turn it is that this screen may play (local humans, or my seat online). */
-  canAct: boolean;
-  hostId: string;
-  myId: string | null;
-  clock: DiceClock | null;
-  onRoll(): void;
-  onMove(token: number): void;
-  sound(kind: LudoSound, step?: number): void;
-}
-
-export function BoardView({ view, players, rotation, canAct, hostId, myId, clock, onRoll, onMove, sound }: BoardViewProps) {
+export function BoardView({ view, players, rotation, canAct, hostId, myId, clock, onRoll, onMove, sound }: TurnBoardProps<GameView>) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const boardImage = useRef<HTMLCanvasElement | null>(null);
@@ -222,7 +207,7 @@ export function BoardView({ view, players, rotation, canAct, hostId, myId, clock
       {isPlaying && (
         <div className="ludo-board__dice" style={percent(yardCentre(view.current))}>
           <Dice value={view.dice || 1} rollId={view.rollId} canRoll={canRoll} onRoll={onRoll} clock={clock} color={SEATS[view.current].color}
-            isWaiting={view.phase === EnginePhase.AwaitRoll} label={canRoll ? 'Roll the dice' : `${currentPlayer?.name ?? SEATS[view.current].name}’s dice`} />
+            isWaiting={view.phase === EnginePhase.AwaitRoll} testPrefix="ludo" label={canRoll ? 'Roll the dice' : `${currentPlayer?.name ?? SEATS[view.current].name}’s dice`} />
         </div>
       )}
       {canMove && [0, 1, 2, 3].filter(token => view.legalMask & (1 << token)).map(token => {
