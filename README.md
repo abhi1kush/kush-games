@@ -183,6 +183,15 @@ cargo install wasm-pack                          # 0.13+ (downloads wasm-bindgen
 
 `npm run build` runs `npm run build:wasm` (`scripts/build-wasm.mjs`, prints the sizes) and then `tsc -b && vite build`. The built `src/wasm/` output is committed, so without `wasm-pack` the script warns and keeps the committed files — `npm ci && npm run build` works either way. `npm run test:rust` runs the cargo tests.
 
+### Colour themes
+
+The ⚙ button in the top-right corner (hub header and game pages) opens a theme picker:
+
+- **Netflix Red** (default) — the dark Netflix-style look with red accents.
+- **Lagoon** — `#163235` page background, `#106967` cards / panels / game bar, `#4fbc9c` logo and accents, `#32bfda` focus rings, links and selected-option highlights, `#efca7c` primary buttons, selected chips and badges (with dark `#163235` text on it). Body text is near-white `#f2fbf8` and secondary text `#cfe9e3`, both ≥ 4.5:1 on both teals (`src/theme.test.ts` checks the contrast pairs).
+
+Themes are CSS custom properties (`:root` and `:root[data-theme="lagoon"]` in `src/styles.css`); hub, cards, chips, buttons, the player bar, shared game chrome and the online-room UI use the variables, while game boards, canvases and SVG thumbnails keep their own art. The choice is saved as `kush-games:theme:save:v1` (the usual versioned envelope) and an inline script in `index.html` applies it before the first paint. The panel closes on an outside tap or Esc; on a game page Esc closes the panel first and only the next Esc leaves the game. `node e2e/theme.mjs <url> /tmp` checks it.
+
 ### Shared sound setting
 
 The newer games (Minesweeper, Sudoku, Tic-Tac-Toe, Memory Match, Flappy Wings, Arrow Out, Color Trails, Breakout, Connect Four, Solitaire, Checkers and Kush Jump) share `src/games/sharedSound.tsx`: generated Web Audio sounds and one 🔊/🔇 button saved as `kush-games-muted` (`M` toggles). Snake, Blocks and Chess keep their own mute settings.

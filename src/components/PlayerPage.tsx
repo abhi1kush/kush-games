@@ -2,6 +2,7 @@ import { Suspense, useEffect } from 'react';
 import { findGame } from '../games/registry';
 import { homePath, navigate } from '../routing';
 import ComingSoonScreen from './ComingSoonScreen';
+import ThemeSettings from './ThemeSettings';
 
 export default function PlayerPage({ gameId }: { gameId: string }) {
   const game = findGame(gameId);
@@ -27,6 +28,7 @@ export default function PlayerPage({ gameId }: { gameId: string }) {
           <span aria-hidden="true">←</span> Back
         </button>
         <span className="player__title">{game ? game.title : 'Game not found'}</span>
+        <ThemeSettings />
       </div>
       <main className="player__stage">
         {!game && (

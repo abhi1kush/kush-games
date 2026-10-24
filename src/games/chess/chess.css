@@ -63,9 +63,9 @@
 .chess-button:hover:not(:disabled) { background: rgba(255,255,255,0.2); }
 .chess-button:disabled { opacity: 0.45; cursor: default; }
 .chess-button--small { padding: 6px 11px; font-size: 13px; }
-.chess-button--primary { background: #fff; color: #000; border-color: #fff; }
-.chess-button--primary:hover:not(:disabled) { background: rgba(255,255,255,0.85); }
-.chess-button--danger { background: #e50914; border-color: #e50914; }
+.chess-button--primary { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
+.chess-button--primary:hover:not(:disabled) { background: var(--primary-hover); }
+.chess-button--danger { background: var(--danger); border-color: var(--danger); }
 
 .chess-game--lobby { align-items: center; }
 .chess-lobby { width: min(440px, 100%); display: flex; flex-direction: column; gap: 12px; }
@@ -76,7 +76,7 @@
 .chess-lobby__card p { margin: 0; color: #aaa; font-size: 14px; line-height: 1.4; }
 .chess-segments { display: flex; border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; overflow: hidden; }
 .chess-segments button { flex: 1; padding: 8px; border: 0; background: transparent; color: #ccc; font-weight: 700; cursor: pointer; font-family: inherit; font-size: 14px; }
-.chess-segments button.is-selected { background: rgba(255,255,255,0.9); color: #000; }
+.chess-segments button.is-selected { background: var(--primary); color: var(--on-primary); }
 
 @media (max-width: 860px) {
   .chess-game { --board: min(calc(100vw - 16px), 560px); padding: 8px 8px 16px; }
