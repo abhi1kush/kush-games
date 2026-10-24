@@ -21,11 +21,12 @@ export interface ThemeOption {
 
 export const THEME_IDS = ['netflix-red', 'lagoon'] as const;
 export type ThemeId = typeof THEME_IDS[number];
-export const DEFAULT_THEME: ThemeId = 'netflix-red';
+/** Visitors who never picked a theme get Lagoon (index.html ships with Lagoon; a saved choice overrides it). */
+export const DEFAULT_THEME: ThemeId = 'lagoon';
 
 export const THEMES: readonly ThemeOption[] = [
+  { id: 'lagoon', name: 'Lagoon', description: 'Deep teal with green, cyan and gold (default)', swatches: ['#163235', '#106967', '#4fbc9c', '#32bfda', '#efca7c'], chromeColor: '#163235', iconSuffix: '-lagoon' },
   { id: 'netflix-red', name: 'Netflix Red', description: 'The classic dark look with red accents', swatches: ['#141414', '#181818', '#e50914', '#ffffff', '#46d369'], chromeColor: '#141414', iconSuffix: '' },
-  { id: 'lagoon', name: 'Lagoon', description: 'Deep teal with green, cyan and gold', swatches: ['#163235', '#106967', '#4fbc9c', '#32bfda', '#efca7c'], chromeColor: '#163235', iconSuffix: '-lagoon' },
 ];
 
 export const THEME_SAVE_ID = 'theme';
@@ -49,7 +50,7 @@ let currentTheme: ThemeId = readInitialTheme();
 const listeners = new Set<() => void>();
 
 /** Bump to make browsers fetch the icons again after they change. */
-export const ICON_VERSION = 4;
+export const ICON_VERSION = 5;
 /** The tab / home-screen icon links in index.html and the file each one points to (before the theme suffix). */
 const ICON_LINKS: [id: string, name: string, extension: string][] = [
   ['favicon-png', 'favicon', '-32.png'], ['favicon-svg', 'favicon', '.svg'], ['apple-touch-icon', 'apple-touch-icon', '.png'],
@@ -61,7 +62,7 @@ export function applyTheme(themeId: ThemeId) {
   if (typeof document === 'undefined') return;
   const theme = THEMES.find(option => option.id === themeId) ?? THEMES[0];
   const root = document.documentElement;
-  if (theme.id === DEFAULT_THEME) delete root.dataset.theme; else root.dataset.theme = theme.id;
+  root.dataset.theme = theme.id;
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme.chromeColor);
   for (const [id, name, extension] of ICON_LINKS) {
     const link = document.getElementById(id) as HTMLLinkElement | null;
@@ -74,7 +75,7 @@ export function setTheme(themeId: ThemeId) {
   if (themeId === currentTheme) return;
   currentTheme = themeId;
   applyTheme(themeId);
-  if (themeId === DEFAULT_THEME) themeSlot.clear(); else themeSlot.save({ theme: themeId });
+  themeSlot.save({ theme: themeId }); // saved even when it's the default, so an explicit choice survives a future default change
   listeners.forEach(listener => listener());
 }
 

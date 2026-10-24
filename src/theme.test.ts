@@ -25,12 +25,12 @@ const contrast = (first: string, second: string) => {
 };
 
 describe('colour themes', () => {
-  it('Netflix Red stays the default and Lagoon uses exactly the requested palette', () => {
-    expect(DEFAULT_THEME).toBe('netflix-red');
-    expect(THEMES.map(theme => theme.id)).toEqual(['netflix-red', 'lagoon']);
+  it('Lagoon is the default and uses exactly the requested palette', () => {
+    expect(DEFAULT_THEME).toBe('lagoon');
+    expect(THEMES.map(theme => theme.id)).toEqual(['lagoon', 'netflix-red']);
     const lagoon = themeVariables(':root[data-theme="lagoon"]');
     expect([lagoon.background, lagoon.surface, lagoon.brand, lagoon.highlight, lagoon.primary]).toEqual(['#163235', '#106967', '#4fbc9c', '#32bfda', '#efca7c']);
-    expect(THEMES[1].swatches).toEqual(['#163235', '#106967', '#4fbc9c', '#32bfda', '#efca7c']);
+    expect(THEMES[0].swatches).toEqual(['#163235', '#106967', '#4fbc9c', '#32bfda', '#efca7c']);
   });
 
   it('Lagoon text meets WCAG AA (4.5:1) on its backgrounds', () => {
@@ -48,10 +48,12 @@ describe('colour themes', () => {
     expect(parseThemeSave('lagoon')).toBeNull();
     expect(THEME_STORAGE_KEY).toBe('kush-games:theme:save:v1');
     expect(html).toContain(`localStorage.getItem('${THEME_STORAGE_KEY}')`);
-    expect(html).toContain("s.data.theme==='lagoon'");
+    expect(html).toContain("s.data.theme==='netflix-red'");
+    expect(html).toContain('<html lang="en" data-theme="lagoon">');
+    expect(html).toContain('<meta name="theme-color" content="#163235" />');
   });
 
-  it('every theme has its favicon files, and the pre-paint script swaps the icon links (which come before it)', () => {
+  it('every theme has its favicon files; the page ships Lagoon icons and the pre-paint script swaps them for a saved red choice', () => {
     const publicFile = (name: string) => readFileSync(new URL(`../public/${name}`, import.meta.url));
     for (const theme of THEMES) {
       for (const name of [`favicon${theme.iconSuffix}.svg`, `favicon${theme.iconSuffix}-32.png`, `apple-touch-icon${theme.iconSuffix}.png`]) expect(publicFile(name).length, name).toBeGreaterThan(200);
@@ -61,6 +63,7 @@ describe('colour themes', () => {
       expect(html.indexOf(`id="${id}"`), id).toBeGreaterThan(0);
       expect(html.indexOf(`id="${id}"`), id).toBeLessThan(script);
     }
-    expect(html).toContain("'/$1-lagoon$2'");
+    for (const file of ['favicon-lagoon-32.png?v=5', 'favicon-lagoon.svg?v=5', 'apple-touch-icon-lagoon.png?v=5']) expect(html).toContain(file); // default icons
+    expect(html).toContain("l.href.replace('-lagoon','')");
   });
 });

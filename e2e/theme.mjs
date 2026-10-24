@@ -1,6 +1,6 @@
-// Theme settings check: ⚙ top-right on the hub and game pages (desktop + 375 px), switching to Lagoon recolours the page,
-// the choice survives a reload (applied by the inline script before the app loads), Esc closes the panel before
-// leaving a game, and switching back to Netflix Red works.
+// Theme settings check: ⚙ top-right on the hub and game pages (desktop + 375 px); a fresh visitor gets Lagoon and the
+// green K; picking Netflix Red recolours the page and the favicon, survives a reload (applied by the inline script before
+// the app loads); Esc closes the panel before leaving a game; switching back to Lagoon works.
 // Usage: node e2e/theme.mjs [siteUrl] [screenshotDirectory]
 import { chromium } from 'playwright-core';
 
@@ -26,7 +26,7 @@ const colors = page => page.evaluate(() => ({
   metaThemeColor: document.querySelector('meta[name="theme-color"]').content,
 }));
 const iconHrefs = page => page.evaluate(() => ['favicon-png', 'favicon-svg', 'apple-touch-icon'].map(id => document.getElementById(id).getAttribute('href') ?? ''));
-const iconsAre = (hrefs, suffix) => hrefs.length === 3 && hrefs.every(href => href.includes('v=4') && (suffix ? href.includes(suffix) : !href.includes('-lagoon')));
+const iconsAre = (hrefs, suffix) => hrefs.length === 3 && hrefs.every(href => href.includes('v=5') && (suffix ? href.includes(suffix) : !href.includes('-lagoon')));
 const allServed = (page, hrefs) => page.evaluate(async list => (await Promise.all(list.map(href => fetch(href).then(response => response.status)))).every(status => status === 200), hrefs);
 const noOverflow = page => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
 const visibleGear = page => page.locator('.nav [data-testid=settings-button]');
@@ -45,48 +45,63 @@ try {
   const gearBox = await gear.boundingBox();
   check(gearBox && gearBox.x + gearBox.width > 1280 - 90 && gearBox.y < 60, `gear top-right on desktop (${Math.round(gearBox?.x)}, ${Math.round(gearBox?.y)})`);
   check(gearBox.width >= 40 && gearBox.height >= 40, `gear tap target ${gearBox.width}×${gearBox.height}`);
-  const red = await colors(page);
-  check(red.theme === 'netflix-red' && red.logo === 'rgb(229, 9, 20)' && red.background === 'rgb(20, 20, 20)', `default is Netflix Red (${JSON.stringify(red)})`);
-  const redIcons = await iconHrefs(page);
-  check(iconsAre(redIcons, ''), `red K favicon links by default (${redIcons.join(', ')})`);
-  check(await allServed(page, redIcons), 'red favicon files return 200');
+  // a fresh visitor (nothing saved) gets Lagoon and the green K
+  const fresh = await colors(page);
+  check(fresh.theme === 'lagoon' && fresh.background === 'rgb(22, 50, 53)' && fresh.logo === 'rgb(79, 188, 156)' && fresh.playButton === 'rgb(239, 202, 124)' && fresh.metaThemeColor === '#163235',
+    `default for a fresh visitor is Lagoon (${JSON.stringify(fresh)})`);
+  const lagoonIcons = await iconHrefs(page);
+  check(iconsAre(lagoonIcons, '-lagoon'), `Lagoon K favicon links by default (${lagoonIcons.join(', ')})`);
+  check(await allServed(page, lagoonIcons), 'Lagoon favicon files return 200');
+  check(await page.evaluate(key => localStorage.getItem(key), THEME_KEY) === null, 'nothing saved until a theme is picked');
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: `${screenshotDirectory}/kush-games-lagoon-default.png` });
+  await page.screenshot({ path: `${screenshotDirectory}/kush-games-theme-lagoon-desktop.png` });
   await gear.click();
   check(await page.getByTestId('settings-panel').isVisible(), 'gear opens the settings panel');
   check(await gear.getAttribute('aria-expanded') === 'true', 'aria-expanded is true while open');
-  check(await page.getByRole('radio', { name: /Netflix Red/ }).getAttribute('aria-checked') === 'true', 'Netflix Red is the checked option');
-  await page.waitForTimeout(300); // panel entrance animation
-  await page.screenshot({ path: `${screenshotDirectory}/kush-games-theme-red-panel.png` });
+  check(await page.getByRole('radio', { name: /Lagoon/ }).getAttribute('aria-checked') === 'true', 'Lagoon is the checked option');
+  check(await page.getByRole('radio', { name: /Lagoon/ }).textContent().then(text => text.includes('default')), 'Lagoon is marked as the default');
   await page.keyboard.press('Escape');
   check(!(await page.getByTestId('settings-panel').isVisible()), 'Esc closes the panel');
+
+  // pick Netflix Red explicitly
   await gear.click();
-  await page.getByTestId('theme-lagoon').click();
+  await page.getByTestId('theme-netflix-red').click();
   await page.waitForTimeout(300); // let the buttons' 150 ms background transition finish
-  const lagoon = await colors(page);
-  check(lagoon.theme === 'lagoon' && lagoon.background === 'rgb(22, 50, 53)' && lagoon.logo === 'rgb(79, 188, 156)' && lagoon.playButton === 'rgb(239, 202, 124)',
-    `Lagoon recolours the page without a reload (${JSON.stringify(lagoon)})`);
-  check(lagoon.metaThemeColor === '#163235', 'browser theme-color follows');
-  const lagoonIcons = await iconHrefs(page);
-  check(iconsAre(lagoonIcons, '-lagoon'), `favicon switches to the Lagoon K instantly (${lagoonIcons.join(', ')})`);
-  check(await allServed(page, lagoonIcons), 'Lagoon favicon files return 200');
+  const red = await colors(page);
+  check(red.theme === 'netflix-red' && red.background === 'rgb(20, 20, 20)' && red.logo === 'rgb(229, 9, 20)',
+    `Netflix Red recolours the page without a reload (${JSON.stringify(red)})`);
+  check(red.metaThemeColor === '#141414', 'browser theme-color follows');
+  const redIcons = await iconHrefs(page);
+  check(iconsAre(redIcons, ''), `favicon switches to the red K instantly (${redIcons.join(', ')})`);
+  check(await allServed(page, redIcons), 'red favicon files return 200');
+  await page.screenshot({ path: `${screenshotDirectory}/kush-games-theme-red-panel.png` });
   await page.mouse.click(400, 500);
   check(!(await page.getByTestId('settings-panel').isVisible()), 'an outside click closes the panel');
-  await page.evaluate(() => window.scrollTo(0, 0));
-  await page.waitForTimeout(300);
-  await page.screenshot({ path: `${screenshotDirectory}/kush-games-theme-lagoon-desktop.png` });
   const saved = await page.evaluate(key => JSON.parse(localStorage.getItem(key)), THEME_KEY);
-  check(saved?.version === 1 && saved?.data?.theme === 'lagoon', 'saved as a versioned envelope');
-
+  check(saved?.version === 1 && saved?.data?.theme === 'netflix-red', 'the explicit Netflix Red choice is saved as a versioned envelope');
   await page.reload({ waitUntil: 'networkidle' });
-  check((await colors(page)).theme === 'lagoon', 'Lagoon persists after a reload');
-  check(iconsAre(await iconHrefs(page), '-lagoon'), 'Lagoon favicon persists after a reload');
-  // before first paint: with the app's JavaScript blocked, the inline script alone must already apply the theme
+  check((await colors(page)).theme === 'netflix-red', 'a saved Netflix Red survives a reload');
+  check(iconsAre(await iconHrefs(page), ''), 'red favicon after a reload');
+  // before first paint: with the app's JavaScript blocked, the inline script alone must apply the saved choice
   const bare = await desktop.newPage();
   await bare.route(/\/assets\/.*\.js$/, route => route.abort());
   await bare.goto(siteUrl, { waitUntil: 'domcontentloaded' });
-  const bareState = await bare.evaluate(() => ({ theme: document.documentElement.dataset.theme, background: getComputedStyle(document.documentElement).getPropertyValue('--background').trim() }));
-  check(iconsAre(await iconHrefs(bare), '-lagoon'), 'the Lagoon favicon is set by index.html before the app runs');
-  check(bareState.theme === 'lagoon', `theme applied by index.html before the app runs (${JSON.stringify(bareState)})`);
+  const bareState = await bare.evaluate(() => ({ theme: document.documentElement.dataset.theme, themeColor: document.querySelector('meta[name="theme-color"]').content }));
+  check(bareState.theme === 'netflix-red' && bareState.themeColor === '#141414', `saved red applied by index.html before the app runs (${JSON.stringify(bareState)})`);
+  check(iconsAre(await iconHrefs(bare), ''), 'red favicon set by index.html before the app runs');
   await bare.close();
+
+  // back to Lagoon
+  await visibleGear(page).click();
+  await page.getByTestId('theme-lagoon').click();
+  const back = await colors(page);
+  check(back.theme === 'lagoon' && back.background === 'rgb(22, 50, 53)' && back.logo === 'rgb(79, 188, 156)', 'switching back to Lagoon works');
+  check(iconsAre(await iconHrefs(page), '-lagoon'), 'favicon switches back to the green K');
+  await page.mouse.click(400, 500);
+  await page.reload({ waitUntil: 'networkidle' });
+  check((await colors(page)).theme === 'lagoon' && iconsAre(await iconHrefs(page), '-lagoon'), 'Lagoon and its favicon after a reload');
 
   // game page: gear in the player bar; Esc closes the panel first, then the next Esc goes back to the hub
   await page.goto(`${siteUrl}#/play/connect-four`, { waitUntil: 'networkidle' });
@@ -102,16 +117,6 @@ try {
   await page.keyboard.press('Escape');
   // (navigation goes through a hashchange event, so give it a moment)
   check(await page.getByTestId('player').waitFor({ state: 'detached', timeout: 3000 }).then(() => true, () => false), 'the next Esc still goes back to the hub');
-
-  // switch back
-  await visibleGear(page).click();
-  await page.getByTestId('theme-netflix-red').click();
-  const back = await colors(page);
-  check(back.theme === 'netflix-red' && back.background === 'rgb(20, 20, 20)' && back.logo === 'rgb(229, 9, 20)', 'switching back to Netflix Red works');
-  check(iconsAre(await iconHrefs(page), ''), 'favicon switches back to the red K');
-  await page.reload({ waitUntil: 'networkidle' });
-  check((await colors(page)).theme === 'netflix-red', 'Netflix Red persists after a reload');
-  check(iconsAre(await iconHrefs(page), ''), 'red favicon after a reload');
   await desktop.close();
 
   // ---------- phone ----------
@@ -129,10 +134,9 @@ try {
   await mobileGear.tap();
   const panelBox = await mobile.getByTestId('settings-panel').boundingBox();
   check(panelBox.x >= 0 && panelBox.x + panelBox.width <= 375, 'panel fits the phone screen');
-  await mobile.getByTestId('theme-lagoon').tap();
   await mobile.mouse.click(180, 400);
   check(!(await mobile.getByTestId('settings-panel').isVisible()), 'tapping outside closes the panel');
-  check((await colors(mobile)).theme === 'lagoon', 'Lagoon on the phone');
+  check((await colors(mobile)).theme === 'lagoon', 'Lagoon by default on the phone');
   check(await noOverflow(mobile), 'still no horizontal scroll in Lagoon');
   await mobile.evaluate(() => window.scrollTo(0, 0));
   await mobile.waitForTimeout(300);

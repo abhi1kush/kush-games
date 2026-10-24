@@ -7,7 +7,7 @@ import { chromium } from 'playwright-core';
 
 const THEMES = {
   '': { background: '#050505', bright: '#e5352a', mid: '#c4271e', dark: '#8e1610', deep: '#4a0805' },          // Netflix Red
-  '-lagoon': { background: '#163235', bright: '#efca7c', mid: '#d4ad62', dark: '#b08a3e', deep: '#7a5a22' },  // Lagoon
+  '-lagoon': { background: '#163235', bright: '#4fbc9c', mid: '#45ab8d', dark: '#348a70', deep: '#1f5c4a' },  // Lagoon
 };
 
 /**
