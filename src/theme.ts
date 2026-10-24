@@ -13,9 +13,8 @@ export interface ThemeOption {
   description: string;
   /** Swatches shown in the picker (the palette, in role order). */
   swatches: string[];
-  /** Browser UI colour (`<meta name="theme-color">`) and favicon fill. */
+  /** Browser UI colour (`<meta name="theme-color">`). */
   chromeColor: string;
-  iconColor: string;
 }
 
 export const THEME_IDS = ['netflix-red', 'lagoon'] as const;
@@ -23,8 +22,8 @@ export type ThemeId = typeof THEME_IDS[number];
 export const DEFAULT_THEME: ThemeId = 'netflix-red';
 
 export const THEMES: readonly ThemeOption[] = [
-  { id: 'netflix-red', name: 'Netflix Red', description: 'The classic dark look with red accents', swatches: ['#141414', '#181818', '#e50914', '#ffffff', '#46d369'], chromeColor: '#141414', iconColor: '#e50914' },
-  { id: 'lagoon', name: 'Lagoon', description: 'Deep teal with green, cyan and gold', swatches: ['#163235', '#106967', '#4fbc9c', '#32bfda', '#efca7c'], chromeColor: '#163235', iconColor: '#4fbc9c' },
+  { id: 'netflix-red', name: 'Netflix Red', description: 'The classic dark look with red accents', swatches: ['#141414', '#181818', '#e50914', '#ffffff', '#46d369'], chromeColor: '#141414' },
+  { id: 'lagoon', name: 'Lagoon', description: 'Deep teal with green, cyan and gold', swatches: ['#163235', '#106967', '#4fbc9c', '#32bfda', '#efca7c'], chromeColor: '#163235' },
 ];
 
 export const THEME_SAVE_ID = 'theme';
@@ -47,15 +46,13 @@ function readInitialTheme(): ThemeId {
 let currentTheme: ThemeId = readInitialTheme();
 const listeners = new Set<() => void>();
 
-/** Put a theme on the page: the data-theme attribute, the browser UI colour and the favicon. */
+/** Put a theme on the page: the data-theme attribute and the browser UI colour (the red K favicon is the same in every theme). */
 export function applyTheme(themeId: ThemeId) {
   if (typeof document === 'undefined') return;
   const theme = THEMES.find(option => option.id === themeId) ?? THEMES[0];
   const root = document.documentElement;
   if (theme.id === DEFAULT_THEME) delete root.dataset.theme; else root.dataset.theme = theme.id;
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme.chromeColor);
-  const icon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
-  if (icon) icon.href = icon.href.replace(/fill='%23[0-9a-fA-F]{6}'/, `fill='%23${theme.iconColor.slice(1)}'`);
 }
 
 export function setTheme(themeId: ThemeId) {
