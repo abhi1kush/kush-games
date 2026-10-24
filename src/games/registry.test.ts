@@ -18,12 +18,12 @@ describe('game registry', () => {
     expect(featuredGame.id).toBe('2048');
     expect(featuredGame.status).toBe('playable');
     expect(games.filter(game => game.status === 'coming-soon')).toEqual([]);
-    expect(games).toHaveLength(19);
+    expect(games).toHaveLength(20);
   });
 
   it('builds one All games grid with genre filters and an empty Coming Soon list (each game shown once)', () => {
     const { playableGames, comingSoonGames, genres } = buildHomeSections();
-    expect(playableGames.map(game => game.id)).toEqual(['2048', 'snake', 'blocks', 'minesweeper', 'sudoku', 'chess', 'tic-tac-toe', 'memory-match', 'flappy-wings', 'breakout', 'arrow-out', 'color-trails', 'connect-four', 'checkers', 'kush-jump', 'jungle-strike', 'antariksh-defenders', 'mithai-match', 'ludo']);
+    expect(playableGames.map(game => game.id)).toEqual(['2048', 'snake', 'blocks', 'minesweeper', 'sudoku', 'chess', 'tic-tac-toe', 'memory-match', 'flappy-wings', 'breakout', 'arrow-out', 'color-trails', 'connect-four', 'checkers', 'kush-jump', 'jungle-strike', 'antariksh-defenders', 'mithai-match', 'ludo', 'snakes-ladders']);
     expect(comingSoonGames).toEqual([]);
     expect(genres.map(entry => entry.genre)).toEqual(['Puzzle', 'Arcade', 'Strategy', 'Classic Board']);
     expect(genres.find(entry => entry.genre === 'Puzzle')!.count).toBe(playableGames.filter(game => game.categories.includes('Puzzle')).length);

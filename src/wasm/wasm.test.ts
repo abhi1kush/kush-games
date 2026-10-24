@@ -9,6 +9,7 @@ import * as jungleStrikeModule from './jungle_strike/jungle_strike.js';
 import * as antarikshModule from './antariksh_defenders/antariksh_defenders.js';
 import * as mithaiModule from './mithai_match/mithai_match.js';
 import * as ludoModule from './ludo/ludo.js';
+import * as snakesModule from './snakes_ladders/snakes_ladders.js';
 import { decodeMoves } from '../games/checkers/engine';
 import { RenderSlot } from '../games/breakout/engine';
 import { Buttons, Phase as KushJumpPhase, RenderSlot as KushJumpSlot } from '../games/kushjump/engine';
@@ -21,6 +22,8 @@ import { emptyMithaiProgress, parseMithaiSave } from '../games/mithai/save';
 import { decodeSnapshot, EnginePhase, YARD } from '../games/ludo/engine';
 import { TurnAuthority } from '../games/online/turnRoom/authority';
 import { ludoSpec } from '../games/ludo/spec';
+import { BOARD_JUMPS, decodeSnapshot as decodeSnakes, EnginePhase as SnakesPhase, jumpTarget } from '../games/snakesladders/engine';
+import { snakesSpec } from '../games/snakesladders/spec';
 
 const wasmBytes = (name: string) => readFileSync(new URL(`./${name}/${name}_bg.wasm`, import.meta.url));
 let breakoutMemory: WebAssembly.Memory;
@@ -38,11 +41,12 @@ beforeAll(() => {
   antarikshMemory = antarikshModule.initSync({ module: wasmBytes('antariksh_defenders') }).memory;
   mithaiMemory = mithaiModule.initSync({ module: wasmBytes('mithai_match') }).memory;
   ludoModule.initSync({ module: wasmBytes('ludo') });
+  snakesModule.initSync({ module: wasmBytes('snakes_ladders') });
 });
 
 describe('wasm bindings', () => {
   it('every game .wasm stays small (< 40 KB raw)', () => {
-    for (const name of ['breakout', 'checkers', 'connect_four', 'kush_jump', 'jungle_strike', 'antariksh_defenders', 'mithai_match', 'ludo']) expect(wasmBytes(name).length, name).toBeLessThan(40 * 1024);
+    for (const name of ['breakout', 'checkers', 'connect_four', 'kush_jump', 'jungle_strike', 'antariksh_defenders', 'mithai_match', 'ludo', 'snakes_ladders']) expect(wasmBytes(name).length, name).toBeLessThan(40 * 1024);
   });
 
   it('Kush Jump: runs right through the render buffer, survives a hitch and finishes at the flag', () => {
@@ -239,5 +243,36 @@ describe('wasm bindings', () => {
     const restored = Array.from(copy.snapshot());
     expect(restored.map((value, index) => value === authority.state.snapshot![index] ? -1 : index).filter(index => index >= 0)).toEqual([]);
     engine.free(); copy.free();
+  });
+  it('Snakes & Ladders: the TypeScript boards match the Rust ones, and every board plays to the end through the authority', () => {
+    expect(snakesModule.SnakesLadders.board_count()).toBe(BOARD_JUMPS.length);
+    BOARD_JUMPS.forEach((jumps, board) => expect(Array.from(snakesModule.SnakesLadders.board_jumps(board))).toEqual(jumps.flat()));
+    for (let board = 0; board < BOARD_JUMPS.length; board++) {
+      const engine = new snakesModule.SnakesLadders(1000 + board);
+      let now = 0;
+      let seed = 11 + board;
+      const random = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+      const authority = TurnAuthority.createLocal(snakesSpec, engine, [0, 1, 2, 3].map(seat => ({ seat, name: `CPU ${seat}`, isBot: true })), { now: () => now, random, turnSeconds: 0, variant: board });
+      const start = decodeSnakes(authority.toState().snapshot)!;
+      expect(start.board).toBe(board);
+      expect(start.phase).toBe(SnakesPhase.AwaitRoll);
+      let jumpsSeen = 0;
+      let lastMove = 0;
+      for (let step = 0; step < 40000 && authority.state.phase === 'playing'; step++) {
+        now += 700; authority.tick();
+        const view = decodeSnakes(authority.state.snapshot)!;
+        if (view.lastMove && view.lastMove.id !== lastMove) {
+          lastMove = view.lastMove.id;
+          expect(view.lastMove.to).toBe(jumpTarget(board, view.lastMove.landed));
+          if (view.lastMove.to !== view.lastMove.landed) jumpsSeen++;
+        }
+      }
+      const end = decodeSnakes(authority.toState().snapshot)!;
+      expect(authority.state.phase).toBe('finished');
+      expect([...end.places].sort()).toEqual([1, 2, 3, 4]);
+      expect(jumpsSeen).toBeGreaterThan(0);
+      expect(authority.state.events.some(event => event.kind === 'ladder' || event.kind === 'snake')).toBe(true);
+      engine.free();
+    }
   });
 });

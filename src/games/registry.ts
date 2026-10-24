@@ -236,6 +236,18 @@ export const games: GameDefinition[] = [
     releaseYear: 2026,
     component: lazy(() => import('./ludo/Ludo')),
   },
+  {
+    id: 'snakes-ladders',
+    title: 'Snakes & Ladders',
+    tagline: 'Climb the ladders, dodge the snakes, race to 100.',
+    description: 'The classic race from 1 to 100 for 2 to 4 players: roll the dice, hop along the winding board, climb up every ladder you land on and slide down every snake. A 6 rolls again (three 6s lose the turn) and you need the exact number to reach 100. Pick one of five hand-drawn boards — Mango Grove (classic), Monsoon Rapids, Temple Steps, Spice Bazaar or Starry Night — and your favourite is remembered. Play online in a room of up to 4 (share the link; the host picks the board, starts the game and can remove players; if the host leaves another player takes over; miss three turns and you are out) or pass and play on one device with computer players. The rules and dice run in Rust compiled to WebAssembly.',
+    categories: ['Classic Board'],
+    status: 'playable',
+    artwork: { gradientFrom: '#0f3d2a', gradientTo: '#1f6b3a', accentColor: '#ffd479', glyph: '🐍' },
+    controls: 'Tap the dice in your corner (or Space) to roll — your token moves by itself; M mute',
+    releaseYear: 2026,
+    component: lazy(() => import('./snakesladders/SnakesLadders')),
+  },
 ];
 
 /** Genre filter chips on the home page, in this order (only genres that have a playable game are shown). */
