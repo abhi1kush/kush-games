@@ -35,3 +35,21 @@ describe('Snakes & Ladders boards and geometry', () => {
     expect(snakesSpec.variantCount).toBe(5);
   });
 });
+
+describe('token drawing', () => {
+  it('the ellipse under a token is opaque, resting or hopping', async () => {
+    const { drawToken, TOKEN_BASE } = await import('./board');
+    for (const lift of [0, 0.5, 1]) {
+      const fills: string[] = [];
+      let style: unknown = '';
+      const gradient = { addColorStop() {} };
+      const context = new Proxy({}, {
+        get: (_, key) => (key === 'fillStyle' ? style : key === 'fill' ? () => fills.push(String(style)) : key.toString().startsWith('create') ? () => gradient : () => undefined),
+        set: (_, key, value) => { if (key === 'fillStyle') style = value; return true; },
+      }) as CanvasRenderingContext2D;
+      drawToken(context, 50, 50, 20, 0, lift);
+      expect(fills[0]).toBe(TOKEN_BASE);
+      expect(fills[0]).toMatch(/^#[0-9a-f]{6}$/i);
+    }
+  });
+});
