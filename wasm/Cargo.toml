@@ -1,6 +1,6 @@
 # One small crate per game, so each game downloads only its own .wasm when it opens.
 [workspace]
-members = ["breakout", "connect_four", "solitaire", "checkers", "kush_jump"]
+members = ["breakout", "connect_four", "solitaire", "checkers", "kush_jump", "jungle_strike"]
 resolver = "2"
 
 [workspace.dependencies]

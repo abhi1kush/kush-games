@@ -15,6 +15,7 @@ import thumbConnectFour from './connect-four.svg';
 import thumbSolitaire from './solitaire.svg';
 import thumbCheckers from './checkers.svg';
 import thumbKushJump from './kush-jump.svg';
+import thumbJungleStrike from './jungle-strike.svg';
 
 export const THUMBNAILS: Record<string, string> = {
   '2048': thumb2048,
@@ -33,4 +34,5 @@ export const THUMBNAILS: Record<string, string> = {
   'solitaire': thumbSolitaire,
   'checkers': thumbCheckers,
   'kush-jump': thumbKushJump,
+  'jungle-strike': thumbJungleStrike,
 };

@@ -200,6 +200,18 @@ export const games: GameDefinition[] = [
     releaseYear: 2026,
     component: lazy(() => import('./kushjump/KushJump')),
   },
+  {
+    id: 'jungle-strike',
+    title: 'Jungle Strike',
+    tagline: 'Run, gun and blast through the jungle to the fortress gate.',
+    description: 'A side-scrolling run-and-gun stage: fight across Green Hell Ridge, aiming in 8 directions while you run, jump or lie flat. Foot soldiers pour in from the edges, turrets and wall cannons track you, snipers pop out of the bushes, and bridges blow up under your boots. Shoot flying capsules for Rapid, Spread or Laser guns, swim the river, reach the checkpoint and destroy the core of the fortified gate. One hit costs a life; 3 lives and 3 continues. The game logic runs in Rust compiled to WebAssembly.',
+    categories: ['Arcade'],
+    status: 'playable',
+    artwork: { gradientFrom: '#0b1a33', gradientTo: '#c8734a', accentColor: '#ffd23f', glyph: '🎯' },
+    controls: 'Arrows/WASD move and aim; Z/J jump; X/K fire (hold); P pause; M mute; on-screen stick and buttons on phones',
+    releaseYear: 2026,
+    component: lazy(() => import('./junglestrike/JungleStrike')),
+  },
 ];
 
 /** Genre filter chips on the home page, in this order (only genres that have a playable game are shown). */

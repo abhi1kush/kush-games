@@ -4,7 +4,7 @@ A Netflix-style home for browser games — dark UI, a big hero banner, and a wra
 
 **Live:** https://abhi1kush.github.io/kush-games/
 
-Built with **React + TypeScript + Vite**; Breakout, Connect Four, Solitaire, Checkers and Kush Jump run their game logic in **Rust compiled to WebAssembly**. Deployed to GitHub Pages from the `gh-pages` branch.
+Built with **React + TypeScript + Vite**; Breakout, Connect Four, Solitaire, Checkers, Kush Jump and Jungle Strike run their game logic in **Rust compiled to WebAssembly**. Deployed to GitHub Pages from the `gh-pages` branch.
 
 ## Features
 
@@ -40,6 +40,7 @@ Built with **React + TypeScript + Vite**; Breakout, Connect Four, Solitaire, Che
 | Solitaire — Klondike (Rust/WebAssembly) | ✅ Playable |
 | Checkers (vs computer, 2 players, or online with a friend; Rust/WebAssembly) | ✅ Playable |
 | Kush Jump — side-scrolling platformer, one stage (Rust/WebAssembly) | ✅ Playable |
+| Jungle Strike — side-scrolling run-and-gun shooter, one stage (Rust/WebAssembly) | ✅ Playable |
 
 ### Snake
 
@@ -148,7 +149,7 @@ A connect-the-dots path puzzle in the style of the "same color / connect two dot
 - **Difficulty:** boards grow 5×5 → 6×6 → 7×7 → 8×8/9×9 → 10×12 (≈ 30px cells on a 375×667 phone). For each level the generator keeps the candidate closest to a rising hardness target, from: share of the board solvable by forced moves alone, solver guesses, average path length and bends, how far paths wander from the direct route, and short (≤ 3 cell) pairs. `npx vite-node scripts/color-trails-metrics.ts 1 5 10 20 30 40 60` prints the table.
 - **Colors:** a color-blind friendlier palette, and every color also has its own small symbol inside its dots.
 
-### Rust/WebAssembly games: Breakout, Connect Four, Solitaire, Checkers, Kush Jump
+### Rust/WebAssembly games: Breakout, Connect Four, Solitaire, Checkers, Kush Jump, Jungle Strike
 
 The UI is React + TypeScript; the rules, physics and AI are Rust crates in `wasm/` (one crate per game, a Cargo workspace), built with `wasm-pack --target web` into `src/wasm/<crate>/`. Each game's `.wasm` is only fetched when that game opens (the hub downloads none). Data crosses the boundary as small typed arrays and integers — never JSON.
 
@@ -173,6 +174,11 @@ Size settings: `opt-level = "z"`, `lto`, `codegen-units = 1`, `panic = "abort"`,
   - One canvas, 240 world units tall and 256–480 wide (fits the screen), camera scrolls forward only. Tiles are pre-rendered sprites (one per kind, rebuilt only on resize) and only on-screen columns are drawn; the far hills/clouds are one repeating strip with parallax; the start, game-over and clear screens stop redrawing.
   - Keyboard: ←/→ or A/D move, Space/↑/W/Z jump (hold for higher), Shift/X run, P pause, M mute, Enter/any key starts. Phones: ◀ ▶ pad (slide between halves), RUN and JUMP buttons, multi-touch; below the stage in portrait, over its corners in landscape. Saves checkpoint, lives, score and coins (`kush-games:kush-jump:save:v1`) when the checkpoint is reached, a life is lost, on pause, tab hidden, `pagehide` and leaving; a refresh restarts from the start or the checkpoint. `?kushJumpTest` exposes `window.__kushJumpTest` (teleport/drop hooks) for `e2e/kush-jump.mjs`.
 
+- **Jungle Strike** — an original side-scrolling run-and-gun stage (own commando, enemies, canvas-drawn art and Web Audio sounds; no image or audio files, no borrowed names or maps). Stage 1 "Green Hell Ridge" is 3 900 units long: jungle ground with rock ledges at two heights (Down + Jump drops through a ledge, not the ground), a bridge over a river that blows up plank by plank once stepped on, the river itself (swim: move and shoot forward or up only, wade out on the far bank), turrets that rise out of the ground and turn 30° at a time toward you, wall cannons (down-left / left / up-left), standing snipers and bush snipers that are bulletproof until they pop up, foot soldiers that keep running in from both screen edges (and leap or drop off ledges), a pit with a ledge over it, a midway checkpoint flag, a second collapsing bridge over a gorge, and the fortified gate: two cannons and a 40-hit core (boss health bar). Flying capsules drop **R** Rapid, **S** Spread (5 pellets) or **L** Laser (piercing). One hit costs a life (the weapon is lost), 3 lives with 2.5 s respawn invincibility, then up to 3 continues from the last checkpoint (score resets).
+  - Rust (`wasm/jungle_strike`) owns everything: 8-way aim (running + up/down = diagonals, standing + down = lie flat, any direction in the air, forward/up in water), somersault jump (small hitbox), one-way platforms, bridges, water, enemies, bullets and particles in fixed-size pools (32 enemies, 40 player bullets, 48 enemy bullets, 96 particles — no allocation after start), scoring, checkpoint, continues and the boss. Same hitch rules as Breakout/Kush Jump: fixed 1/120 s steps, at most 50 ms simulated per frame, gaps over 100 ms dropped and 0.3 s of protection afterwards. The wasm is ~35 KB (≈16 KB gzipped) and loads only when the game opens; JS reads one `Float32Array` render buffer straight from wasm memory each frame.
+  - One canvas (240 units tall, 256–480 wide), forward-only camera; the sky/mountains and palm silhouettes are two pre-rendered parallax strips, ground/ledge/plank/gate are pre-rendered sprites (rebuilt only on resize), only on-screen platforms and objects are drawn.
+  - Keyboard: arrows/WASD move and aim, Z/J/Space jump, X/K fire (hold for auto-fire), P pause, M mute, Enter/any key starts. Phones: an 8-way stick plus JUMP and FIRE (several fingers at once), below the stage in portrait and over its corners in landscape. Saves checkpoint, lives, score, weapon and continues (`kush-games:jungle-strike:save:v1`) on the checkpoint, a lost life, game over, pause, tab hidden, `pagehide` and leaving. `cargo test -p jungle_strike` includes a bot that plays the whole stage without cheats. `?jungleStrikeTest` exposes `window.__jungleStrikeTest` (teleport, invincibility, weapon, spawn hooks and frame timings) for `e2e/jungle-strike.mjs`.
+
 #### Toolchain
 
 ```bash
@@ -195,7 +201,7 @@ Themes are CSS custom properties (`:root` and `:root[data-theme="lagoon"]` in `s
 
 ### Shared sound setting
 
-The newer games (Minesweeper, Sudoku, Tic-Tac-Toe, Memory Match, Flappy Wings, Arrow Out, Color Trails, Breakout, Connect Four, Solitaire, Checkers and Kush Jump) share `src/games/sharedSound.tsx`: generated Web Audio sounds and one 🔊/🔇 button saved as `kush-games-muted` (`M` toggles). Snake, Blocks and Chess keep their own mute settings.
+The newer games (Minesweeper, Sudoku, Tic-Tac-Toe, Memory Match, Flappy Wings, Arrow Out, Color Trails, Breakout, Connect Four, Solitaire, Checkers, Kush Jump and Jungle Strike) share `src/games/sharedSound.tsx`: generated Web Audio sounds and one 🔊/🔇 button saved as `kush-games-muted` (`M` toggles). Snake, Blocks and Chess keep their own mute settings.
 
 ### Chess
 
@@ -266,6 +272,7 @@ Every playable game saves its game in progress to `localStorage` and restores it
 | Connect Four | moves played, opponent, difficulty, who started (tally kept separately) | after every move |
 | Solitaire | deal seed, Draw 1/3, the list of actions (3 bytes each), time | after every action; time on `pagehide` / tab hidden |
 | Checkers | moves played (as legal-move indexes), opponent, difficulty (tally kept separately) | after every move |
+| Jungle Strike | checkpoint reached, lives, score, weapon, continues | checkpoint, a life lost, game over, pause, `pagehide`, tab hidden and leaving (cleared on stage clear) |
 | Kush Jump | checkpoint reached, lives, score, coins | checkpoint reached, a life lost, pause, `pagehide`, tab hidden and leaving (cleared on game over / stage clear) |
 | Blocks | board cells, current piece (type, position, rotation), next queue, 7-bag and random-generator state (so the piece order carries on), hold + can-hold, score, lines, level, timers | on every lock, line clear, hold and pause; on `pagehide`, tab hidden, and leaving the game |
 
@@ -321,6 +328,7 @@ node e2e/four-games.mjs https://abhi1kush.github.io/kush-games/ /tmp  # Breakout
 node e2e/chess-online.mjs https://abhi1kush.github.io/kush-games/ /tmp  # Chess local + online (two browsers)
 node e2e/online-games.mjs https://abhi1kush.github.io/kush-games/ /tmp  # Connect Four + Checkers online (add --peerjs-only for the broker check)
 node e2e/kush-jump.mjs https://abhi1kush.github.io/kush-games/ /tmp     # Kush Jump: move, jump, stomp, checkpoint reload, finish, phone layouts
+node e2e/jungle-strike.mjs https://abhi1kush.github.io/kush-games/ /tmp # Jungle Strike: move, shoot, kill, power-up, checkpoint reload, perf, boss, phones
 ```
 
 ## Deploying
