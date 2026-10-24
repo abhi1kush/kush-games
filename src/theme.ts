@@ -49,7 +49,7 @@ let currentTheme: ThemeId = readInitialTheme();
 const listeners = new Set<() => void>();
 
 /** Bump to make browsers fetch the icons again after they change. */
-export const ICON_VERSION = 3;
+export const ICON_VERSION = 4;
 /** The tab / home-screen icon links in index.html and the file each one points to (before the theme suffix). */
 const ICON_LINKS: [id: string, name: string, extension: string][] = [
   ['favicon-png', 'favicon', '-32.png'], ['favicon-svg', 'favicon', '.svg'], ['apple-touch-icon', 'apple-touch-icon', '.png'],

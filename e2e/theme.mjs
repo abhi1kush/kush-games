@@ -26,7 +26,7 @@ const colors = page => page.evaluate(() => ({
   metaThemeColor: document.querySelector('meta[name="theme-color"]').content,
 }));
 const iconHrefs = page => page.evaluate(() => ['favicon-png', 'favicon-svg', 'apple-touch-icon'].map(id => document.getElementById(id).getAttribute('href') ?? ''));
-const iconsAre = (hrefs, suffix) => hrefs.length === 3 && hrefs.every(href => href.includes('v=3') && (suffix ? href.includes(suffix) : !href.includes('-lagoon')));
+const iconsAre = (hrefs, suffix) => hrefs.length === 3 && hrefs.every(href => href.includes('v=4') && (suffix ? href.includes(suffix) : !href.includes('-lagoon')));
 const allServed = (page, hrefs) => page.evaluate(async list => (await Promise.all(list.map(href => fetch(href).then(response => response.status)))).every(status => status === 200), hrefs);
 const noOverflow = page => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
 const visibleGear = page => page.locator('.nav [data-testid=settings-button]');

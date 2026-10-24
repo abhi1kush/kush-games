@@ -1,32 +1,33 @@
 // Draws the ribbon "K" favicon for each colour theme and exports the files in public/:
 //   favicon[-lagoon].svg, favicon[-lagoon]-32.png, apple-touch-icon[-lagoon].png (180 px, full-bleed for iOS)
 // plus an optional preview sheet. Rasterising uses the same headless Chrome as the e2e checks.
-// Usage: node scripts/build-favicons.mjs [previewPng]
-import { writeFileSync } from 'node:fs';
+// Usage: node scripts/build-favicons.mjs [previewPng] [referenceImage]
+import { readFileSync, writeFileSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 
 const THEMES = {
-  '': { background: '#141414', stem: '#b1060f', arm: '#c4070f', leg: '#e50914' },          // Netflix Red
-  '-lagoon': { background: '#163235', stem: '#b08a3e', arm: '#c9a55c', leg: '#efca7c' },  // Lagoon
+  '': { background: '#050505', bright: '#e5352a', mid: '#c4271e', dark: '#8e1610', deep: '#4a0805' },          // Netflix Red
+  '-lagoon': { background: '#163235', bright: '#efca7c', mid: '#d4ad62', dark: '#b08a3e', deep: '#7a5a22' },  // Lagoon
 };
 
 /**
- * A tall K on a 32-unit grid: the stem and arm are darker ribbons, the bright leg folds over them, and soft shadows
- * mark the folds. Every straight edge sits on an even unit, so the 16 px rendering lands on whole pixels; the letter
- * runs from y 2 to y 30 (one pixel of margin at 16 px).
+ * The ribbon K on a 32-unit grid (traced from the reference: the letter fills y 3.8–28.8). A wide left bar shaded
+ * darker toward its right edge; an upper arm that runs behind the junction (deep shadow at its lower end); a wide leg
+ * in front, bright at the junction and darker toward the bottom right. The bar and leg have slightly curved bottoms.
+ * `crisp` (used for the 16/32 px PNG) trades some shading for contrast: lighter shadows so the arm still shows.
  */
-export function kSvg({ background, stem, arm, leg }, { rounded = true } = {}) {
+export function kSvg({ background, bright, mid, dark, deep }, { rounded = true, crisp = false } = {}) {
+  const armShadow = crisp ? dark : deep;
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
 <defs>
-<linearGradient id="stemFold" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".5"/></linearGradient>
-<linearGradient id="armFold" x1="0" y1="1" x2=".45" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".55"/><stop offset=".7" stop-color="#000" stop-opacity="0"/></linearGradient>
+<linearGradient id="bar" x1="7.6" y1="0" x2="13.3" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="${bright}"/><stop offset=".55" stop-color="${mid}"/><stop offset="1" stop-color="${crisp ? mid : dark}"/></linearGradient>
+<linearGradient id="arm" x1="14.6" y1="15.4" x2="20.4" y2="4.6" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="${armShadow}"/><stop offset=".45" stop-color="${crisp ? mid : dark}"/><stop offset="1" stop-color="${bright}"/></linearGradient>
+<linearGradient id="leg" x1="14.4" y1="13.6" x2="23.6" y2="29.2" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="${bright}"/><stop offset=".6" stop-color="${mid}"/><stop offset="1" stop-color="${crisp ? mid : dark}"/></linearGradient>
 </defs>
-<rect width="32" height="32"${rounded ? ' rx="6"' : ''} fill="${background}"/>
-<path d="M6 2h6v26.8l-6 1.2z" fill="${stem}"/>
-<path d="M10 8h2v12H9z" fill="url(#stemFold)"/>
-<path d="M12 15 20 2h6L16.4 20z" fill="${arm}"/>
-<path d="M12 15 20 2h6L16.4 20z" fill="url(#armFold)"/>
-<path d="M6 8h6.4L26 28.8 19.6 30z" fill="${leg}"/>
+<rect width="32" height="32"${rounded ? ' rx="3.5"' : ''} fill="${background}"/>
+<path d="M18.28 3.8H23.88L16.1 16.5 13.28 12.2V11.6Z" fill="url(#arm)"/>
+<path d="M7.56 3.8H13.28V28.6Q10.3 28.6 7.56 28.88Z" fill="url(#bar)"/>
+<path d="M13.28 12L24.44 28.8Q21.2 28.62 17.96 28.6L13.28 21.2Z" fill="url(#leg)"/>
 </svg>
 `;
 }
@@ -44,7 +45,7 @@ const rasterise = (svg, size) => page.evaluate(async ({ uri, size }) => {
 for (const [suffix, palette] of Object.entries(THEMES)) {
   const svg = kSvg(palette);
   writeFileSync(`public/favicon${suffix}.svg`, svg);
-  writeFileSync(`public/favicon${suffix}-32.png`, Buffer.from(await rasterise(svg, 32), 'base64'));
+  writeFileSync(`public/favicon${suffix}-32.png`, Buffer.from(await rasterise(kSvg(palette, { crisp: true }), 32), 'base64'));
   writeFileSync(`public/apple-touch-icon${suffix}.png`, Buffer.from(await rasterise(kSvg(palette, { rounded: false }), 180), 'base64'));
 }
 
@@ -62,6 +63,16 @@ if (previewPath) {
     });
     rows.push(`<div style="background:${background};display:flex;gap:40px;padding:14px">${cells.join('')}</div>`);
   }
+  const crispRow = Object.entries(THEMES).map(([suffix, palette]) => {
+    const uri = dataUri(kSvg(palette, { crisp: true }));
+    return `<img src="${uri}" width="16" height="16"><img src="${uri}" width="32" height="32"><canvas data-uri="${uri}" data-size="16" width="128" height="128" style="image-rendering:pixelated"></canvas>`;
+  }).join('');
+  rows.push(`<div style="background:#202124;display:flex;gap:18px;align-items:center;padding:14px;font:12px sans-serif;color:#ccc">${crispRow}<span>high-contrast variant used for the 32 px PNG fallback</span></div>`);
+  const referencePath = process.argv[3];
+  const reference = referencePath ? `data:image/png;base64,${readFileSync(referencePath).toString('base64')}` : '';
+  rows.push(`<div style="background:#fff;display:flex;gap:24px;padding:14px;align-items:flex-start;font:12px sans-serif">
+    <figure style="margin:0"><img src="${dataUri(kSvg(THEMES['']))}" width="512" height="512"><figcaption>new SVG, 512 px</figcaption></figure>
+    ${reference ? `<figure style="margin:0"><img src="${reference}" height="512"><figcaption>reference</figcaption></figure>` : ''}</div>`);
   await page.setContent(`<body style="margin:0">${rows.join('')}<div style="font:12px sans-serif;padding:6px 14px">16 · 32 · 180 px, then the 16 px (×8) and 32 px (×4) renderings pixel by pixel</div></body>`);
   await page.evaluate(async () => {
     for (const canvas of document.querySelectorAll('canvas')) {
