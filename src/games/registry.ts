@@ -280,7 +280,7 @@ export const games: GameDefinition[] = [
     categories: ['Puzzle'],
     status: 'playable',
     artwork: { gradientFrom: '#1b1060', gradientTo: '#14408c', accentColor: '#4fc3ff', glyph: '💧' },
-    controls: 'Tap a pipe to turn it (or arrows + Space); V open valve; P pause; R restart; M mute',
+    controls: 'Tap a pipe to turn it (or arrows + Space); H hint (3 per level); V open valve; P pause; R restart; M mute',
     releaseYear: 2026,
     component: lazy(() => import('./jalpath/JalPath')),
   },

@@ -80,6 +80,14 @@ describe('wasm bindings', () => {
       expect(game.stars()).toBeGreaterThanOrEqual(1);
       game.free();
     }
+    const hinted = new jalPathModule.JalPath(3);
+    const cell = hinted.hint_cell();
+    expect(cell).toBeGreaterThanOrEqual(0);
+    const result = hinted.hint();
+    expect(result >> 2).toBe(cell);
+    expect(hinted.debug_solution(cell)).toBe(new Uint8Array(jalPathMemory.buffer, hinted.tiles_ptr(), 64 * 8)[cell * 8]);
+    expect(hinted.hints_left()).toBe(2);
+    hinted.free();
     const dry = new jalPathModule.JalPath(0);
     dry.open_valve();
     for (let step = 0; step < 4000 && dry.phase() === 1; step++) dry.advance(50);

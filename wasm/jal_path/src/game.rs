@@ -15,6 +15,11 @@ pub const STEP_MS: f32 = 1000.0 / 60.0;
 pub const MAX_STEPS_PER_CALL: u32 = 30;
 pub const MAX_SPILLS: usize = 64;
 
+/// Hints allowed per level.
+pub const HINTS_PER_LEVEL: u8 = 3;
+/// Most extra planning time a level can earn from failed tries.
+pub const MAX_EXTRA_PLAN_MS: f32 = 30_000.0;
+
 pub const PHASE_PLANNING: u8 = 0;
 pub const PHASE_FLOWING: u8 = 1;
 pub const PHASE_WON: u8 = 2;
@@ -39,11 +44,12 @@ pub struct Game {
     pub spill_count: usize,
     pub carry_ms: f32,
     pub moves: u32,
+    pub hints_used: u8,
 }
 
 impl Game {
     pub fn new(board: Board, solution: [u8; MAX_CELLS], capacity: f32, plan_ms: f32, speed: f32) -> Game {
-        let mut game = Game { board, solution, phase: PHASE_PLANNING, tank: capacity, capacity, plan_left_ms: plan_ms, speed, needed: 0.0, house_fill: [0.0; 3], spills: [0; MAX_SPILLS], spill_count: 0, carry_ms: 0.0, moves: 0 };
+        let mut game = Game { board, solution, phase: PHASE_PLANNING, tank: capacity, capacity, plan_left_ms: plan_ms, speed, needed: 0.0, house_fill: [0.0; 3], spills: [0; MAX_SPILLS], spill_count: 0, carry_ms: 0.0, moves: 0, hints_used: 0 };
         game.board.mark_connected();
         game
     }
@@ -62,6 +68,57 @@ impl Game {
         self.moves += 1;
         self.board.mark_connected();
         true
+    }
+
+    /// Extra planning time (adaptive difficulty): only while planning, 0…MAX_EXTRA_PLAN_MS, never below the level's base.
+    pub fn add_plan_time(&mut self, ms: f32) -> bool {
+        if self.phase != PHASE_PLANNING || !(ms > 0.0) { return false; }
+        self.plan_left_ms += ms.min(MAX_EXTRA_PLAN_MS);
+        true
+    }
+
+    pub fn hints_left(&self) -> u8 { HINTS_PER_LEVEL.saturating_sub(self.hints_used) }
+
+    /// The next pipe to fix: walking the intended route outward from the tank, the first pipe that is not yet
+    /// turned the right way and may still turn. None when the route is already right (or nothing can turn).
+    pub fn hint_cell(&self) -> Option<u8> {
+        if self.phase > PHASE_FLOWING { return None; }
+        let cells = self.board.cells();
+        let mut queue = [0u8; MAX_CELLS];
+        let mut seen = [false; MAX_CELLS];
+        let (mut head, mut tail) = (0, 0);
+        let start = self.board.source.cell;
+        queue[tail] = start; tail += 1; seen[start as usize] = true;
+        while head < tail {
+            let cell = queue[head]; head += 1;
+            let tile = self.board.tiles[cell as usize];
+            if tile.mask != self.solution[cell as usize] && self.can_rotate(cell) { return Some(cell); }
+            for side in 0..4u8 {
+                if self.solution[cell as usize] & (1 << side) == 0 { continue; }
+                if let Some(next) = self.board.neighbour(cell, side) {
+                    if (next as usize) < cells && !seen[next as usize] && self.solution[next as usize] != 0 { seen[next as usize] = true; queue[tail] = next; tail += 1; }
+                }
+            }
+        }
+        None
+    }
+
+    /// Use a hint: turn that one pipe into place. Returns (cell, quarter turns made), or None (no hints left,
+    /// nothing to fix, or the game is over). Hints never touch more than one pipe.
+    pub fn hint(&mut self) -> Option<(u8, u8)> {
+        if self.hints_left() == 0 { return None; }
+        let cell = self.hint_cell()?;
+        let target = self.solution[cell as usize];
+        let mut turns = 0;
+        while self.board.tiles[cell as usize].mask != target && turns < 4 {
+            self.board.tiles[cell as usize].mask = rotate_mask(self.board.tiles[cell as usize].mask);
+            turns += 1;
+        }
+        if self.board.tiles[cell as usize].mask != target { return None; }
+        self.hints_used += 1;
+        self.moves += 1;
+        self.board.mark_connected();
+        Some((cell, turns))
     }
 
     pub fn open_valve(&mut self) -> bool {
@@ -153,9 +210,13 @@ impl Game {
         // judged on the spare water (what the tank holds beyond the best route's need), so late levels with a
         // tight tank can still earn three stars
         let spare = self.capacity - self.needed;
-        if spare <= 0.0 { return 3; }
-        let left = self.tank / spare;
-        if left >= 0.7 { 3 } else if left >= 0.35 { 2 } else { 1 }
+        let by_water = if spare <= 0.0 { 3 } else {
+            let left = self.tank / spare;
+            if left >= 0.7 { 3 } else if left >= 0.35 { 2 } else { 1 }
+        };
+        // hints cost a little: one or two hints cap the level at two stars, three hints at one
+        let cap = match self.hints_used { 0 => 3, 1 | 2 => 2, _ => 1 };
+        by_water.min(cap)
     }
 
     /// Turns every movable tile to its intended orientation (test/hint helper).

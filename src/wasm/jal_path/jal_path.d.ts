@@ -4,6 +4,7 @@
 export class JalPath {
     free(): void;
     [Symbol.dispose](): void;
+    add_plan_time(ms: number): boolean;
     /**
      * Advance the clock (fixed 1/60 s steps inside; at most half a second per call).
      */
@@ -23,6 +24,16 @@ export class JalPath {
      */
     debug_solve(): void;
     height(): number;
+    /**
+     * Use a hint: turns one pipe into place. Returns cell * 4 + quarter turns, or -1 (none left / nothing to fix).
+     */
+    hint(): number;
+    /**
+     * The pipe a hint would fix (or -1), without using one.
+     */
+    hint_cell(): number;
+    hints_left(): number;
+    hints_used(): number;
     house_fill(house: number): number;
     houses_full(): number;
     level(): number;
@@ -58,6 +69,7 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly __wbg_jalpath_free: (a: number, b: number) => void;
+    readonly jalpath_add_plan_time: (a: number, b: number) => number;
     readonly jalpath_advance: (a: number, b: number) => void;
     readonly jalpath_can_rotate: (a: number, b: number) => number;
     readonly jalpath_capacity: (a: number) => number;
@@ -65,6 +77,10 @@ export interface InitOutput {
     readonly jalpath_debug_solution: (a: number, b: number) => number;
     readonly jalpath_debug_solve: (a: number) => void;
     readonly jalpath_height: (a: number) => number;
+    readonly jalpath_hint: (a: number) => number;
+    readonly jalpath_hint_cell: (a: number) => number;
+    readonly jalpath_hints_left: (a: number) => number;
+    readonly jalpath_hints_used: (a: number) => number;
     readonly jalpath_house_fill: (a: number, b: number) => number;
     readonly jalpath_houses_full: (a: number) => number;
     readonly jalpath_level: (a: number) => number;

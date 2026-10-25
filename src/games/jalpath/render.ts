@@ -5,7 +5,7 @@
  */
 import { EAST, FLAG_CONNECTED, FLAG_FIXED, FLAG_LEAK, isElbow, KIND_PIPE, KIND_ROCK, NO_ENTRY, NORTH, PHASE_FLOWING, PHASE_WON, type Port, SOUTH, type Tile, WEST } from './engine';
 
-export interface RotateAnimation { start: number; from: number }
+export interface RotateAnimation { start: number; from: number; duration?: number }
 export interface Scene {
   level: number;
   width: number;
@@ -23,11 +23,15 @@ export interface Scene {
   now: number;
   rotations: Map<number, RotateAnimation>;
   shakes: Map<number, number>;
+  /** Hinted cells → when the hint was given (a pulsing golden ring). */
+  hints: Map<number, number>;
   cursor: number | null;
 }
 
 export const ROTATE_MS = 150;
 export const SHAKE_MS = 320;
+export const HINT_ROTATE_MS = 650;
+export const HINT_GLOW_MS = 2600;
 const PIPE_COLORS = ['#f39c32', '#4cbb5c', '#a46ee0', '#ec5f93', '#f2c94c', '#38c1b6'];
 const ROOF_COLORS = ['#e50914', '#17a589', '#f08c1a'];
 const WATER = '#2b9cf2';
@@ -453,7 +457,7 @@ export function drawScene(context: CanvasRenderingContext2D, scene: Scene, size:
     let angle = 0;
     const rotation = scene.rotations.get(cell);
     if (rotation) {
-      const t = Math.min(1, (scene.now - rotation.start) / ROTATE_MS);
+      const t = Math.min(1, (scene.now - rotation.start) / (rotation.duration ?? ROTATE_MS));
       angle = rotation.from * (1 - easeOut(t));
       if (t >= 1) scene.rotations.delete(cell);
     }
@@ -477,6 +481,20 @@ export function drawScene(context: CanvasRenderingContext2D, scene: Scene, size:
     const [x, y] = cellOrigin(cell, scene.width, size);
     context.strokeStyle = `rgba(229, 9, 20, ${1 - t})`; context.lineWidth = 3;
     context.beginPath(); context.roundRect(x + 3, y + 3, size - 6, size - 6, size * 0.12); context.stroke();
+  }
+  for (const [cell, start] of scene.hints) {
+    const t = (scene.now - start) / HINT_GLOW_MS;
+    if (t >= 1) { scene.hints.delete(cell); continue; }
+    const [x, y] = cellOrigin(cell, scene.width, size);
+    const pulse = 0.5 + 0.5 * Math.sin(t * Math.PI * 8);
+    context.save();
+    context.globalAlpha = Math.min(1, (1 - t) * 3);
+    context.shadowColor = '#ffd84d';
+    context.shadowBlur = size * (0.2 + 0.25 * pulse);
+    context.strokeStyle = '#ffd84d';
+    context.lineWidth = Math.max(2.5, size * (0.06 + 0.03 * pulse));
+    context.beginPath(); context.roundRect(x + 2, y + 2, size - 4, size - 4, size * 0.16); context.stroke();
+    context.restore();
   }
   drawTank(context, scene, size);
   for (let index = 0; index < scene.houses.length; index++) drawHouse(context, scene, index, size);
@@ -519,5 +537,5 @@ export function cellCenter(cell: number, width: number, size: number): [number, 
 
 /** True while something on screen still moves. */
 export function isAnimating(scene: Scene) {
-  return scene.rotations.size > 0 || scene.shakes.size > 0;
+  return scene.rotations.size > 0 || scene.shakes.size > 0 || scene.hints.size > 0;
 }

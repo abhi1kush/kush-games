@@ -7,8 +7,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { createSaveSlot, SAVE_VERSIONS } from '../persistence';
 import { MuteButton, unlockAudio, useSharedMute } from '../sharedSound';
 import { emptyProgress, JalPath, LEVEL_COUNT, loadJalPathEngine, parseProgress, PHASE_FLOWING, PHASE_LOST, PHASE_PLANNING, PHASE_WON,
-  type Progress, RATES, readPorts, readSpills, readTiles, recordWin } from './engine';
-import { cellAt, cellCenter, drawScene, isAnimating, type RotateAnimation, type Scene, type StaticLayer } from './render';
+  EXTRA_OFF_ON_WIN, EXTRA_ON_FAIL, MAX_EXTRA_SECONDS, type Progress, RATES, readPorts, readSpills, readTiles, recordLoss, recordWin } from './engine';
+import { cellAt, cellCenter, drawScene, HINT_ROTATE_MS, isAnimating, type RotateAnimation, type Scene, type StaticLayer } from './render';
 import { type JalSound, playJalSound } from './sounds';
 import '../shared.css';
 import '../online/online.css';
@@ -46,6 +46,9 @@ function JalPathScreens() {
   const handleWin = useCallback((level: number, stars: number) => {
     setProgress(current => { const next = recordWin(current, level, stars); slot.save(next); return next; });
   }, [slot]);
+  const handleLoss = useCallback((level: number) => {
+    setProgress(current => { const next = recordLoss(current, level); slot.save(next); return next; });
+  }, [slot]);
 
   useEffect(() => {
     if (playing !== null) return;
@@ -56,7 +59,7 @@ function JalPathScreens() {
 
   if (playing !== null) {
     return <LevelScreen key={playing} level={playing} progress={progress} sound={sound} mute={mute} toggleMute={toggleMute}
-      onWin={handleWin} onLevel={setPlaying} onExit={() => setPlaying(null)} />;
+      onWin={handleWin} onLoss={handleLoss} onLevel={setPlaying} onExit={() => setPlaying(null)} />;
   }
   return <StartScreen progress={progress} onPlay={play} mute={mute} />;
 }
@@ -76,12 +79,16 @@ function ControlsCard() {
         <li>Join the tank on the left to <b>all three houses</b>. A pipe that joins up glows blue.</li>
         <li><b>Timing:</b> you get a planning countdown (40 s on level 1, shorter later). The tank only drains once the valve opens —
           when the countdown ends, or earlier with <b>Open valve</b>.</li>
+        <li><b>Adaptive time:</b> if the tank runs dry, that level gives you {EXTRA_ON_FAIL} s more planning next try (up to +{MAX_EXTRA_SECONDS} s);
+          each win takes {EXTRA_OFF_ON_WIN} s of that extra back — never below the level’s normal time.</li>
         <li>Water then moves about two tiles a second. Every pipe it fills uses {RATES.tile} units; each open end spills {RATES.spill} units/s;
           each cracked (rusty) pipe leaks {RATES.leak} units/s once wet; {RATES.evaporation} units/s evaporate.</li>
         <li>Dry pipes can still be turned while water flows; wet pipes are locked. Pause stops the clock.</li>
+        <li><b>Hint</b> (💡 or H): turns one pipe on the route into place and makes it glow — the first wrong, still-dry pipe walking out
+          from the tank. 3 per level, before or during the flow. One or two hints cap that level at ★★, three at ★.</li>
         <li>All three houses full = win. Tank empty first = try again. Stars count the spare water left (the tank holds a bit more than the best route needs): keep ≥ 70% of it for ★★★, ≥ 35% for ★★.</li>
       </ul>
-      <p className="jal-keys">Keys: arrows move · Space/Enter turn · V open valve · P pause · R restart · M mute</p>
+      <p className="jal-keys">Keys: arrows move · Space/Enter turn · V open valve · H hint · P pause · R restart · M mute</p>
     </section>
   );
 }
@@ -120,10 +127,10 @@ function StartScreen({ progress, onPlay, mute }: { progress: Progress; onPlay: (
   );
 }
 
-interface Hud { phase: number; tank: number; planLeft: number; housesFull: number; stars: number; moves: number }
+interface Hud { phase: number; tank: number; planLeft: number; housesFull: number; stars: number; moves: number; hintsLeft: number }
 const readHud = (game: JalPath): Hud => ({
   phase: game.phase(), tank: game.capacity() > 0 ? game.tank() / game.capacity() : 0, planLeft: game.plan_left_ms(),
-  housesFull: game.houses_full(), stars: game.stars(), moves: game.moves(),
+  housesFull: game.houses_full(), stars: game.stars(), moves: game.moves(), hintsLeft: game.hints_left(),
 });
 
 interface LevelProps {
@@ -133,14 +140,20 @@ interface LevelProps {
   mute: React.ReactNode;
   toggleMute: () => void;
   onWin: (level: number, stars: number) => void;
+  onLoss: (level: number) => void;
   onLevel: (level: number) => void;
   onExit: () => void;
 }
 
-function LevelScreen({ level, sound, mute, toggleMute, onWin, onLevel, onExit }: LevelProps) {
+function LevelScreen({ level, progress, sound, mute, toggleMute, onWin, onLoss, onLevel, onExit }: LevelProps) {
+  const extraSeconds = progress.extraSeconds[level] ?? 0;
+  const extraRef = useRef(extraSeconds);
+  extraRef.current = extraSeconds;
+  const createGame = () => { const created = new JalPath(level); if (extraRef.current > 0) created.add_plan_time(extraRef.current * 1000); return created; };
+  const [startExtra, setStartExtra] = useState(extraSeconds);
   const [attempt, setAttempt] = useState(0);
   const gameRef = useRef<JalPath | null>(null);
-  if (!gameRef.current) gameRef.current = new JalPath(level);
+  if (!gameRef.current) gameRef.current = createGame();
   const [hud, setHud] = useState<Hud>(() => readHud(gameRef.current!));
   const [isPaused, setIsPaused] = useState(false);
   const pausedRef = useRef(false);
@@ -151,6 +164,8 @@ function LevelScreen({ level, sound, mute, toggleMute, onWin, onLevel, onExit }:
   const layerRef = useRef<StaticLayer | null>(null);
   const rotationsRef = useRef(new Map<number, RotateAnimation>());
   const shakesRef = useRef(new Map<number, number>());
+  const hintsRef = useRef(new Map<number, number>());
+  const [hintNote, setHintNote] = useState('');
   const cursorRef = useRef<number | null>(null);
   const frameRef = useRef(0);
   const lastFrameRef = useRef(0);
@@ -177,7 +192,7 @@ function LevelScreen({ level, sound, mute, toggleMute, onWin, onLevel, onExit }:
       level, width: current.width(), height: current.height(), tiles: readTiles(current), source: ports.source, houses: ports.houses,
       houseFill: [0, 1, 2].map(index => current.house_fill(index)), spills: readSpills(current),
       tankFraction: current.capacity() > 0 ? current.tank() / current.capacity() : 0, phase: current.phase(), time: clockRef.current / 1000,
-      now: performance.now(), rotations: rotationsRef.current, shakes: shakesRef.current, cursor: cursorRef.current,
+      now: performance.now(), rotations: rotationsRef.current, shakes: shakesRef.current, hints: hintsRef.current, cursor: cursorRef.current,
     };
     drawScene(context, scene, sizeRef.current, window.devicePixelRatio || 1, layerRef);
   }, [level]);
@@ -196,13 +211,14 @@ function LevelScreen({ level, sound, mute, toggleMute, onWin, onLevel, onExit }:
       if (phase === PHASE_LOST) { sound('lose'); settleUntilRef.current = performance.now() + SETTLE_MS; }
     }
     if (phase === PHASE_WON && !reportedRef.current) { reportedRef.current = true; onWin(level, current.stars()); }
+    if (phase === PHASE_LOST && !reportedRef.current) { reportedRef.current = true; onLoss(level); }
     seenRef.current = { spills, houses, phase };
-  }, [level, onWin, sound]);
+  }, [level, onWin, onLoss, sound]);
 
   const needsFrames = useCallback(() => {
     const current = gameRef.current;
     if (!current) return false;
-    const scene = { rotations: rotationsRef.current, shakes: shakesRef.current } as Scene;
+    const scene = { rotations: rotationsRef.current, shakes: shakesRef.current, hints: hintsRef.current } as Scene;
     if (isAnimating(scene)) return true;
     if (pausedRef.current) return false;
     return current.phase() === PHASE_FLOWING || performance.now() < settleUntilRef.current;
@@ -285,6 +301,7 @@ function LevelScreen({ level, sound, mute, toggleMute, onWin, onLevel, onExit }:
     if (!current || pausedRef.current) return;
     const phase = current.phase();
     if (phase === PHASE_WON || phase === PHASE_LOST) return;
+    setHintNote('');
     if (current.can_rotate(cell) && current.rotate(cell)) {
       const now = performance.now();
       const previous = rotationsRef.current.get(cell);
@@ -296,6 +313,25 @@ function LevelScreen({ level, sound, mute, toggleMute, onWin, onLevel, onExit }:
       shakesRef.current.set(cell, performance.now());
       sound('blocked');
     }
+    setHud(readHud(current));
+    wake();
+  }, [sound, wake]);
+
+  const showHint = useCallback(() => {
+    const current = gameRef.current;
+    if (!current || pausedRef.current) return;
+    const phase = current.phase();
+    if (phase === PHASE_WON || phase === PHASE_LOST) return;
+    if (current.hints_left() === 0) { setHintNote('No hints left on this level.'); sound('blocked'); return; }
+    const result = current.hint();
+    if (result < 0) { setHintNote(phase === PHASE_PLANNING ? 'The route is already right — open the valve!' : 'Nothing left that a hint can turn.'); sound('blocked'); return; }
+    const cell = result >> 2;
+    const turns = result & 3;
+    const now = performance.now();
+    rotationsRef.current.set(cell, { start: now, from: -turns * Math.PI / 2, duration: HINT_ROTATE_MS });
+    hintsRef.current.set(cell, now);
+    setHintNote(current.hints_left() === 0 ? 'That was your last hint for this level.' : `Hint: that glowing pipe is now turned the right way. ${current.hints_left()} left.`);
+    sound('turn');
     setHud(readHud(current));
     wake();
   }, [sound, wake]);
@@ -317,8 +353,9 @@ function LevelScreen({ level, sound, mute, toggleMute, onWin, onLevel, onExit }:
 
   const restart = useCallback(() => {
     gameRef.current?.free();
-    gameRef.current = new JalPath(level);
-    rotationsRef.current.clear(); shakesRef.current.clear();
+    gameRef.current = createGame();
+    setStartExtra(extraRef.current);
+    rotationsRef.current.clear(); shakesRef.current.clear(); hintsRef.current.clear(); setHintNote('');
     seenRef.current = { spills: 0, houses: 0, phase: PHASE_PLANNING };
     reportedRef.current = false;
     settleUntilRef.current = 0;
@@ -356,13 +393,14 @@ function LevelScreen({ level, sound, mute, toggleMute, onWin, onLevel, onExit }:
       else if (key === 'ArrowDown') move(0, 1);
       else if ((key === ' ' || key === 'Enter') && cursor !== null && !(event.target instanceof HTMLButtonElement)) { event.preventDefault(); turn(cursor); }
       else if (key === 'v' || key === 'V') openValve();
+      else if (key === 'h' || key === 'H') showHint();
       else if (key === 'p' || key === 'P') setPaused(!pausedRef.current);
       else if (key === 'r' || key === 'R') restart();
       else if (key === 'm' || key === 'M') toggleMute();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [width, height, draw, turn, openValve, setPaused, restart, toggleMute]);
+  }, [width, height, draw, turn, openValve, showHint, setPaused, restart, toggleMute]);
 
   const onPointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
     unlockAudio();
@@ -380,6 +418,7 @@ function LevelScreen({ level, sound, mute, toggleMute, onWin, onLevel, onExit }:
       state: () => { const current = gameRef.current!; return { ...readHud(current), level, width, height, capacity: current.capacity(), tankUnits: current.tank(), spills: current.spills().length, paused: pausedRef.current, animating: frameRef.current !== 0 }; },
       solve: () => { gameRef.current!.debug_solve(); setHud(readHud(gameRef.current!)); draw(); },
       openValve: () => openValve(),
+      hintCell: () => gameRef.current!.hint_cell(),
       cellPoint: (cell: number) => { const rect = canvasRef.current!.getBoundingClientRect(); const [x, y] = cellCenter(cell, width, sizeRef.current); return { x: rect.left + x, y: rect.top + y }; },
       tiles: () => readTiles(gameRef.current!),
       solution: (cell: number) => gameRef.current!.debug_solution(cell),
@@ -391,6 +430,10 @@ function LevelScreen({ level, sound, mute, toggleMute, onWin, onLevel, onExit }:
 
   const tankPercent = Math.round(Math.max(0, hud.tank) * 100);
   const isOver = hud.phase === PHASE_WON || hud.phase === PHASE_LOST;
+  const hintButton = (
+    <button type="button" className="game-button jal-hint" onClick={showHint} disabled={isPaused || hud.hintsLeft === 0} data-testid="jal-hint"
+      title="Hint (H): turns one pipe on the route into place" aria-label={`Hint, ${hud.hintsLeft} left`}>💡 Hint <b>{hud.hintsLeft}</b></button>
+  );
   return (
     <div className="game-shell jal" data-testid="jal-screen" data-phase={hud.phase} data-level={level + 1}>
       <div className="game-shell__header jal-header">
@@ -413,11 +456,13 @@ function LevelScreen({ level, sound, mute, toggleMute, onWin, onLevel, onExit }:
       </div>
       {hud.phase === PHASE_PLANNING && (
         <div className="jal-status" data-testid="jal-status">
-          <span>Valve opens in <b>{Math.ceil(hud.planLeft / 1000)} s</b></span>
+          <span>Valve opens in <b data-testid="jal-countdown">{Math.ceil(hud.planLeft / 1000)} s</b>{startExtra > 0 && <small className="jal-extra" data-testid="jal-extra"> (+{startExtra} s extra from earlier tries)</small>}</span>
           <button type="button" className="online-button online-button--primary online-button--small" onClick={openValve} disabled={isPaused} data-testid="jal-valve">Open valve now</button>
+          {hintButton}
         </div>
       )}
-      {hud.phase === PHASE_FLOWING && <p className="jal-status" data-testid="jal-status">💧 Water is flowing — dry pipes can still turn</p>}
+      {hud.phase === PHASE_FLOWING && <div className="jal-status" data-testid="jal-status"><span>💧 Water is flowing — dry pipes can still turn</span>{hintButton}</div>}
+      {hintNote && !isOver && <p className="jal-hint-note" data-testid="jal-hint-note" role="status">{hintNote}</p>}
       <div className="jal-stage" ref={stageRef}>
         <canvas ref={canvasRef} className="jal-canvas" onPointerDown={onPointerDown} data-testid="jal-canvas" aria-label="Pipe board" />
         {isPaused && !isOver && (
@@ -445,6 +490,7 @@ function LevelScreen({ level, sound, mute, toggleMute, onWin, onLevel, onExit }:
             <div className="jal-card jal-result jal-result--lost">
               <h2>The tank ran dry</h2>
               <p>{hud.housesFull} of 3 houses got water. Close the open ends and avoid cracked pipes.</p>
+              <p className="jal-extra-note" data-testid="jal-extra-note">{extraSeconds > startExtra ? `Next try: +${extraSeconds} s extra planning time.` : extraSeconds >= MAX_EXTRA_SECONDS ? `Extra planning time is at the +${MAX_EXTRA_SECONDS} s maximum.` : ''}</p>
               <div className="game-actions">
                 <button type="button" className="online-button online-button--primary" onClick={restart} data-testid="jal-retry">↻ Retry</button>
                 <button type="button" className="game-button" onClick={onExit}>Levels</button>

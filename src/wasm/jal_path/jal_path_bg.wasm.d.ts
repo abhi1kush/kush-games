@@ -2,6 +2,7 @@
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
 export const __wbg_jalpath_free: (a: number, b: number) => void;
+export const jalpath_add_plan_time: (a: number, b: number) => number;
 export const jalpath_advance: (a: number, b: number) => void;
 export const jalpath_can_rotate: (a: number, b: number) => number;
 export const jalpath_capacity: (a: number) => number;
@@ -9,6 +10,10 @@ export const jalpath_connected_houses: (a: number) => number;
 export const jalpath_debug_solution: (a: number, b: number) => number;
 export const jalpath_debug_solve: (a: number) => void;
 export const jalpath_height: (a: number) => number;
+export const jalpath_hint: (a: number) => number;
+export const jalpath_hint_cell: (a: number) => number;
+export const jalpath_hints_left: (a: number) => number;
+export const jalpath_hints_used: (a: number) => number;
 export const jalpath_house_fill: (a: number, b: number) => number;
 export const jalpath_houses_full: (a: number) => number;
 export const jalpath_level: (a: number) => number;

@@ -41,6 +41,13 @@ impl JalPath {
     pub fn can_rotate(&self, cell: u8) -> bool { self.game.can_rotate(cell) }
     pub fn rotate(&mut self, cell: u8) -> bool { self.game.rotate(cell) }
     pub fn open_valve(&mut self) -> bool { self.game.open_valve() }
+    pub fn add_plan_time(&mut self, ms: f32) -> bool { self.game.add_plan_time(ms) }
+    pub fn hints_left(&self) -> u8 { self.game.hints_left() }
+    pub fn hints_used(&self) -> u8 { self.game.hints_used }
+    /// The pipe a hint would fix (or -1), without using one.
+    pub fn hint_cell(&self) -> i32 { self.game.hint_cell().map_or(-1, |cell| cell as i32) }
+    /// Use a hint: turns one pipe into place. Returns cell * 4 + quarter turns, or -1 (none left / nothing to fix).
+    pub fn hint(&mut self) -> i32 { self.game.hint().map_or(-1, |(cell, turns)| cell as i32 * 4 + turns as i32) }
     /// Advance the clock (fixed 1/60 s steps inside; at most half a second per call).
     pub fn advance(&mut self, ms: f32) { self.game.advance(ms) }
     /// Open pipe ends spilling right now, each `cell * 4 + side`.

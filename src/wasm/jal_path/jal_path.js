@@ -12,6 +12,14 @@ export class JalPath {
         wasm.__wbg_jalpath_free(ptr, 0);
     }
     /**
+     * @param {number} ms
+     * @returns {boolean}
+     */
+    add_plan_time(ms) {
+        const ret = wasm.jalpath_add_plan_time(this.__wbg_ptr, ms);
+        return ret !== 0;
+    }
+    /**
      * Advance the clock (fixed 1/60 s steps inside; at most half a second per call).
      * @param {number} ms
      */
@@ -61,6 +69,36 @@ export class JalPath {
      */
     height() {
         const ret = wasm.jalpath_height(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * Use a hint: turns one pipe into place. Returns cell * 4 + quarter turns, or -1 (none left / nothing to fix).
+     * @returns {number}
+     */
+    hint() {
+        const ret = wasm.jalpath_hint(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * The pipe a hint would fix (or -1), without using one.
+     * @returns {number}
+     */
+    hint_cell() {
+        const ret = wasm.jalpath_hint_cell(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    hints_left() {
+        const ret = wasm.jalpath_hints_left(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    hints_used() {
+        const ret = wasm.jalpath_hints_used(this.__wbg_ptr);
         return ret;
     }
     /**

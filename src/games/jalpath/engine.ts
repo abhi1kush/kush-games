@@ -59,25 +59,40 @@ export function readSpills(game: JalPath): Port[] {
 export const sideCount = (mask: number) => (mask & 1) + ((mask >> 1) & 1) + ((mask >> 2) & 1) + ((mask >> 3) & 1);
 export const isElbow = (mask: number) => sideCount(mask) === 2 && mask !== 5 && mask !== 10;
 
-export interface Progress { unlocked: number; stars: number[]; current: number }
+/** `extraSeconds[level]`: adaptive planning time on top of the level's base (+5 s per failed try, −7 s per win, 0…30). */
+export interface Progress { unlocked: number; stars: number[]; current: number; extraSeconds: number[] }
+export const EXTRA_ON_FAIL = 5;
+export const EXTRA_OFF_ON_WIN = 7;
+export const MAX_EXTRA_SECONDS = 30;
 export const LEVEL_COUNT = 18;
-export const emptyProgress = (): Progress => ({ unlocked: 1, stars: Array(LEVEL_COUNT).fill(0), current: 0 });
+export const emptyProgress = (): Progress => ({ unlocked: 1, stars: Array(LEVEL_COUNT).fill(0), current: 0, extraSeconds: Array(LEVEL_COUNT).fill(0) });
 
 export function parseProgress(data: unknown): Progress | null {
   if (typeof data !== 'object' || data === null) return null;
   const record = data as Record<string, unknown>;
   const { unlocked, stars, current } = record;
+  // older saves have no extra time: start every level at its base
+  const extra = record.extraSeconds === undefined ? Array(LEVEL_COUNT).fill(0) : record.extraSeconds;
+  if (!Array.isArray(extra) || extra.length !== LEVEL_COUNT || !extra.every(value => Number.isInteger(value) && value >= 0 && value <= MAX_EXTRA_SECONDS)) return null;
   if (!Number.isInteger(unlocked) || (unlocked as number) < 1 || (unlocked as number) > LEVEL_COUNT) return null;
   if (!Number.isInteger(current) || (current as number) < 0 || (current as number) >= LEVEL_COUNT) return null;
   if (!Array.isArray(stars) || stars.length !== LEVEL_COUNT || !stars.every(value => Number.isInteger(value) && value >= 0 && value <= 3)) return null;
-  return { unlocked: unlocked as number, stars: stars as number[], current: current as number };
+  return { unlocked: unlocked as number, stars: stars as number[], current: current as number, extraSeconds: extra as number[] };
 }
 
 /** After winning `level` with `stars`: unlock the next one and keep the best stars. */
 export function recordWin(progress: Progress, level: number, stars: number): Progress {
-  const next = { ...progress, stars: progress.stars.slice() };
+  const next = { ...progress, stars: progress.stars.slice(), extraSeconds: progress.extraSeconds.slice() };
   next.stars[level] = Math.max(next.stars[level], stars);
+  next.extraSeconds[level] = Math.max(0, next.extraSeconds[level] - EXTRA_OFF_ON_WIN);
   next.unlocked = Math.min(LEVEL_COUNT, Math.max(next.unlocked, level + 2));
   next.current = Math.min(LEVEL_COUNT - 1, level + 1);
   return next;
+}
+
+/** After the tank runs dry on `level`: a little more planning time next try (capped). */
+export function recordLoss(progress: Progress, level: number): Progress {
+  const extraSeconds = progress.extraSeconds.slice();
+  extraSeconds[level] = Math.min(MAX_EXTRA_SECONDS, extraSeconds[level] + EXTRA_ON_FAIL);
+  return { ...progress, extraSeconds };
 }

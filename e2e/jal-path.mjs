@@ -68,6 +68,23 @@ const firstStuck = page => page.evaluate(() => { const t = window.__jalTest.tile
   await page.waitForTimeout(400);
   check(!(await state(page)).animating, 'the draw loop sleeps while planning (no redraw when idle)');
   await page.screenshot({ path: `${shots}/kush-games-pipes-desktop.png` });
+  // hint: turns exactly one route pipe into place and glows
+  const wrongOnRoute = () => page.evaluate(() => window.__jalTest.tiles().filter((tile, c) => { const want = window.__jalTest.solution(c); return want !== 0 && tile.mask !== want; }).length);
+  check((await page.getByTestId('jal-hint').innerText()).includes('3'), 'Hint button shows 3 hints');
+  const hinted = await page.evaluate(() => window.__jalTest.hintCell());
+  const masksBefore = (await tiles(page)).map(tile => tile.mask);
+  const wrongBefore = await wrongOnRoute();
+  await page.getByTestId('jal-hint').click();
+  await page.waitForTimeout(250);
+  await page.screenshot({ path: `${shots}/kush-games-pipes-hint.png` });
+  const masksAfter = (await tiles(page)).map(tile => tile.mask);
+  const changed = masksAfter.map((mask, c) => mask !== masksBefore[c] ? c : -1).filter(c => c >= 0);
+  check(hinted >= 0 && changed.length === 1 && changed[0] === hinted, `a hint turns exactly one pipe (cell ${hinted})`);
+  check(masksAfter[hinted] === await page.evaluate(c => window.__jalTest.solution(c), hinted), 'the hinted pipe now sits the right way');
+  check(await wrongOnRoute() === wrongBefore - 1, `the route has one fewer wrong pipe (${wrongBefore} → ${wrongBefore - 1})`);
+  check((await state(page)).hintsLeft === 2 && await page.getByTestId('jal-hint-note').isVisible(), 'hint count drops to 2 and a note explains it');
+  await page.keyboard.press('h');
+  check((await state(page)).hintsLeft === 1, 'H key uses a hint too');
   // solve + open valve
   await page.evaluate(() => window.__jalTest.solve());
   await page.getByTestId('jal-valve').click();
@@ -100,9 +117,18 @@ const firstStuck = page => page.evaluate(() => { const t = window.__jalTest.tile
   check(await waitFor(async () => (await state(page)).phase === 3, 60000), 'the tank runs dry: level lost');
   check((await state(page)).tank === 0 && await page.getByTestId('jal-lost').isVisible(), 'fail card shows with an empty tank');
   await page.screenshot({ path: `${shots}/kush-games-pipes-fail.png` });
+  check((await page.getByTestId('jal-extra-note').innerText()).includes('+5 s'), 'the fail card promises +5 s planning time');
+  const basePlan = 40000 - 0; // level 1 base planning time
   await page.getByTestId('jal-retry').click();
   value = await state(page);
   check(value.phase === 0 && value.tank === 1, 'Retry resets the level');
+  check(value.planLeft > basePlan + 4000 && await page.getByTestId('jal-extra').isVisible(), `after a loss the retry has +5 s planning (${Math.round(value.planLeft / 1000)} s)`);
+  await page.evaluate(() => window.__jalTest.solve());
+  await page.keyboard.press('v');
+  check(await waitFor(async () => (await state(page)).phase === 2, 30000), 'win the retried level');
+  await page.getByTestId('jal-replay').click();
+  value = await state(page);
+  check(value.planLeft <= basePlan && value.planLeft > basePlan - 1000, `a win takes the extra back but never below the base (${Math.round(value.planLeft / 1000)} s)`);
   await context.close();
 }
 
@@ -124,6 +150,8 @@ for (const [label, viewport] of [['portrait', { width: 375, height: 812 }], ['la
   const box = await page.getByTestId('jal-canvas').boundingBox();
   check(box.x >= 0 && box.x + box.width <= viewport.width + 1, `${label}: the board fits the screen width (${Math.round(box.width)}px)`);
   if (label === 'portrait') {
+    await page.getByTestId('jal-hint').tap();
+    check((await state(page)).hintsLeft === 2, `${label}: tapping Hint works`);
     await page.evaluate(() => window.__jalTest.solve());
     await page.getByTestId('jal-valve').tap();
     await page.waitForTimeout(2500);

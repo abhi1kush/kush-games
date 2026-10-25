@@ -132,3 +132,56 @@ fn a_clean_solution_earns_three_stars_on_every_level() {
         assert_eq!(game.stars(), 3, "level {}: {} left of {} (needs {})", level + 1, game.tank, game.capacity, game.needed);
     }
 }
+
+#[test]
+fn a_hint_fixes_exactly_one_pipe_on_the_route_and_there_are_three() {
+    for level in 0..crate::levels::LEVEL_COUNT {
+        let mut game = crate::levels::build(level);
+        let wrong = |game: &Game| (0..game.board.cells()).filter(|&cell| game.solution[cell] != 0 && game.board.tiles[cell].mask != game.solution[cell]).count();
+        let before = game.board.tiles;
+        let wrong_before = wrong(&game);
+        let expected = game.hint_cell().expect("a scrambled level has something to fix");
+        let (cell, turns) = game.hint().expect("hint");
+        assert_eq!(cell, expected);
+        assert!((1..=3).contains(&turns));
+        assert_eq!(game.board.tiles[cell as usize].mask, game.solution[cell as usize]);
+        let changed = (0..game.board.cells()).filter(|&index| game.board.tiles[index].mask != before[index].mask).count();
+        assert_eq!(changed, 1, "level {}: only one pipe moves", level + 1);
+        assert_eq!(wrong(&game), wrong_before - 1);
+        assert_eq!(game.hints_left(), 2);
+        game.hint(); game.hint();
+        assert_eq!(game.hints_left(), 0);
+        assert!(game.hint().is_none(), "no fourth hint");
+    }
+}
+
+#[test]
+fn hints_skip_bolted_and_wet_pipes_and_cap_the_stars() {
+    let mut game = crate::levels::build(0);
+    game.hint();
+    game.solve();
+    assert!(game.hint_cell().is_none(), "nothing left to fix on a solved route");
+    assert!(game.hint().is_none());
+    assert_eq!(game.hints_used, 1);
+    game.open_valve();
+    for _ in 0..60 * 600 { if game.phase != PHASE_FLOWING { break; } game.step(STEP_MS / 1000.0); }
+    assert_eq!(game.phase, PHASE_WON);
+    assert_eq!(game.stars(), 2, "one hint caps a clean solve at two stars");
+    if let Some(cell) = game.hint_cell() { assert!(game.can_rotate(cell)); }
+}
+
+#[test]
+fn extra_planning_time_only_adds_and_is_capped() {
+    let mut game = crate::levels::build(4);
+    let base = game.plan_left_ms;
+    assert!(!game.add_plan_time(-7000.0), "never below the level's base time");
+    assert!(!game.add_plan_time(0.0));
+    assert_eq!(game.plan_left_ms, base);
+    assert!(game.add_plan_time(5000.0));
+    assert_eq!(game.plan_left_ms, base + 5000.0);
+    let mut capped = crate::levels::build(4);
+    capped.add_plan_time(99_000.0);
+    assert_eq!(capped.plan_left_ms, base + MAX_EXTRA_PLAN_MS);
+    game.open_valve();
+    assert!(!game.add_plan_time(5000.0), "no extra time once the water runs");
+}
