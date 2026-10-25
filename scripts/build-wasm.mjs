@@ -7,7 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, rmSync, existsSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 
-const crates = process.argv.slice(2).length ? process.argv.slice(2) : ['breakout', 'connect_four', 'checkers', 'kush_jump', 'jungle_strike', 'antariksh_defenders', 'mithai_match', 'ludo', 'snakes_ladders', 'fleet_clash', 'carrom', 'jal_path'];
+const crates = process.argv.slice(2).length ? process.argv.slice(2) : ['breakout', 'connect_four', 'checkers', 'kush_jump', 'jungle_strike', 'antariksh_defenders', 'mithai_match', 'ludo', 'snakes_ladders', 'fleet_clash', 'carrom', 'jal_path', 'paani_pour'];
 let hasWasmPack = true;
 try { execFileSync('wasm-pack', ['--version'], { stdio: 'ignore' }); } catch { hasWasmPack = false; }
 if (!hasWasmPack) {

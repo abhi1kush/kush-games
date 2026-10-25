@@ -13,6 +13,7 @@ import * as snakesModule from './snakes_ladders/snakes_ladders.js';
 import * as fleetModule from './fleet_clash/fleet_clash.js';
 import * as carromModule from './carrom/carrom.js';
 import * as jalPathModule from './jal_path/jal_path.js';
+import * as paaniPourModule from './paani_pour/paani_pour.js';
 import { decodeMoves } from '../games/checkers/engine';
 import { RenderSlot } from '../games/breakout/engine';
 import { Buttons, Phase as KushJumpPhase, RenderSlot as KushJumpSlot } from '../games/kushjump/engine';
@@ -39,6 +40,7 @@ let antarikshMemory: WebAssembly.Memory;
 let mithaiMemory: WebAssembly.Memory;
 
 let jalPathMemory: WebAssembly.Memory;
+let paaniPourMemory: WebAssembly.Memory;
 
 beforeAll(() => {
   breakoutMemory = breakoutModule.initSync({ module: wasmBytes('breakout') }).memory;
@@ -53,11 +55,12 @@ beforeAll(() => {
   fleetModule.initSync({ module: wasmBytes('fleet_clash') });
   carromModule.initSync({ module: wasmBytes('carrom') });
   jalPathMemory = jalPathModule.initSync({ module: wasmBytes('jal_path') }).memory;
+  paaniPourMemory = paaniPourModule.initSync({ module: wasmBytes('paani_pour') }).memory;
 });
 
 describe('wasm bindings', () => {
   it('every game .wasm stays small (< 40 KB raw)', () => {
-    for (const name of ['breakout', 'checkers', 'connect_four', 'kush_jump', 'jungle_strike', 'antariksh_defenders', 'mithai_match', 'ludo', 'snakes_ladders', 'fleet_clash', 'carrom', 'jal_path']) expect(wasmBytes(name).length, name).toBeLessThan(40 * 1024);
+    for (const name of ['breakout', 'checkers', 'connect_four', 'kush_jump', 'jungle_strike', 'antariksh_defenders', 'mithai_match', 'ludo', 'snakes_ladders', 'fleet_clash', 'carrom', 'jal_path', 'paani_pour']) expect(wasmBytes(name).length, name).toBeLessThan(40 * 1024);
   });
 
   it('Jal Path: tiles read zero-copy (8 bytes each), a solved board waters all three houses, an unsolved one runs dry', () => {
@@ -94,6 +97,28 @@ describe('wasm bindings', () => {
     expect(dry.phase()).toBe(3);
     expect(dry.tank()).toBe(0);
     dry.free();
+  });
+
+  it('Paani Pour: tubes read zero-copy, pours follow the top-colour rule, undo restores, the solver finishes a level', () => {
+    expect(paaniPourModule.PaaniPour.level_count()).toBe(20);
+    const game = new paaniPourModule.PaaniPour(0);
+    const tubes = game.tube_count();
+    expect(tubes).toBe(game.colour_count() + 2);
+    const layers = () => Array.from(new Uint8Array(paaniPourMemory.buffer, game.layers_ptr(), tubes * 4));
+    const start = layers();
+    expect(start.filter(colour => colour === 1)).toHaveLength(4);
+    expect(game.can_pour(tubes - 1, 0)).toBe(false); // empty source
+    const hint = game.peek_hint();
+    const amount = game.pour(hint >> 4, hint & 15);
+    expect(amount).toBeGreaterThan(0);
+    expect(layers()).not.toEqual(start);
+    expect(game.undo() & 255).toBe(hint);
+    expect(layers()).toEqual(start);
+    expect(game.debug_solve()).toBe(true);
+    expect(game.is_solved()).toBe(true);
+    expect(game.stars()).toBe(3);
+    expect(game.pours()).toBe(game.par());
+    game.free();
   });
 
   it('Kush Jump: runs right through the render buffer, survives a hitch and finishes at the flag', () => {

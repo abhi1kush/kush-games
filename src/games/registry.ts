@@ -284,6 +284,18 @@ export const games: GameDefinition[] = [
     releaseYear: 2026,
     component: lazy(() => import('./jalpath/JalPath')),
   },
+  {
+    id: 'paani-pour',
+    title: 'Paani Pour',
+    tagline: 'Sort the coloured water so every tube holds one colour.',
+    description: 'A water-sorting puzzle in 20 levels. Glass tubes hold four layers each of mixed coloured water; tap a tube to lift it and tap another to pour. Only the top colour pours, and only onto an empty tube or the same colour, as much as fits. Sort every colour into its own tube in as few pours as you can: match the par (what the built-in solver needed) for three stars. Undo is free, Reset starts over, and three hints per level show one good pour. Levels grow from 3 colours in 5 tubes to 12 colours in 14 tubes. Your progress and the level you are on are saved. The tubes, pour rules, undo, level generator and solver run in Rust compiled to WebAssembly.',
+    categories: ['Puzzle'],
+    status: 'playable',
+    artwork: { gradientFrom: '#1d2a6b', gradientTo: '#0e1440', accentColor: '#ffd23f', glyph: '🧪' },
+    controls: 'Tap a tube, then another to pour (or ← → + Space); U / Ctrl+Z undo; R reset; H hint; M mute',
+    releaseYear: 2026,
+    component: lazy(() => import('./paanipour/PaaniPour')),
+  },
 ];
 
 /** Genre filter chips on the home page, in this order (only genres that have a playable game are shown). */
