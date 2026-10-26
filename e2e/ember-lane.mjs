@@ -204,7 +204,7 @@ async function hintClearOfCharacters(page) {
   await page.getByTestId('ember-hud').waitFor();
   await page.getByTestId('ember-pause').click();
   await page.getByTestId('ember-quit').click();
-  await waitFor(async () => (await page.evaluate(() => location.hash)) === '#/', 5000, 50).catch(() => {});
+  await waitFor(async () => (await page.evaluate(() => location.hash)) === '#/' && !(await page.getByTestId('player').count()), 5000, 50).catch(() => {});
   const quitHash = await page.evaluate(() => location.hash);
   check(quitHash === '#/' && !(await page.getByTestId('player').count()) && !(await page.getByTestId('ember-canvas').count()), `Quit game leaves to the games hub (${quitHash})`);
   await context.close();
