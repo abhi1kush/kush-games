@@ -1,4 +1,4 @@
-//! The game state and its fixed 60 Hz step: Mira (the player) walks, pushes crates, climbs over them, carries the
+//! The game state and its fixed 60 Hz step: Mira (the player) walks, pushes crates, climbs onto them, carries the
 //! lantern, pulls levers and throws embers at braziers; her little brother Lio follows. Light comes from flames,
 //! windows and the lantern; crates block it. Rats live in the dark (see rats.rs) and bite anyone standing in it.
 
@@ -15,13 +15,15 @@ pub const SIBLING_GAP: f32 = 24.0;
 pub const REACH: f32 = 22.0;
 pub const LIT_LEVEL: f32 = 0.5;
 pub const LANTERN_OIL: f32 = 16.0;
-pub const FIRE_POT_SECONDS: f32 = 8.0;
+pub const FIRE_POT_SECONDS: f32 = 12.0;
 pub const THROW_RANGE: f32 = 250.0;
 pub const CLIMB_SECONDS: f32 = 0.55;
 pub const DEATH_SECONDS: f32 = 1.8;
 pub const BITE_SECONDS: f32 = 0.85;
 pub const GRAVITY: f32 = 620.0;
 pub const HALF_BODY: f32 = 8.0;
+/// Standing this high (on a crate) the rats can't reach you.
+pub const OUT_OF_REACH: f32 = 10.0;
 
 pub const BUTTON_LEFT: u8 = 1;
 pub const BUTTON_RIGHT: u8 = 2;
@@ -38,6 +40,7 @@ pub const PROMPT_TAKE_LANTERN: u8 = 1;
 pub const PROMPT_DROP_LANTERN: u8 = 2;
 pub const PROMPT_LEVER: u8 = 3;
 pub const PROMPT_CLIMB: u8 = 4;
+pub const PROMPT_HOP_DOWN: u8 = 5;
 
 pub const EVENT_IGNITE: u32 = 1;
 pub const EVENT_DEATH: u32 = 2;
@@ -75,6 +78,10 @@ pub struct World {
     pub state_time: f32,
     pub climb_from: f32,
     pub climb_to: f32,
+    pub climb_from_y: f32,
+    pub climb_to_y: f32,
+    /// The crate Mira stands on (-1: on the ground).
+    pub on_crate: i8,
     pub walked: f32,
     pub sibling_x: f32,
     pub sibling_y: f32,
@@ -108,7 +115,7 @@ impl World {
         }
         let crates = CRATES.map(|(x, half, height, min_x, max_x)| Crate { x, half, height, min_x, max_x });
         let mut world = World {
-            time: 0.0, player_x: START_X, player_y: 0.0, facing: 1.0, state: STATE_IDLE, state_time: 0.0, climb_from: 0.0, climb_to: 0.0, walked: 0.0,
+            time: 0.0, player_x: START_X, player_y: 0.0, facing: 1.0, state: STATE_IDLE, state_time: 0.0, climb_from: 0.0, climb_to: 0.0, climb_from_y: 0.0, climb_to_y: 0.0, on_crate: -1, walked: 0.0,
             sibling_x: START_X - SIBLING_GAP, sibling_y: 0.0, sibling_facing: 1.0, sibling_walked: 0.0, danger: 0.0, sibling_danger: 0.0,
             lights, base_lit, pot_left: 0.0, carrying: false, lantern_used: false, oil: LANTERN_OIL, embers: 0, ember: Ember::default(),
             crates, levers: [false; LEVERS.len()], rats: [Rat::default(); RAT_COUNT], checkpoint: 0, cleared: false, events: 0,
@@ -162,8 +169,9 @@ impl World {
             let mut left = 0.0f32;
             let mut right = STAGE_END;
             for crate_box in &self.crates {
-                if crate_box.x + crate_box.half <= x { left = left.max(crate_box.x + crate_box.half); }
-                if crate_box.x - crate_box.half >= x { right = right.min(crate_box.x - crate_box.half); }
+                // the crate itself stays lit on the light's side; the street beyond its far edge is in shadow
+                if crate_box.x + crate_box.half <= x { left = left.max(crate_box.x - crate_box.half); }
+                if crate_box.x - crate_box.half >= x { right = right.min(crate_box.x + crate_box.half); }
             }
             self.lights[index].left = left;
             self.lights[index].right = right;
@@ -176,6 +184,7 @@ impl World {
         if LEVERS.iter().any(|&(x, _)| (x - self.player_x).abs() < REACH) { return PROMPT_LEVER; }
         let lantern = self.lights[LANTERN];
         if !self.carrying && (lantern.x - self.player_x).abs() < REACH && (!self.lantern_used || self.oil > 0.0) { return PROMPT_TAKE_LANTERN; }
+        if self.on_crate >= 0 { return PROMPT_HOP_DOWN; }
         if self.climbable_crate().is_some() { return PROMPT_CLIMB; }
         if self.carrying { return PROMPT_DROP_LANTERN; }
         PROMPT_NONE
@@ -210,17 +219,35 @@ impl World {
             }
             PROMPT_CLIMB => {
                 if let Some(index) = self.climbable_crate() {
+                    // up onto the near half of the top: out of the rats' reach
                     let crate_box = self.crates[index];
-                    self.state = STATE_CLIMB;
-                    self.state_time = 0.0;
-                    self.climb_from = self.player_x;
-                    self.climb_to = crate_box.x + self.facing * (crate_box.half + HALF_BODY + 2.0);
-                    self.events |= EVENT_CLIMB;
+                    self.start_climb(crate_box.x - self.facing * crate_box.half * 0.35, 0.0, crate_box.height);
+                    self.on_crate = index as i8;
                 }
             }
+            PROMPT_HOP_DOWN => self.hop_down(self.facing),
             _ => {}
         }
         self.update_lights();
+    }
+
+    fn start_climb(&mut self, to_x: f32, from_y: f32, to_y: f32) {
+        self.state = STATE_CLIMB;
+        self.state_time = 0.0;
+        self.climb_from = self.player_x;
+        self.climb_to = to_x;
+        self.climb_from_y = from_y;
+        self.climb_to_y = to_y;
+        self.events |= EVENT_CLIMB;
+    }
+
+    /// Jump off the crate Mira stands on, to the ground on the given side.
+    fn hop_down(&mut self, direction: f32) {
+        if self.on_crate < 0 { return; }
+        let crate_box = self.crates[self.on_crate as usize];
+        self.facing = direction;
+        self.start_climb(crate_box.x + direction * (crate_box.half + HALF_BODY + 2.0), crate_box.height, 0.0);
+        self.on_crate = -1;
     }
 
     /// The unlit brazier / fire pot an ember would fly to (in the facing direction, within range).
@@ -283,14 +310,24 @@ impl World {
         if self.state == STATE_CLIMB {
             let t = (self.state_time / CLIMB_SECONDS).min(1.0);
             self.player_x = self.climb_from + (self.climb_to - self.climb_from) * t;
-            self.player_y = 4.0 * t * (1.0 - t) * 34.0;
-            if t >= 1.0 { self.state = STATE_IDLE; self.player_y = 0.0; }
+            self.player_y = self.climb_from_y + (self.climb_to_y - self.climb_from_y) * t + 4.0 * t * (1.0 - t) * 12.0;
+            if t >= 1.0 { self.state = STATE_IDLE; self.player_y = self.climb_to_y; }
             return;
         }
         if self.state == STATE_THROW && self.state_time < 0.35 { return; }
         let direction = (buttons & BUTTON_RIGHT != 0) as i32 as f32 - (buttons & BUTTON_LEFT != 0) as i32 as f32;
         if direction == 0.0 { self.state = STATE_IDLE; return; }
         self.facing = direction;
+        if self.on_crate >= 0 {
+            // walking on top of a crate; stepping off an edge hops down on that side
+            let crate_box = self.crates[self.on_crate as usize];
+            let next = self.player_x + direction * WALK_SPEED * STEP;
+            if (next - crate_box.x).abs() > crate_box.half - 3.0 { self.hop_down(direction); return; }
+            self.walked += (next - self.player_x).abs();
+            self.player_x = next;
+            self.state = STATE_WALK;
+            return;
+        }
         let mut step = direction * WALK_SPEED * STEP;
         let mut pushing = false;
         for crate_box in self.crates.iter_mut() {
@@ -312,7 +349,12 @@ impl World {
 
     fn move_sibling(&mut self) {
         let gap = if self.carrying { SIBLING_GAP * 0.8 } else { SIBLING_GAP };
-        let target = self.player_x - self.facing * gap;
+        let mut target = self.player_x - self.facing * gap;
+        if self.on_crate >= 0 {
+            // Mira is up on a crate: Lio scrambles up beside her, out of the rats' reach
+            let crate_box = self.crates[self.on_crate as usize];
+            target = target.within(crate_box.x - crate_box.half + 4.0, crate_box.x + crate_box.half - 4.0);
+        }
         let delta = target - self.sibling_x;
         if delta.abs() > 2.0 {
             let speed = if delta.abs() > 60.0 { SIBLING_SPEED * 1.3 } else { SIBLING_SPEED };
@@ -348,8 +390,9 @@ impl World {
     }
 
     fn check_bites(&mut self) {
-        let player_dark = !self.is_lit(self.player_x);
-        let sibling_dark = !self.is_lit(self.sibling_x);
+        // rats can't climb: up on a crate is safe even in the dark
+        let player_dark = self.player_y < OUT_OF_REACH && !self.is_lit(self.player_x);
+        let sibling_dark = self.sibling_y < OUT_OF_REACH && !self.is_lit(self.sibling_x);
         let player_bitten = player_dark && rats_touching(self, self.player_x);
         let sibling_bitten = sibling_dark && rats_touching(self, self.sibling_x);
         self.danger = if player_bitten { self.danger + STEP / BITE_SECONDS } else { (self.danger - STEP * 0.9).max(0.0) };

@@ -63,6 +63,8 @@ impl EmberLane {
 
     pub fn player_x(&self) -> f32 { self.world.player_x }
     pub fn player_y(&self) -> f32 { self.world.player_y }
+    /// Standing on a crate (safe from the rats).
+    pub fn on_crate(&self) -> bool { self.world.on_crate >= 0 }
     pub fn facing(&self) -> f32 { self.world.facing }
     pub fn state(&self) -> u8 { self.world.state }
     pub fn state_time(&self) -> f32 { self.world.state_time }

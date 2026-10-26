@@ -16,8 +16,8 @@ export const RAT_STRIDE = 8;
 
 export const KIND = { hearth: 0, torch: 1, flicker: 2, brazier: 3, firePot: 4, lantern: 5, window: 6, door: 7 } as const;
 export const STATE = { idle: 0, walk: 1, push: 2, climb: 3, throw: 4, dead: 5 } as const;
-export const PROMPT = { none: 0, takeLantern: 1, dropLantern: 2, lever: 3, climb: 4 } as const;
-export const PROMPT_TEXT = ['', 'Take the lantern', 'Put the lantern down', 'Pull the lever', 'Climb over'];
+export const PROMPT = { none: 0, takeLantern: 1, dropLantern: 2, lever: 3, climb: 4, hopDown: 5 } as const;
+export const PROMPT_TEXT = ['', 'Take the lantern', 'Put the lantern down', 'Pull the lever', 'Climb onto the crate', 'Hop down'];
 export const EVENT = {
   ignite: 1, death: 2, checkpoint: 4, take: 8, drop: 16, lever: 32, throw: 64, fizzle: 128, clear: 256, climb: 512,
   lanternOut: 1024, potOut: 2048, respawn: 4096, push: 8192,
@@ -60,14 +60,24 @@ export function parseProgress(data: unknown): Progress | null {
   return { cleared: record.cleared, checkpoint: record.checkpoint as number, bestSeconds: record.bestSeconds, clears: record.clears as number };
 }
 
+/** Where the crate puzzle stands (Cooper's Yard). */
+export interface Yard { onCrate: boolean; potLit: boolean; crateX: number }
+/** The crate is out of the brazier's way once it is pushed back to here. */
+export const CRATE_CLEAR_X = 2535;
+
 /** The tutorial line for where Mira stands. */
-export function hintFor(x: number, carrying: boolean, embers: number): string {
+export function hintFor(x: number, carrying: boolean, embers: number, yard?: Yard): string {
+  if (yard && x > 2390 && x < 2800) {
+    if (yard.crateX <= CRATE_CLEAR_X) return x < 2700 ? 'The brazier lights the whole yard now. Go on — keep Lio close.' : '';
+    if (yard.onCrate) return yard.potLit ? 'Quick, while the pot burns: hop down on the far side, then push the crate back left, behind the brazier.' : 'Safe up here — rats can’t climb. Throw an ember at the fire pot ahead.';
+    if (x > yard.crateX) return yard.potLit ? 'Push the crate left, behind the brazier, before the pot burns out.' : 'Too dark! Turn round and climb back onto the crate.';
+    if (x > 2450) return 'The crate blocks the brazier’s light. Climb onto it — rats can’t reach you up there.';
+  }
   if (x < 300) return 'Rats fear the light. Keep yourself — and Lio — inside it.';
   if (x > 480 && x < 610) return 'That torch keeps guttering. Wait for it to flare up, then cross.';
   if (x > 960 && x < 1120) return embers > 0 ? 'A cold brazier in the dark. Throw an ember at it.' : 'A cold brazier in the dark…';
   if (x > 1240 && x < 1330) return 'Light the next brazier from here.';
   if (x > 1690 && x < 1800 && !carrying) return 'A lantern! Take it — the oil won’t last long.';
-  if (x > 2390 && x < 2560) return 'The crate hides the street from the brazier. Light the fire pot beyond it, climb over and push the crate back.';
   if (x > 2980 && x < 3080) return 'Pull the lever to open the shutters. One rope works both windows.';
   if (x > 3240 && x < 3290) return 'The second lever opens the other window — and shuts this one.';
   if (x > 3560) return 'The sanctuary door. Go in together.';

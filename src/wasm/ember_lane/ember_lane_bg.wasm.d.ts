@@ -22,6 +22,7 @@ export const emberlane_light_count: (a: number) => number;
 export const emberlane_lights_ptr: (a: number) => number;
 export const emberlane_new: () => number;
 export const emberlane_oil: (a: number) => number;
+export const emberlane_on_crate: (a: number) => number;
 export const emberlane_player_lit: (a: number) => number;
 export const emberlane_player_x: (a: number) => number;
 export const emberlane_player_y: (a: number) => number;

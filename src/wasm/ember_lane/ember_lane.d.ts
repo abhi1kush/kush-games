@@ -33,6 +33,10 @@ export class EmberLane {
     lights_ptr(): number;
     constructor();
     oil(): number;
+    /**
+     * Standing on a crate (safe from the rats).
+     */
+    on_crate(): boolean;
     player_lit(): boolean;
     player_x(): number;
     player_y(): number;
@@ -89,6 +93,7 @@ export interface InitOutput {
     readonly emberlane_lights_ptr: (a: number) => number;
     readonly emberlane_new: () => number;
     readonly emberlane_oil: (a: number) => number;
+    readonly emberlane_on_crate: (a: number) => number;
     readonly emberlane_player_lit: (a: number) => number;
     readonly emberlane_player_x: (a: number) => number;
     readonly emberlane_player_y: (a: number) => number;

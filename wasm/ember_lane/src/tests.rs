@@ -137,17 +137,19 @@ fn the_whole_stage_can_be_cleared_without_dying() {
     assert_eq!(game.deaths(), 0, "lantern alley");
     assert_eq!(game.checkpoint(), 3);
     if game.carrying() { game.interact(); }
-    // 4. crate + fire pot
+    // 4. crate + fire pot: light the pot, climb onto the crate, hop down beyond it, push the crate back
     walk_to(&mut game, 2530.0);
     assert_eq!(game.throw_target(), 12);
     assert!(game.throw_ember());
     wait(&mut game, 1.2);
-    walk_to(&mut game, 2555.0);
+    walk_to(&mut game, 2552.0);
     assert_eq!(game.prompt(), PROMPT_CLIMB);
     game.interact();
     wait(&mut game, 0.7);
-    assert!(game.player_x() > CRATES[0].0);
-    walk_to(&mut game, 2440.0); // push the crate back past the brazier
+    assert!(game.on_crate(), "climbed onto the crate");
+    run(&mut game, BUTTON_RIGHT, 1.0); // walk off the far edge: hop down beside the burning pot
+    assert!(!game.on_crate() && game.player_x() > CRATES[0].0 + CRATES[0].1);
+    walk_to(&mut game, 2500.0); // push the crate back past the brazier
     assert!(game.crate_x(0) < 2520.0, "crate moved behind the brazier ({})", game.crate_x(0));
     walk_to(&mut game, 3005.0);
     assert_eq!(game.deaths(), 0, "crate section");
@@ -163,4 +165,57 @@ fn the_whole_stage_can_be_cleared_without_dying() {
     wait(&mut game, 0.5);
     assert_eq!(game.deaths(), 0, "shutter section");
     assert!(game.cleared(), "reached the sanctuary door");
+}
+
+
+/// Cooper's Yard, played the way that used to dead-end: slide the crate right first. The crate now stops before it
+/// covers the fire pot, climbing puts Mira ON the crate (out of the rats' reach), and the section still clears.
+#[test]
+fn crate_section_survives_sliding_the_crate_first() {
+    let mut game = EmberLane::new();
+    game.debug_warp(3);
+    run(&mut game, BUTTON_RIGHT, 6.0); // walk into the crate and keep pushing
+    assert!(game.crate_x(0) <= CRATES[0].4 && CRATES[0].4 < 2625.0 - CRATES[0].1, "the crate can't be slid over the fire pot");
+    assert_eq!(game.deaths(), 0, "pushing along the brazier's light is safe");
+    assert_eq!(game.prompt(), PROMPT_CLIMB);
+    // climb up without lighting anything: safe up there, even in the crate's shadow, for as long as you like
+    game.interact();
+    wait(&mut game, 0.7);
+    assert!(game.on_crate());
+    assert_eq!(game.prompt(), PROMPT_HOP_DOWN);
+    wait(&mut game, 6.0);
+    assert_eq!(game.deaths(), 0, "rats can't reach the top of the crate");
+    // light the pot from the top, hop down on the far side, push the crate back behind the brazier
+    assert_eq!(game.throw_target(), 12, "the fire pot is still ahead");
+    assert!(game.throw_ember());
+    wait(&mut game, 1.2);
+    assert!(game.pot_left() > 0.0);
+    game.interact(); // hop down (facing right)
+    wait(&mut game, 0.7);
+    assert!(!game.on_crate() && game.player_x() > game.crate_x(0));
+    assert!(game.player_lit(), "landing beside the burning pot");
+    walk_to(&mut game, 2500.0);
+    assert!(game.crate_x(0) < 2520.0);
+    walk_to(&mut game, 3005.0);
+    assert_eq!(game.deaths(), 0, "Cooper's Yard cleared without a death");
+    assert_eq!(game.checkpoint(), 4);
+}
+
+/// Hopping down into the dark is recoverable: turn round and climb back up before the rats bite.
+#[test]
+fn hopping_into_the_dark_can_climb_back() {
+    let mut game = EmberLane::new();
+    game.debug_warp(3);
+    walk_to(&mut game, 2552.0);
+    game.interact();
+    wait(&mut game, 0.7);
+    run(&mut game, BUTTON_RIGHT, 0.8); // off the far edge, no pot lit
+    assert!(!game.on_crate() && !game.player_lit());
+    run(&mut game, BUTTON_LEFT, 0.05);
+    assert_eq!(game.prompt(), PROMPT_CLIMB, "facing the crate again offers the climb");
+    game.interact();
+    wait(&mut game, 3.0);
+    assert!(game.on_crate());
+    assert!(game.sibling_y() > OUT_OF_REACH, "Lio climbs up beside Mira");
+    assert_eq!(game.deaths(), 0);
 }

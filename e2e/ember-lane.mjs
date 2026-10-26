@@ -126,6 +126,35 @@ async function hintClearOfCharacters(page) {
   await page.getByTestId('ember-hud').waitFor();
   check(Math.abs((await info(page)).x - 990) < 6, 'Continue starts at the checkpoint');
 
+  // Cooper's Yard, played the way that used to dead-end: slide the crate right, then climb
+  await begin(page, 3);
+  await page.waitForTimeout(200);
+  await hold(page, 'ArrowRight', 5000);
+  let yard = await info(page);
+  check(yard.deaths === 0 && yard.crate < 2600 && yard.prompt === 4, `sliding the crate right stops short of the fire pot and offers the climb (crate ${yard.crate.toFixed(0)})`);
+  await press(page, 'e');
+  await page.waitForTimeout(2500);
+  yard = await info(page);
+  check(yard.onCrate && yard.deaths === 0 && yard.siblingY > 10, 'E climbs ONTO the crate; Mira and Lio are safe up there');
+  check((await page.getByTestId('ember-hint').textContent()).includes('fire pot'), 'the hint says to light the fire pot from the crate');
+  await press(page, 'f');
+  await page.waitForTimeout(1400);
+  check((await info(page)).pot > 0, 'an ember from the crate lights the fire pot');
+  await page.screenshot({ path: `${shots}/kush-games-ember-crate-fix.png` });
+  await press(page, 'e');
+  await page.waitForTimeout(800);
+  yard = await info(page);
+  check(!yard.onCrate && yard.x > yard.crate && yard.lit, 'E hops down on the far side, into the pot’s light');
+  await hold(page, 'ArrowLeft', 2600);
+  yard = await info(page);
+  check(yard.crate <= 2535, `pushing left moves the crate behind the brazier (${yard.crate.toFixed(0)})`);
+  await page.evaluate(() => document.activeElement?.blur());
+  await page.keyboard.down('ArrowRight');
+  await waitFor(async () => (await info(page)).checkpoint === 4 || (await info(page)).deaths > 0, 20000, 100);
+  await page.keyboard.up('ArrowRight');
+  yard = await info(page);
+  check(yard.checkpoint === 4 && yard.deaths === 0, 'Cooper’s Yard cleared without a death');
+
   // the lantern
   await begin(page, 2);
   await page.waitForTimeout(200);

@@ -50,7 +50,7 @@ pub const RAT_COUNT: usize = 220;
 pub const CHECKPOINTS: [(f32, u8); 5] = [(START_X, 0), (990.0, 3), (1700.0, 0), (2410.0, 2), (3000.0, 0)];
 
 /// Crate: start x (centre), half width, height, how far it may slide
-pub const CRATES: [(f32, f32, f32, f32, f32); 1] = [(2575.0, 15.0, 30.0, 2440.0, 2700.0)];
+pub const CRATES: [(f32, f32, f32, f32, f32); 1] = [(2575.0, 15.0, 30.0, 2440.0, 2590.0)];
 
 /// Levers: x, and which window each opens (the other one closes: a shared rope).
 pub const LEVERS: [(f32, usize); 2] = [(3060.0, WINDOW_A), (3262.0, WINDOW_B)];

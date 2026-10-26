@@ -160,7 +160,7 @@ export class Renderer {
     this.lastLio = game.sibling_x();
     // contact shadows
     context.fillStyle = 'rgba(0, 0, 0, 0.35)';
-    for (const [x, w] of [[playerX, 8], [lioX, 6]] as const) { context.beginPath(); context.ellipse(x, charY, w * s, 1.8 * s, 0, 0, Math.PI * 2); context.fill(); }
+    for (const [x, w, y] of [[playerX, 8, game.player_y()], [lioX, 6, game.sibling_y()]] as const) { context.beginPath(); context.ellipse(x, charY - y * s, w * s * (1 - Math.min(0.5, y / 80)), 1.8 * s, 0, 0, Math.PI * 2); context.fill(); }
     const miraHands = drawMira(context, {
       x: playerX, y: charY - game.player_y() * s, s, facing: game.facing(), walked: game.walked(), moving: state === STATE.walk || state === STATE.push, time, fear,
       pushing: state === STATE.push, throwing: state === STATE.throw ? game.state_time() : undefined, climbing: state === STATE.climb, carrying: game.carrying(), dead: isDead ? deadT : 0,
@@ -210,7 +210,7 @@ export class Renderer {
     vignette.addColorStop(0, 'rgba(0, 0, 0, 0)'); vignette.addColorStop(1, 'rgba(0, 0, 0, 0.72)');
     context.fillStyle = vignette; context.fillRect(0, 0, width, height);
     if (isDead) { context.fillStyle = `rgba(0, 0, 0, ${Math.min(0.85, Math.max(0, deadT - 0.6) * 0.9)})`; context.fillRect(0, 0, width, height); }
-    if (overlay.prompt && !isDead) this.drawPrompt(context, view, playerX, charY - 52 * s, PROMPT_TEXT[overlay.prompt], overlay.touch);
+    if (overlay.prompt && !isDead) this.drawPrompt(context, view, playerX, charY - (54 + game.player_y()) * s, PROMPT_TEXT[overlay.prompt], overlay.touch);
   }
 
   private lastLio: number | null = null;

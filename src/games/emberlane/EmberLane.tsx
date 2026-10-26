@@ -42,7 +42,7 @@ function ControlsCard({ touch }: { touch: boolean }) {
       <ul>
         <li><b>Rats own the dark.</b> Step out of the light — or let Lio fall behind in it — and they swarm. Flame drives them back.</li>
         <li><b>Embers</b> light cold braziers and fire pots in the direction you face. You only carry a few.</li>
-        <li>Carry the <b>lantern</b> while its oil lasts, push <b>crates</b> out of the light, pull <b>levers</b> to open shutters.</li>
+        <li>Carry the <b>lantern</b> while its oil lasts, push <b>crates</b> out of the light — or climb onto one: rats can’t climb — and pull <b>levers</b> to open shutters.</li>
         <li>Fall, and you wake at the last lit <b>checkpoint</b>.</li>
       </ul>
       {touch
@@ -104,7 +104,7 @@ function EmberLaneScreens() {
     const x = game.player_x();
     const next: Hud = {
       section: sectionAt(x), embers: game.embers(), oil: Math.ceil(game.oil()), carrying: game.carrying(), prompt: game.prompt(),
-      hint: hintFor(x, game.carrying(), game.embers()), checkpoint: game.checkpoint(), deaths: game.deaths(), dead: game.state() === STATE.dead,
+      hint: hintFor(x, game.carrying(), game.embers(), { onCrate: game.on_crate(), potLit: game.pot_left() > 0, crateX: game.crate_x(0) }), checkpoint: game.checkpoint(), deaths: game.deaths(), dead: game.state() === STATE.dead,
     };
     const previous = hudRef.current;
     if ((Object.keys(next) as (keyof Hud)[]).some(key => next[key] !== previous[key])) { hudRef.current = next; setHud(next); }
@@ -263,7 +263,7 @@ function EmberLaneScreens() {
       begin: (checkpoint: number) => begin(checkpoint),
       info: () => {
         const game = gameRef.current;
-        return { x: game.player_x(), sibling: game.sibling_x(), deaths: game.deaths(), checkpoint: game.checkpoint(), cleared: game.cleared(), embers: game.embers(), carrying: game.carrying(), prompt: game.prompt(), lit: game.player_lit(), state: game.state(), time: game.time(), danger: game.danger(), crate: game.crate_x(0) };
+        return { x: game.player_x(), sibling: game.sibling_x(), siblingY: game.sibling_y(), onCrate: game.on_crate(), pot: game.pot_left(), deaths: game.deaths(), checkpoint: game.checkpoint(), cleared: game.cleared(), embers: game.embers(), carrying: game.carrying(), prompt: game.prompt(), lit: game.player_lit(), state: game.state(), time: game.time(), danger: game.danger(), crate: game.crate_x(0) };
       },
       windows: () => readLights(gameRef.current).filter(light => light.kind === KIND.window).map(light => light.lit),
       /** Walk Mira to x synchronously (the frame loop then catches up on drawing and events). */

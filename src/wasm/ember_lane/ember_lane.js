@@ -151,6 +151,14 @@ export class EmberLane {
         return ret;
     }
     /**
+     * Standing on a crate (safe from the rats).
+     * @returns {boolean}
+     */
+    on_crate() {
+        const ret = wasm.emberlane_on_crate(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
      * @returns {boolean}
      */
     player_lit() {
