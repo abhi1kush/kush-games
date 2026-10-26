@@ -1,0 +1,89 @@
+/* Ember Lane — night street stage with warm, candle-lit chrome over the canvas. */
+.ember { gap: 10px; padding-top: 8px; user-select: none; -webkit-user-select: none; }
+.ember-stage {
+  position: relative; width: 100%; max-width: 1180px; aspect-ratio: 16 / 9; max-height: calc(100vh - 150px); max-height: calc(100dvh - 150px);
+  margin: 0 auto; border-radius: 18px; overflow: hidden; background: #05060f;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 190, 120, 0.12), inset 0 0 80px rgba(0, 0, 0, 0.6);
+}
+.ember-frame { position: relative; width: 100%; max-width: 1180px; margin: 0 auto; }
+.ember-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+
+/* HUD */
+.ember-hud { position: absolute; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: flex-start; padding: 12px 14px; pointer-events: none; gap: 8px; }
+.ember-hud > * { pointer-events: auto; }
+.ember-hud__left, .ember-hud__right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ember-hud__section { font: 600 15px/1 Georgia, 'Times New Roman', serif; letter-spacing: 0.08em; text-transform: uppercase; color: #ffdcae; text-shadow: 0 0 12px rgba(255, 140, 50, 0.6), 0 1px 2px #000; }
+.ember-hud__checkpoints { display: flex; gap: 5px; }
+.ember-hud__checkpoints i { width: 7px; height: 7px; border-radius: 50%; background: rgba(255, 255, 255, 0.16); box-shadow: inset 0 0 0 1px rgba(255, 210, 160, 0.25); }
+.ember-hud__checkpoints i.is-lit { background: radial-gradient(circle at 40% 35%, #fff3c4, #ff9a3c 60%, #c8461a); box-shadow: 0 0 8px rgba(255, 150, 60, 0.9); }
+.ember-hud__embers { display: flex; align-items: center; gap: 4px; padding: 5px 10px; border-radius: 999px; background: rgba(8, 8, 18, 0.55); border: 1px solid rgba(255, 180, 100, 0.2); min-height: 26px; }
+.ember-hud__embers i { width: 11px; height: 14px; border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; background: radial-gradient(circle at 50% 70%, #fff2c0, #ffb347 45%, #e0461e 80%); box-shadow: 0 0 10px rgba(255, 130, 40, 0.85); animation: ember-flicker 1.4s ease-in-out infinite alternate; }
+.ember-hud__embers i:nth-child(2) { animation-delay: -0.5s; } .ember-hud__embers i:nth-child(3) { animation-delay: -0.9s; }
+.ember-hud__embers em { font: italic 12px/1 Georgia, serif; color: rgba(255, 220, 190, 0.6); }
+@keyframes ember-flicker { from { transform: scale(0.92); opacity: 0.85; } to { transform: scale(1.06); opacity: 1; } }
+.ember-hud__oil { width: 70px; height: 9px; border-radius: 999px; background: rgba(0, 0, 0, 0.5); border: 1px solid rgba(255, 210, 140, 0.35); overflow: hidden; }
+.ember-hud__oil b { display: block; height: 100%; background: linear-gradient(90deg, #c66a1a, #ffd27a); box-shadow: 0 0 8px rgba(255, 190, 90, 0.8); transition: width 0.4s linear; }
+.ember-icon-button, .ember .ember-mute { width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(255, 200, 140, 0.3); background: rgba(8, 8, 18, 0.55); color: #ffe2b8; font: 700 12px/1 system-ui, sans-serif; cursor: pointer; display: grid; place-items: center; padding: 0; }
+.ember-icon-button:hover, .ember .ember-mute:hover { background: rgba(60, 30, 14, 0.7); }
+
+.ember-hint { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); max-width: min(92%, 640px); margin: 0; padding: 8px 16px; border-radius: 12px;
+  background: linear-gradient(180deg, rgba(14, 12, 24, 0.78), rgba(8, 6, 14, 0.86)); border: 1px solid rgba(255, 190, 120, 0.22); color: #f6e2c6;
+  font: italic 14px/1.35 Georgia, 'Times New Roman', serif; text-align: center; pointer-events: none; animation: ember-fade-in 0.5s ease both; }
+.ember-toast { position: absolute; top: 22%; left: 50%; transform: translateX(-50%); margin: 0; font: 600 clamp(18px, 3vw, 30px)/1.1 Georgia, 'Times New Roman', serif; color: #ffe7c2; letter-spacing: 0.06em; white-space: nowrap;
+  text-shadow: 0 0 24px rgba(255, 140, 50, 0.8), 0 2px 4px #000; pointer-events: none; animation: ember-toast 2.8s ease both; }
+@keyframes ember-toast { 0% { opacity: 0; transform: translate(-50%, 8px); filter: blur(4px); } 15% { opacity: 1; transform: translate(-50%, 0); filter: none; } 75% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -6px); } }
+@keyframes ember-fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* overlays */
+.ember-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 18px; overflow-y: auto;
+  background: radial-gradient(ellipse at 50% 40%, rgba(10, 8, 20, 0.25), rgba(4, 3, 10, 0.82) 75%); animation: ember-fade-in 0.4s ease both; color: #f3e2cc; }
+.ember-overlay--start { background: linear-gradient(180deg, rgba(4, 4, 12, 0.15), rgba(4, 3, 10, 0.55) 45%, rgba(4, 3, 10, 0.85)); }
+.ember-overlay--clear { background: radial-gradient(ellipse at 50% 45%, rgba(255, 170, 80, 0.28), rgba(30, 14, 6, 0.75) 55%, rgba(4, 3, 10, 0.92)); }
+.ember-title { text-align: center; }
+.ember-title h1 { margin: 2px 0 4px; font: 700 clamp(40px, 8vw, 84px)/0.95 Georgia, 'Times New Roman', serif; letter-spacing: 0.04em;
+  background: linear-gradient(180deg, #fff4d6 10%, #ffbe6a 55%, #d9531e 95%); -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 0 22px rgba(255, 130, 40, 0.55)) drop-shadow(0 3px 2px rgba(0, 0, 0, 0.7)); }
+.ember-title__kicker { margin: 0; font: 600 12px/1 system-ui, sans-serif; letter-spacing: 0.32em; text-transform: uppercase; color: rgba(255, 205, 150, 0.75); }
+.ember-title__tag { margin: 6px 0 0; font: italic clamp(15px, 2vw, 19px)/1.3 Georgia, serif; color: #f0d9bc; text-shadow: 0 1px 3px #000; }
+.ember-overlay__heading { margin: 0; font: 700 clamp(28px, 5vw, 46px)/1 Georgia, 'Times New Roman', serif; color: #ffe6bf; text-shadow: 0 0 26px rgba(255, 140, 50, 0.7), 0 2px 3px #000; }
+.ember-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; }
+.ember-record { margin: 0; font: 13px/1 system-ui, sans-serif; color: rgba(255, 215, 170, 0.8); }
+.ember-card { max-width: 560px; padding: 14px 18px; border-radius: 14px; background: linear-gradient(180deg, rgba(22, 16, 26, 0.86), rgba(10, 8, 16, 0.92)); border: 1px solid rgba(255, 190, 120, 0.22); box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5); }
+.ember-card h2 { margin: 0 0 6px; font: 700 15px/1.2 Georgia, serif; letter-spacing: 0.1em; text-transform: uppercase; color: #ffc98a; }
+.ember-card ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; font: 13.5px/1.4 system-ui, sans-serif; color: #eadac6; }
+.ember-card b { color: #ffd9a3; }
+.ember-keys { margin: 8px 0 0; font: 12.5px/1.4 system-ui, sans-serif; color: rgba(255, 220, 185, 0.75); }
+.ember-clear__line, .ember-clear__next { margin: 0; font: italic 15px/1.4 Georgia, serif; text-align: center; color: #f6e0c2; }
+.ember-clear__next { font-size: 13px; color: rgba(246, 224, 194, 0.7); }
+.ember-stats { display: flex; gap: 12px; margin: 4px 0; }
+.ember-stats div { min-width: 82px; padding: 8px 12px; border-radius: 12px; background: rgba(0, 0, 0, 0.35); border: 1px solid rgba(255, 200, 130, 0.25); text-align: center; }
+.ember-stats dt { font: 600 11px/1 system-ui, sans-serif; letter-spacing: 0.15em; text-transform: uppercase; color: rgba(255, 210, 160, 0.7); }
+.ember-stats dd { margin: 5px 0 0; font: 700 22px/1 Georgia, serif; color: #fff0d6; }
+
+/* touch controls */
+.ember-touch { position: absolute; left: 0; right: 0; bottom: 10px; display: flex; justify-content: space-between; align-items: flex-end; padding: 0 12px; pointer-events: none; touch-action: none; }
+.ember-touch > * { pointer-events: auto; }
+.ember-touch__pad, .ember-touch__actions { display: flex; gap: 8px; touch-action: none; }
+.ember-touch__key { width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center; border: 1px solid rgba(255, 210, 160, 0.35); background: rgba(10, 8, 18, 0.5);
+  color: #ffe6c4; font: 800 20px/1 system-ui, sans-serif; touch-action: none; -webkit-tap-highlight-color: transparent; padding: 0; backdrop-filter: blur(2px); }
+.ember-touch__pad:active .ember-touch__key, .ember-touch__key:active { background: rgba(255, 170, 90, 0.3); }
+.ember-touch__key--action.is-ready { border-color: #ffc276; box-shadow: 0 0 16px rgba(255, 170, 80, 0.7); }
+.ember-touch__key--fire.is-empty { opacity: 0.4; }
+@media (pointer: coarse) and (orientation: landscape) { .ember .ember-hint { bottom: 78px; font-size: 12.5px; } }
+@media (orientation: portrait) and (max-width: 700px) {
+  .ember-stage { aspect-ratio: auto; height: min(118vw, calc(100dvh - 210px)); min-height: 340px; max-height: none; border-radius: 12px; }
+  .ember-touch { position: static; padding: 12px 6px 4px; }
+  .ember-touch__key { width: 64px; height: 64px; }
+  .ember-hint { font-size: 12.5px; bottom: 10px; }
+  .ember-hud { padding: 8px 10px; }
+  .ember-card { padding: 10px 12px; }
+  .ember-card ul { font-size: 12.5px; }
+}
+@media (orientation: landscape) and (max-height: 520px) {
+  .ember { padding-top: 2px; gap: 4px; }
+  .ember-stage { max-height: calc(100dvh - 64px); border-radius: 10px; }
+  .ember-overlay { justify-content: flex-start; gap: 8px; padding: 10px; }
+  .ember-title h1 { font-size: 40px; }
+  .ember-card { padding: 8px 12px; }
+  .ember-card ul { font-size: 12px; gap: 2px; }
+}

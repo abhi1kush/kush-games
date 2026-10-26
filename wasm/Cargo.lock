@@ -50,6 +50,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "ember_lane"
+version = "0.1.0"
+dependencies = [
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "fleet_clash"
 version = "0.1.0"
 dependencies = [

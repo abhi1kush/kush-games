@@ -14,6 +14,7 @@ import * as fleetModule from './fleet_clash/fleet_clash.js';
 import * as carromModule from './carrom/carrom.js';
 import * as jalPathModule from './jal_path/jal_path.js';
 import * as paaniPourModule from './paani_pour/paani_pour.js';
+import * as emberLaneModule from './ember_lane/ember_lane.js';
 import { decodeMoves } from '../games/checkers/engine';
 import { RenderSlot } from '../games/breakout/engine';
 import { Buttons, Phase as KushJumpPhase, RenderSlot as KushJumpSlot } from '../games/kushjump/engine';
@@ -41,6 +42,7 @@ let mithaiMemory: WebAssembly.Memory;
 
 let jalPathMemory: WebAssembly.Memory;
 let paaniPourMemory: WebAssembly.Memory;
+let emberLaneMemory: WebAssembly.Memory;
 
 beforeAll(() => {
   breakoutMemory = breakoutModule.initSync({ module: wasmBytes('breakout') }).memory;
@@ -56,11 +58,12 @@ beforeAll(() => {
   carromModule.initSync({ module: wasmBytes('carrom') });
   jalPathMemory = jalPathModule.initSync({ module: wasmBytes('jal_path') }).memory;
   paaniPourMemory = paaniPourModule.initSync({ module: wasmBytes('paani_pour') }).memory;
+  emberLaneMemory = emberLaneModule.initSync({ module: wasmBytes('ember_lane') }).memory;
 });
 
 describe('wasm bindings', () => {
   it('every game .wasm stays small (< 40 KB raw)', () => {
-    for (const name of ['breakout', 'checkers', 'connect_four', 'kush_jump', 'jungle_strike', 'antariksh_defenders', 'mithai_match', 'ludo', 'snakes_ladders', 'fleet_clash', 'carrom', 'jal_path', 'paani_pour']) expect(wasmBytes(name).length, name).toBeLessThan(40 * 1024);
+    for (const name of ['breakout', 'checkers', 'connect_four', 'kush_jump', 'jungle_strike', 'antariksh_defenders', 'mithai_match', 'ludo', 'snakes_ladders', 'fleet_clash', 'carrom', 'jal_path', 'paani_pour', 'ember_lane']) expect(wasmBytes(name).length, name).toBeLessThan(40 * 1024);
   });
 
   it('Jal Path: tiles read zero-copy (8 bytes each), a solved board waters all three houses, an unsolved one runs dry', () => {
@@ -118,6 +121,24 @@ describe('wasm bindings', () => {
     expect(game.is_solved()).toBe(true);
     expect(game.stars()).toBe(3);
     expect(game.pours()).toBe(game.par());
+    game.free();
+  });
+
+  it('Ember Lane: lights and rats read zero-copy, the dark is lethal and death returns to the checkpoint', () => {
+    const game = new emberLaneModule.EmberLane();
+    const lights = new Float32Array(emberLaneMemory.buffer, game.lights_ptr(), game.light_count() * 8);
+    expect(lights[2]).toBeGreaterThan(100); // the hearth's radius
+    expect(game.rat_count()).toBeGreaterThan(100);
+    expect(game.player_lit()).toBe(true);
+    game.debug_warp(1);
+    expect(game.checkpoint()).toBe(1);
+    game.set_input(2);
+    for (let step = 0; step < 60 * 12 && game.deaths() === 0; step++) game.advance(1000 / 60);
+    expect(game.deaths()).toBe(1);
+    game.set_input(0);
+    for (let step = 0; step < 60 * 3; step++) game.advance(1000 / 60);
+    expect(Math.abs(game.player_x() - 990)).toBeLessThan(5);
+    expect(game.state()).not.toBe(5);
     game.free();
   });
 

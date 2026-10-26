@@ -296,6 +296,18 @@ export const games: GameDefinition[] = [
     releaseYear: 2026,
     component: lazy(() => import('./paanipour/PaaniPour')),
   },
+  {
+    id: 'ember-lane',
+    title: 'Ember Lane',
+    tagline: 'Lead your little brother down a night street where rats rule the dark.',
+    description: 'A side-scrolling light-and-shadow puzzle adventure, first stage. Mira must lead her little brother Lio down a village street at night, where rat swarms boil out of every shadow and only flame holds them back. Step into the dark — or leave Lio in it — and the rats take you; you wake at the last lit checkpoint. Wait for a guttering torch to flare, throw embers into cold braziers, carry a lantern while its oil lasts, push a crate out of the light and work linked shutter levers to reach the safe, lit sanctuary door. The light, rat swarms, puzzles and movement run in Rust compiled to WebAssembly; progress and your best time are saved.',
+    categories: ['Puzzle', 'Arcade'],
+    status: 'playable',
+    artwork: { gradientFrom: '#2a1636', gradientTo: '#07060f', accentColor: '#ff9a3c', glyph: '🔥' },
+    controls: '← → / A D walk; E or ↑ take, pull, climb; F or Space throw an ember; P pause; M mute; on-screen buttons on phones',
+    releaseYear: 2026,
+    component: lazy(() => import('./emberlane/EmberLane')),
+  },
 ];
 
 /** Genre filter chips on the home page, in this order (only genres that have a playable game are shown). */
