@@ -48,7 +48,7 @@ function ControlsCard({ touch }: { touch: boolean }) {
       </ul>
       {touch
         ? <p className="ember-keys">◀ ▶ walk · <b>✋</b> take / pull / climb · <b>🔥</b> throw an ember</p>
-        : <p className="ember-keys">← → or A D walk · E or ↑ take / pull / climb · F or Space throw an ember · P pause · M mute</p>}
+        : <p className="ember-keys">← → or A D walk · E or ↑ take / pull / climb · F or Space throw an ember · P or ⋮ menu · M mute</p>}
     </section>
   );
 }
@@ -310,7 +310,7 @@ function EmberLaneScreens() {
           </div>
         )}
         {screen === 'playing' && hud.hint && !isPaused && <p className="ember-hint" data-testid="ember-hint">{hud.hint}</p>}
-        {screen === 'playing' && toast && <p key={toast.key} className="ember-toast" data-testid="ember-toast">{toast.text}</p>}
+        {screen === 'playing' && toast && !isPaused && <p key={toast.key} className="ember-toast" data-testid="ember-toast">{toast.text}</p>}
         {screen === 'start' && (
           <div className="ember-overlay ember-overlay--start" data-testid="ember-start">
             <div className="ember-title">
