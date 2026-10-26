@@ -7,7 +7,7 @@ import { BoardResult, onlineResult } from '../online/result';
 import { parseSavedOnlineRoom, SavedOnlineRoom } from '../online/save';
 import { playConnectedSound, playGameOverSound, playOfferSound } from '../online/sounds';
 import { useOnlineRoom } from '../online/useOnlineRoom';
-import { MuteButton, unlockAudio, useSharedMute } from '../sharedSound';
+import { getSharedSoundsPlayed, MuteButton, unlockAudio, useSharedMute } from '../sharedSound';
 import ConnectFourBoard from './Board';
 import { ROWS } from './engine';
 import { connectFourRules, replayColumns } from './rules';
@@ -76,7 +76,7 @@ export default function ConnectFourOnline({ role, roomCode, initialMatch, isRest
 
   return (
     <div className="game-shell connect-four connect-four--online" data-testid="connect-four" data-mode="online" data-winner={board.winner}
-      data-moves={match.moves.length} data-my-color={hasJoinedGame ? myColor : ''} data-game-number={match.gameNumber}
+      data-moves={match.moves.length} data-sounds={getSharedSoundsPlayed()} data-my-color={hasJoinedGame ? myColor : ''} data-game-number={match.gameNumber}
       data-over={isOver ? 'true' : 'false'} data-turn={turnColor}>
       <div className="game-shell__header">
         <div className="game-segments" role="group" aria-label="Opponent">

@@ -3,7 +3,7 @@ import { createAiClient, emptyTally, isTally, Tally, waitAtLeast } from '../aiWo
 import { readStoredJson, saveStoredJson } from '../random';
 import { OnlineLobbyCard } from '../online/OnlineUI';
 import { useOnlineScreen } from '../online/useOnlineScreen';
-import { MuteButton, unlockAudio, useSharedMute } from '../sharedSound';
+import { getSharedSoundsPlayed, MuteButton, unlockAudio, useSharedMute } from '../sharedSound';
 import ConnectFourBoard from './Board';
 import ConnectFourOnline, { createConnectFourOnlineSlot } from './ConnectFourOnline';
 import { COLUMNS, computeMoveHere, ConnectFour as Engine, HARD_NODE_BUDGET, loadConnectFourEngine, ROWS } from './engine';
@@ -213,7 +213,7 @@ function ConnectFourGame({ onOnline }: { onOnline(): void }) {
 
   return (
     <div className="game-shell connect-four" data-testid="connect-four" data-mode={mode} data-level={level} data-winner={view.winner}
-      data-moves={view.history.length} data-thinking={isThinking} data-ai-ms={aiMilliseconds ?? ''}>
+      data-moves={view.history.length} data-thinking={isThinking} data-ai-ms={aiMilliseconds ?? ''} data-sounds={getSharedSoundsPlayed()}>
       <div className="game-shell__header">
         <ModeSegments mode={mode} onLocalMode={nextMode => startNewGame({ mode: nextMode })} onOnline={onOnline} />
         {mode === 'computer' && (
