@@ -253,33 +253,44 @@ fn a_new_run_starts_with_embers_and_checkpoints_top_them_up() {
     assert_eq!(game.embers(), 3, "Torch Lane tops up to three");
 }
 
-/// The guttering torch is dark until Mira arrives, stays dark for a beat, then flares and runs its cycle, so the
-/// first thing the player sees is it lighting up — never a torch caught halfway through its bright phase.
+/// The guttering torch burns steadily until Mira is standing on top of the stone wall. Only then does it go out,
+/// stay dark for a beat, flare and run its cycle, so she sees the whole pattern from a safe spot.
 #[test]
-fn the_guttering_torch_wakes_dark_when_mira_arrives() {
+fn the_guttering_torch_starts_its_cycle_when_mira_is_on_the_wall() {
     let mut game = EmberLane::new();
     let torch = FLICKER;
-    run(&mut game, 0, 20.0); // dawdle at the start: it stays asleep
-    assert_eq!(game.world.lights[torch].intensity, 0.0, "dark before Mira gets there");
-    walk_to(&mut game, FLICKER_WAKE_X + 1.0);
-    let woke = game.world.flicker_start;
-    assert!(woke >= 0.0);
-    assert_eq!(game.world.lights[torch].intensity, 0.0, "still dark as it wakes");
+    run(&mut game, 0, 20.0); // dawdle at the start
+    assert_eq!(game.world.lights[torch].intensity, 1.0, "steady before Mira is on the wall");
+    walk_to(&mut game, 480.0); // right up against the wall
+    run(&mut game, 0, 8.0);
+    assert!(game.world.flicker_start < 0.0, "approaching doesn't start it");
+    assert_eq!(game.world.lights[torch].intensity, 1.0);
+    game.interact(); // climb
+    run(&mut game, 0, CLIMB_SECONDS * 0.5);
+    assert!(game.world.flicker_start < 0.0, "not while still climbing");
+    run(&mut game, 0, CLIMB_SECONDS * 0.5 + 0.05);
+    assert_eq!(game.standing_on(), STONE as i32);
+    assert!(game.world.flicker_start >= 0.0, "on top of the wall it starts");
+    assert_eq!(game.world.lights[torch].intensity, 0.0, "it goes out first");
     run(&mut game, 0, FLICKER_FIRST_DARK - 0.1);
-    assert_eq!(game.world.lights[torch].intensity, 0.0, "a dark beat first");
+    assert_eq!(game.world.lights[torch].intensity, 0.0, "a dark beat");
     run(&mut game, 0, 0.4);
     assert_eq!(game.world.lights[torch].intensity, 1.0, "then it flares up");
-    // and keeps cycling: bright for a while, then dark again, then bright again
+    // and keeps cycling: dark again, then bright again
     let mut seen_dark = false;
     let mut seen_bright_again = false;
-    for _ in 0..60 * 6 {
+    for _ in 0..60 * 7 {
         game.advance(1000.0 / 60.0);
         let level = game.world.lights[torch].intensity;
         if level == 0.0 { seen_dark = true; }
         if seen_dark && level == 1.0 { seen_bright_again = true; }
     }
     assert!(seen_dark && seen_bright_again, "it gutters out and flares again");
-    // a fall before Torch Lane's checkpoint puts it back to sleep, so it wakes dark again on the next try
+    // hopping down doesn't stop it
+    game.interact();
+    run(&mut game, 0, 1.0);
+    assert!(game.world.flicker_start >= 0.0);
+    // a fall before Torch Lane's checkpoint resets it: steady again until she's back on the wall
     let mut died = false;
     for _ in 0..60 * 12 {
         game.world.player_x = 690.0;
@@ -287,10 +298,10 @@ fn the_guttering_torch_wakes_dark_when_mira_arrives() {
         game.advance(1000.0 / 60.0);
         if game.take_events() & EVENT_DEATH != 0 { died = true; break; }
     }
-    assert!(died, "the dark stretch is deadly");
+    assert!(died, "the dark stretch is deadly while it gutters");
     run(&mut game, 0, DEATH_SECONDS + 0.2);
-    assert!(game.player_x() < FLICKER_WAKE_X && game.world.flicker_start < 0.0);
-    assert_eq!(game.world.lights[torch].intensity, 0.0);
+    assert!(game.world.flicker_start < 0.0);
+    assert_eq!(game.world.lights[torch].intensity, 1.0);
 }
 
 /// The stone wall before the guttering torch can't be walked through or pushed: Mira must climb it, which takes

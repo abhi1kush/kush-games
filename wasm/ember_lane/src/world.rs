@@ -22,10 +22,10 @@ pub const DEATH_SECONDS: f32 = 1.8;
 pub const BITE_SECONDS: f32 = 0.85;
 pub const GRAVITY: f32 = 620.0;
 pub const HALF_BODY: f32 = 8.0;
-/// The guttering torch sleeps (dark) until Mira gets this far, so its first flare happens in front of her.
-pub const FLICKER_WAKE_X: f32 = 420.0;
-/// Dark beat after it wakes before the first flare.
-pub const FLICKER_FIRST_DARK: f32 = 0.9;
+/// The guttering torch burns steadily until Mira stands on top of the stone wall in front of it; then it goes out
+/// and starts guttering on and off, so she watches the whole cycle from a safe spot.
+/// How long it stays dark when it first goes out, before its first flare.
+pub const FLICKER_FIRST_DARK: f32 = 1.3;
 /// Its cycle: bright, fading, dark, flaring back up.
 pub const FLICKER_ON: f32 = 4.2;
 pub const FLICKER_FADE: f32 = 0.3;
@@ -158,7 +158,7 @@ impl World {
     pub fn is_lit(&self, x: f32) -> bool { self.light_at(x) >= LIT_LEVEL }
 
     pub fn flicker_intensity(&self) -> f32 {
-        if self.flicker_start < 0.0 { return 0.0; }
+        if self.flicker_start < 0.0 { return 1.0; } // steady until Mira is up on the wall
         // it wakes in the dark part of its cycle: FLICKER_FIRST_DARK of darkness, then the flare
         let dark_end = FLICKER_ON + FLICKER_FADE + FLICKER_DARK;
         let phase = (self.time - self.flicker_start + dark_end - FLICKER_FIRST_DARK) % FLICKER_PERIOD;
@@ -169,7 +169,7 @@ impl World {
     }
 
     pub fn update_lights(&mut self) {
-        if self.flicker_start < 0.0 && self.player_x >= FLICKER_WAKE_X { self.flicker_start = self.time; }
+        if self.flicker_start < 0.0 && self.on_crate == STONE as i8 && self.state != STATE_CLIMB { self.flicker_start = self.time; }
         let flicker = self.flicker_intensity();
         for index in 0..LIGHT_COUNT {
             let kind = self.lights[index].kind as u8;

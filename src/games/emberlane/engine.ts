@@ -76,8 +76,8 @@ export function hintFor(x: number, carrying: boolean, embers: number, yard?: Yar
     if (x > 2450) return 'The crate blocks the brazier’s light. Climb onto it — rats can’t reach you up there.';
   }
   if (x < 300) return 'Rats fear the light. Keep yourself — and Lio — inside it.';
-  if (x > 380 && x < 640 && yard?.onCrate) return 'Watch the torch ahead gutter out and flare up. Hop down as it flares, then cross while it burns.';
-  if (x > 430 && x < STONE.x) return 'A stone wall. Climb it — from the top you can watch the torch ahead.';
+  if (x > 380 && x < 640 && yard?.onCrate) return 'Up here the torch ahead starts to gutter out and flare up. Hop down as it flares, then cross while it burns.';
+  if (x > 430 && x < STONE.x) return 'A stone wall. Climb it — once you are on top, the torch ahead starts to gutter.';
   if (x > STONE.x && x < 640) return 'Cross while the torch burns. If it gutters out, wait in the light behind you.';
   if (x > 960 && x < 1120) return embers > 0 ? 'A cold brazier in the dark. Throw an ember at it.' : 'A cold brazier in the dark…';
   if (x > 1240 && x < 1330) return 'Light the next brazier from here.';
