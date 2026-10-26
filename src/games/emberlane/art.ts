@@ -567,44 +567,71 @@ export function drawWindow(context: CanvasRenderingContext2D, view: View, x: num
   context.fillStyle = '#3d2718'; context.fillRect(cx - w / 2 - 3 * s, cy + h / 2, w + 6 * s, 3 * s);
 }
 
-/** The low stone wall before the guttering torch: dressed blocks, mortar, a mossy top. */
-export function drawStone(context: CanvasRenderingContext2D, view: View, x: number, half: number, height: number) {
+/** The stone staircase before the guttering torch: a flight of steps up, a flat landing, a flight down. Each tread
+ * has a lit nosing and a shadowed riser so it reads as steps to walk up, not a block to push. */
+export function drawStairs(context: CanvasRenderingContext2D, view: View, stairs: { x: number; half: number; height: number; steps: number; landing: number }) {
   const s = view.scale;
-  const left = toScreenX(view, x - half);
-  const width = half * 2 * s;
-  const top = view.ground - height * s;
-  // contact shadow on the cobbles, then the block with a dark outline so it reads in front of the house plinths
+  const ground = view.ground;
+  const tread = (stairs.half - stairs.landing) / stairs.steps;
+  const rise = stairs.height / stairs.steps;
+  const sx = (x: number) => toScreenX(view, x);
+  const sy = (y: number) => ground - y * s;
+  // contact shadow on the cobbles
   context.fillStyle = 'rgba(0, 0, 0, 0.4)';
-  context.beginPath(); context.ellipse(left + width / 2, view.ground + 1 * s, width * 0.62, 3 * s, 0, 0, Math.PI * 2); context.fill();
-  const face = context.createLinearGradient(left, top, left + width, view.ground);
-  face.addColorStop(0, '#a08c74'); face.addColorStop(1, '#5e4f42');
+  context.beginPath(); context.ellipse(sx(stairs.x), ground + 1 * s, stairs.half * s * 1.05, 3 * s, 0, 0, Math.PI * 2); context.fill();
+  // the silhouette: up the left flight, across the landing, down the right flight
+  const outline: [number, number][] = [[stairs.x - stairs.half, 0]];
+  for (let step = 1; step <= stairs.steps; step++) {
+    const x = stairs.x - stairs.half + (step - 1) * tread;
+    outline.push([x, step * rise], [x + tread, step * rise]);
+  }
+  for (let step = stairs.steps; step >= 1; step--) {
+    const x = stairs.x + stairs.landing + (stairs.steps - step) * tread;
+    outline.push([x, step * rise], [x + tread, step * rise]);
+  }
+  outline.push([stairs.x + stairs.half, 0]);
+  const face = context.createLinearGradient(0, sy(stairs.height), 0, ground);
+  face.addColorStop(0, '#9c8a72'); face.addColorStop(1, '#5a4b3f');
   context.fillStyle = face;
   context.strokeStyle = '#231a14';
   context.lineWidth = 1.6 * s;
-  context.beginPath(); context.roundRect(left, top, width, height * s, 2 * s); context.fill(); context.stroke();
-  // courses of blocks
-  context.strokeStyle = 'rgba(40, 34, 32, 0.75)';
-  context.lineWidth = 1.1 * s;
-  const rows = 3;
   context.beginPath();
-  for (let row = 1; row < rows; row++) { const y = top + (height * s * row) / rows; context.moveTo(left, y); context.lineTo(left + width, y); }
-  for (let row = 0; row < rows; row++) {
-    const y0 = top + (height * s * row) / rows;
-    const y1 = top + (height * s * (row + 1)) / rows;
-    const offsets = row % 2 ? [0.5] : [0.28, 0.72];
-    for (const offset of offsets) { const jx = left + width * offset; context.moveTo(jx, y0); context.lineTo(jx, y1); }
+  outline.forEach(([x, y], index) => (index ? context.lineTo(sx(x), sy(y)) : context.moveTo(sx(x), sy(y))));
+  context.closePath(); context.fill(); context.stroke();
+  // mortar: a course line at every step height, staggered joints
+  context.strokeStyle = 'rgba(40, 34, 32, 0.7)';
+  context.lineWidth = 1 * s;
+  context.beginPath();
+  for (let step = 1; step < stairs.steps; step++) {
+    const inset = stairs.half - step * tread;
+    context.moveTo(sx(stairs.x - inset), sy(step * rise)); context.lineTo(sx(stairs.x + inset), sy(step * rise));
+  }
+  for (let step = 0; step < stairs.steps; step++) {
+    const inset = stairs.half - step * tread;
+    const y0 = sy(step * rise); const y1 = sy((step + 1) * rise);
+    const joints = step % 2 ? [-0.25, 0.25] : [-0.5, 0, 0.5];
+    for (const joint of joints) { const jx = sx(stairs.x + joint * inset); context.moveTo(jx, y0); context.lineTo(jx, y1); }
   }
   context.stroke();
-  // chips and highlights
-  context.fillStyle = 'rgba(255, 240, 220, 0.12)';
-  context.fillRect(left + 1 * s, top + 1 * s, width - 2 * s, 2 * s);
-  context.fillStyle = 'rgba(0, 0, 0, 0.18)';
-  context.fillRect(left + width - 3 * s, top, 3 * s, height * s);
-  // moss on top
+  // each tread: a bright worn nosing on top and a dark riser below it, so the steps read at a glance
+  for (let step = 1; step <= stairs.steps; step++) {
+    const y = sy(step * rise);
+    for (const side of [-1, 1]) {
+      const outer = stairs.x + side * (stairs.half - (step - 1) * tread);
+      const inner = step === stairs.steps ? stairs.x + side * stairs.landing : stairs.x + side * (stairs.half - step * tread);
+      const [from, to] = side < 0 ? [outer, inner] : [inner, outer];
+      context.fillStyle = 'rgba(255, 238, 210, 0.28)';
+      context.fillRect(sx(from), y, (to - from) * s, 1.6 * s);
+      context.fillStyle = 'rgba(0, 0, 0, 0.22)';
+      context.fillRect(sx(from), y + 1.6 * s, (to - from) * s, Math.min(rise * 0.45, 3) * s);
+    }
+  }
+  // the landing: a broad worn slab with a little moss in the corners
+  context.fillStyle = 'rgba(255, 238, 210, 0.3)';
+  context.fillRect(sx(stairs.x - stairs.landing), sy(stairs.height), stairs.landing * 2 * s, 1.8 * s);
   context.fillStyle = '#4f6b3a';
-  context.beginPath();
-  context.moveTo(left - 1 * s, top + 1.5 * s);
-  for (let step = 0; step <= 8; step++) { const px = left - 1 * s + ((width + 2 * s) * step) / 8; context.lineTo(px, top - (step % 2 ? 1.6 : 0.4) * s); }
-  context.lineTo(left + width + 1 * s, top + 1.5 * s);
-  context.closePath(); context.fill();
+  for (const side of [-1, 1]) {
+    const cx = sx(stairs.x + side * (stairs.landing - 1.5));
+    context.beginPath(); context.ellipse(cx, sy(stairs.height) + 0.6 * s, 2.4 * s, 1.2 * s, 0, Math.PI, 0); context.fill();
+  }
 }

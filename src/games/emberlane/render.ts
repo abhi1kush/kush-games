@@ -3,9 +3,9 @@
  * layer with soft holes cut by every flame (clipped by crate shadows), warm additive glows and light shafts — then
  * embers, smoke, low mist, rat eyes glinting in the dark, a danger tint and the vignette.
  */
-import { drawBrazier, drawCrate, drawStone, drawFirePot, drawFlame, drawLantern, drawLever, drawTorch, drawWindow, hash, LayerCache, paintFar, paintMid, paintSky, paintStreet, toScreenX, toScreenY, type View } from './art';
+import { drawBrazier, drawCrate, drawStairs, drawFirePot, drawFlame, drawLantern, drawLever, drawTorch, drawWindow, hash, LayerCache, paintFar, paintMid, paintSky, paintStreet, toScreenX, toScreenY, type View } from './art';
 import { drawLio, drawMira } from './characters';
-import { CRATE, type EmberLane, KIND, LEVER_X, type Light, PROMPT, PROMPT_TEXT, STONE, RAT_STRIDE, ratView, readLights, STAGE_END, STATE } from './engine';
+import { CRATE, type EmberLane, KIND, LEVER_X, type Light, PROMPT, PROMPT_TEXT, STAIRS, RAT_STRIDE, ratView, readLights, STAGE_END, STATE } from './engine';
 
 /** World units visible from the bottom of the street band to the top of the view. */
 export const VIEW_UNITS = 178;
@@ -133,7 +133,7 @@ export class Renderer {
       }
     });
     const crateX = game.crate_x(0);
-    if (visible(STONE.x)) drawStone(context, view, STONE.x, STONE.half, STONE.height);
+    if (visible(STAIRS.x)) drawStairs(context, view, STAIRS);
 
     // --- lantern lying on its hook / the ground
     const lantern = lights.find(light => light.kind === KIND.lantern)!;
@@ -211,7 +211,7 @@ export class Renderer {
     vignette.addColorStop(0, 'rgba(0, 0, 0, 0)'); vignette.addColorStop(1, 'rgba(0, 0, 0, 0.72)');
     context.fillStyle = vignette; context.fillRect(0, 0, width, height);
     if (isDead) { context.fillStyle = `rgba(0, 0, 0, ${Math.min(0.85, Math.max(0, deadT - 0.6) * 0.9)})`; context.fillRect(0, 0, width, height); }
-    if (overlay.prompt && !isDead) this.drawPrompt(context, view, playerX, charY - (54 + game.player_y()) * s, overlay.prompt === PROMPT.climb && game.player_x() < 1000 ? 'Climb the wall' : PROMPT_TEXT[overlay.prompt], overlay.touch);
+    if (overlay.prompt && !isDead) this.drawPrompt(context, view, playerX, charY - (54 + game.player_y()) * s, game.player_x() < 1000 && overlay.prompt === PROMPT.climb ? 'Climb the steps' : game.player_x() < 1000 && overlay.prompt === PROMPT.hopDown ? 'Step down' : PROMPT_TEXT[overlay.prompt], overlay.touch);
   }
 
   private lastLio: number | null = null;

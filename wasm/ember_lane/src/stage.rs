@@ -51,11 +51,16 @@ pub const RAT_COUNT: usize = 218;
 pub const CHECKPOINTS: [(f32, u8); 5] = [(START_X, 3), (990.0, 3), (1700.0, 1), (2410.0, 2), (3000.0, 1)];
 
 /// Blocks: start x (centre), half width, height, how far it may slide. The first is Cooper's Yard's crate; the
-/// second is a fixed stone wall just before the guttering torch (it can't slide, and light spills over it): Mira has
-/// to climb it, and from the top she can watch the torch gutter before she crosses.
-pub const CRATES: [(f32, f32, f32, f32, f32); 2] = [(2575.0, 15.0, 30.0, 2440.0, 2590.0), (STONE_X, 14.0, 26.0, STONE_X, STONE_X)];
-pub const STONE_X: f32 = 505.0;
-pub const STONE: usize = 1;
+/// second is a fixed stone staircase just before the guttering torch (steps up, a landing, steps down; it can't
+/// slide, and light spills over it): Mira walks up it, and from the landing she watches the torch gutter before she
+/// crosses.
+pub const CRATES: [(f32, f32, f32, f32, f32); 2] = [(2575.0, 15.0, 30.0, 2440.0, 2590.0), (STAIRS_X, STAIRS_HALF, 26.0, STAIRS_X, STAIRS_X)];
+pub const STAIRS_X: f32 = 505.0;
+pub const STAIRS_HALF: f32 = 26.0;
+pub const STAIRS: usize = 1;
+/// Steps in each flight, and the half width of the flat landing on top.
+pub const STAIRS_STEPS: f32 = 3.0;
+pub const STAIRS_LANDING: f32 = 8.0;
 
 /// Levers: x, and which window each opens (the other one closes: a shared rope).
 pub const LEVERS: [(f32, usize); 2] = [(3060.0, WINDOW_A), (3262.0, WINDOW_B)];

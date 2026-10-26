@@ -97,6 +97,10 @@ pub struct World {
     pub climb_to_y: f32,
     /// The crate Mira stands on (-1: on the ground).
     pub on_crate: i8,
+    /// The current climb goes up or down the staircase (step by step rather than a scramble).
+    pub climb_stairs: bool,
+    /// Just walked up onto the landing: she stays there until the direction key is let go.
+    pub stair_hold: bool,
     /// When the guttering torch woke up (-1: still asleep and dark).
     pub flicker_start: f32,
     pub walked: f32,
@@ -132,7 +136,7 @@ impl World {
         }
         let crates = CRATES.map(|(x, half, height, min_x, max_x)| Crate { x, half, height, min_x, max_x });
         let mut world = World {
-            time: 0.0, player_x: START_X, player_y: 0.0, facing: 1.0, state: STATE_IDLE, state_time: 0.0, climb_from: 0.0, climb_to: 0.0, climb_from_y: 0.0, climb_to_y: 0.0, on_crate: -1, flicker_start: -1.0, walked: 0.0,
+            time: 0.0, player_x: START_X, player_y: 0.0, facing: 1.0, state: STATE_IDLE, state_time: 0.0, climb_from: 0.0, climb_to: 0.0, climb_from_y: 0.0, climb_to_y: 0.0, on_crate: -1, climb_stairs: false, stair_hold: false, flicker_start: -1.0, walked: 0.0,
             sibling_x: START_X - SIBLING_GAP, sibling_y: 0.0, sibling_facing: 1.0, sibling_walked: 0.0, danger: 0.0, sibling_danger: 0.0,
             lights, base_lit, pot_left: 0.0, carrying: false, lantern_used: false, oil: LANTERN_OIL, embers: CHECKPOINTS[0].1, ember: Ember::default(),
             crates, levers: [false; LEVERS.len()], rats: [Rat::default(); RAT_COUNT], checkpoint: 0, cleared: false, events: 0,
@@ -169,7 +173,7 @@ impl World {
     }
 
     pub fn update_lights(&mut self) {
-        if self.flicker_start < 0.0 && self.on_crate == STONE as i8 && self.state != STATE_CLIMB { self.flicker_start = self.time; }
+        if self.flicker_start < 0.0 && self.on_crate == STAIRS as i8 && self.state != STATE_CLIMB { self.flicker_start = self.time; }
         let flicker = self.flicker_intensity();
         for index in 0..LIGHT_COUNT {
             let kind = self.lights[index].kind as u8;
@@ -241,12 +245,7 @@ impl World {
                 self.events |= EVENT_DROP;
             }
             PROMPT_CLIMB => {
-                if let Some(index) = self.climbable_crate() {
-                    // up onto the near half of the top: out of the rats' reach
-                    let crate_box = self.crates[index];
-                    self.start_climb(crate_box.x - self.facing * crate_box.half * 0.35, 0.0, crate_box.height);
-                    self.on_crate = index as i8;
-                }
+                if let Some(index) = self.climbable_crate() { self.climb_onto(index); }
             }
             PROMPT_HOP_DOWN => self.hop_down(self.facing),
             _ => {}
@@ -254,7 +253,27 @@ impl World {
         self.update_lights();
     }
 
+    /// Up onto a crate (the near half of its top) or up the staircase (onto its landing): out of the rats' reach.
+    fn climb_onto(&mut self, index: usize) {
+        let crate_box = self.crates[index];
+        let to_x = if index == STAIRS { crate_box.x - self.facing * 3.0 } else { crate_box.x - self.facing * crate_box.half * 0.35 };
+        self.start_climb(to_x, 0.0, crate_box.height);
+        self.climb_stairs = index == STAIRS;
+        self.on_crate = index as i8;
+    }
+
+    /// Height of the ground (or a step) at x for someone walking over the staircase.
+    pub fn stairs_height(&self, x: f32) -> f32 {
+        let stairs = self.crates[STAIRS];
+        let from_centre = (x - stairs.x).abs();
+        if from_centre <= STAIRS_LANDING { return stairs.height; }
+        if from_centre >= stairs.half { return 0.0; }
+        let tread = (stairs.half - STAIRS_LANDING) / STAIRS_STEPS;
+        stairs.height * ((stairs.half - from_centre) / tread).ceil() / STAIRS_STEPS
+    }
+
     fn start_climb(&mut self, to_x: f32, from_y: f32, to_y: f32) {
+        self.climb_stairs = false;
         self.state = STATE_CLIMB;
         self.state_time = 0.0;
         self.climb_from = self.player_x;
@@ -270,6 +289,8 @@ impl World {
         let crate_box = self.crates[self.on_crate as usize];
         self.facing = direction;
         self.start_climb(crate_box.x + direction * (crate_box.half + HALF_BODY + 2.0), crate_box.height, 0.0);
+        self.climb_stairs = self.on_crate == STAIRS as i8;
+        self.stair_hold = false;
         self.on_crate = -1;
     }
 
@@ -333,19 +354,34 @@ impl World {
         if self.state == STATE_CLIMB {
             let t = (self.state_time / CLIMB_SECONDS).min(1.0);
             self.player_x = self.climb_from + (self.climb_to - self.climb_from) * t;
-            self.player_y = self.climb_from_y + (self.climb_to_y - self.climb_from_y) * t + 4.0 * t * (1.0 - t) * 12.0;
-            if t >= 1.0 { self.state = STATE_IDLE; self.player_y = self.climb_to_y; }
+            self.player_y = if self.climb_stairs {
+                // one step at a time: a little lift on each tread
+                let steps = t * STAIRS_STEPS;
+                let lift = steps.floor() + (steps.fract() * 2.0).min(1.0);
+                self.climb_from_y + (self.climb_to_y - self.climb_from_y) * (lift / STAIRS_STEPS).min(1.0)
+            } else {
+                self.climb_from_y + (self.climb_to_y - self.climb_from_y) * t + 4.0 * t * (1.0 - t) * 12.0
+            };
+            if t >= 1.0 {
+                self.state = STATE_IDLE;
+                self.player_y = self.climb_to_y;
+                // walked up onto the landing: stop there until the key is let go, so she sees the torch go out
+                if self.climb_stairs && self.on_crate == STAIRS as i8 { self.stair_hold = true; }
+            }
             return;
         }
         if self.state == STATE_THROW && self.state_time < 0.35 { return; }
         let direction = (buttons & BUTTON_RIGHT != 0) as i32 as f32 - (buttons & BUTTON_LEFT != 0) as i32 as f32;
-        if direction == 0.0 { self.state = STATE_IDLE; return; }
+        if direction == 0.0 { self.state = STATE_IDLE; self.stair_hold = false; return; }
+        if self.stair_hold { self.state = STATE_IDLE; return; }
         self.facing = direction;
         if self.on_crate >= 0 {
             // walking on top of a crate; stepping off an edge hops down on that side
             let crate_box = self.crates[self.on_crate as usize];
             let next = self.player_x + direction * WALK_SPEED * STEP;
-            if (next - crate_box.x).abs() > crate_box.half - 3.0 { self.hop_down(direction); return; }
+            let top = if self.on_crate == STAIRS as i8 { STAIRS_LANDING } else { crate_box.half - 3.0 };
+            // stepping off the edge: hop down that side (or walk down the staircase's far flight)
+            if (next - crate_box.x).abs() > top { self.hop_down(direction); return; }
             self.walked += (next - self.player_x).abs();
             self.player_x = next;
             self.state = STATE_WALK;
@@ -353,11 +389,12 @@ impl World {
         }
         let mut step = direction * WALK_SPEED * STEP;
         let mut pushing = false;
+        let mut up_the_stairs = false;
         for crate_box in self.crates.iter_mut() {
             let edge_gap = if direction > 0.0 { (crate_box.x - crate_box.half) - (self.player_x + HALF_BODY) } else { (self.player_x - HALF_BODY) - (crate_box.x + crate_box.half) };
             if edge_gap < -0.5 || edge_gap > step.abs() { continue; }
-            // touching a fixed stone: it just stops her (climb it instead)
-            if crate_box.fixed() { step = direction * edge_gap.max(0.0); continue; }
+            // walking into the staircase: she walks up it
+            if crate_box.fixed() { step = direction * edge_gap.max(0.0); up_the_stairs = true; continue; }
             // touching: push it (slower) as far as its track allows
             let push = direction * PUSH_SPEED * STEP;
             let new_x = (crate_box.x + push).within(crate_box.min_x, crate_box.max_x);
@@ -370,6 +407,7 @@ impl World {
         self.walked += step.abs();
         self.state = if pushing { STATE_PUSH } else { STATE_WALK };
         if pushing && step.abs() > 0.0 { self.events |= EVENT_PUSH; }
+        if up_the_stairs { self.climb_onto(STAIRS); }
     }
 
     fn move_sibling(&mut self) {
@@ -378,7 +416,8 @@ impl World {
         if self.on_crate >= 0 {
             // Mira is up on a crate: Lio scrambles up beside her, out of the rats' reach
             let crate_box = self.crates[self.on_crate as usize];
-            target = target.within(crate_box.x - crate_box.half + 4.0, crate_box.x + crate_box.half - 4.0);
+            let reach = if self.on_crate == STAIRS as i8 { STAIRS_LANDING - 4.0 } else { crate_box.half - 4.0 };
+            target = target.within(crate_box.x - reach, crate_box.x + reach);
         }
         let delta = target - self.sibling_x;
         if delta.abs() > 2.0 {
@@ -392,7 +431,10 @@ impl World {
         }
         // hop onto / over crates
         let mut height = 0.0f32;
-        for crate_box in &self.crates { if (self.sibling_x - crate_box.x).abs() < crate_box.half + 4.0 { height = height.max(crate_box.height); } }
+        for (index, crate_box) in self.crates.iter().enumerate() {
+            if index == STAIRS { height = height.max(self.stairs_height(self.sibling_x)); continue; } // he trots up the steps
+            if (self.sibling_x - crate_box.x).abs() < crate_box.half + 4.0 { height = height.max(crate_box.height); }
+        }
         self.sibling_y += (height - self.sibling_y) * 0.35;
     }
 

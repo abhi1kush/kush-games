@@ -122,14 +122,10 @@ fn the_advance_clock_survives_bad_frame_gaps() {
 fn the_whole_stage_can_be_cleared_without_dying() {
     let mut game = EmberLane::new();
     // 1. torches and the flickering torch: wait for the flare, then cross
-    walk_to(&mut game, 480.0); // up against the stone wall
-    assert_eq!(game.prompt(), PROMPT_CLIMB);
-    game.interact();
-    wait(&mut game, 0.7);
-    assert_eq!(game.standing_on(), STONE as i32);
-    wait_for_flare(&mut game); // watch it from the top of the wall
-    game.interact(); // hop down
-    walk_to(&mut game, 1000.0);
+    run(&mut game, BUTTON_RIGHT, 6.0); // walk up the staircase; she stops on the landing
+    assert_eq!(game.standing_on(), STAIRS as i32);
+    wait_for_flare(&mut game); // watch it from the landing
+    walk_to(&mut game, 1000.0); // down the far steps and across while it burns
     assert_eq!(game.deaths(), 0, "flicker section");
     assert_eq!(game.checkpoint(), 1);
     // 2. braziers
@@ -253,24 +249,28 @@ fn a_new_run_starts_with_embers_and_checkpoints_top_them_up() {
     assert_eq!(game.embers(), 3, "Torch Lane tops up to three");
 }
 
-/// The guttering torch burns steadily until Mira is standing on top of the stone wall. Only then does it go out,
+/// The guttering torch burns steadily until Mira is standing on the staircase's landing. Only then does it go out,
 /// stay dark for a beat, flare and run its cycle, so she sees the whole pattern from a safe spot.
 #[test]
-fn the_guttering_torch_starts_its_cycle_when_mira_is_on_the_wall() {
+fn the_guttering_torch_starts_its_cycle_when_mira_is_on_the_landing() {
     let mut game = EmberLane::new();
     let torch = FLICKER;
+    let foot = STAIRS_X - STAIRS_HALF - HALF_BODY - 4.0;
     run(&mut game, 0, 20.0); // dawdle at the start
-    assert_eq!(game.world.lights[torch].intensity, 1.0, "steady before Mira is on the wall");
-    walk_to(&mut game, 480.0); // right up against the wall
+    assert_eq!(game.world.lights[torch].intensity, 1.0, "steady before Mira is on the stairs");
+    walk_to(&mut game, foot); // at the foot of the staircase
     run(&mut game, 0, 8.0);
     assert!(game.world.flicker_start < 0.0, "approaching doesn't start it");
     assert_eq!(game.world.lights[torch].intensity, 1.0);
-    game.interact(); // climb
-    run(&mut game, 0, CLIMB_SECONDS * 0.5);
-    assert!(game.world.flicker_start < 0.0, "not while still climbing");
-    run(&mut game, 0, CLIMB_SECONDS * 0.5 + 0.05);
-    assert_eq!(game.standing_on(), STONE as i32);
-    assert!(game.world.flicker_start >= 0.0, "on top of the wall it starts");
+    // walk up: not while still on the steps
+    game.set_input(BUTTON_RIGHT);
+    for _ in 0..60 * 3 { game.advance(1000.0 / 60.0); if game.state() == STATE_CLIMB { break; } }
+    assert_eq!(game.state(), STATE_CLIMB, "walking into the staircase walks her up it");
+    assert!(game.world.flicker_start < 0.0, "not while still on the steps");
+    for _ in 0..60 * 3 { game.advance(1000.0 / 60.0); if game.state() != STATE_CLIMB { break; } }
+    game.set_input(0);
+    assert_eq!(game.standing_on(), STAIRS as i32);
+    assert!(game.world.flicker_start >= 0.0, "on the landing it starts");
     assert_eq!(game.world.lights[torch].intensity, 0.0, "it goes out first");
     run(&mut game, 0, FLICKER_FIRST_DARK - 0.1);
     assert_eq!(game.world.lights[torch].intensity, 0.0, "a dark beat");
@@ -306,32 +306,61 @@ fn the_guttering_torch_starts_its_cycle_when_mira_is_on_the_wall() {
 
 /// The stone wall before the guttering torch can't be walked through or pushed: Mira must climb it, which takes
 /// time, so she sees the torch gutter before she can cross. It doesn't shade the street.
+/// A fixed stone staircase stands before the guttering torch. Walking into it walks Mira up the steps (Lio trots up
+/// after her); she stops on the landing until the key is let go, then walks on down the far flight. It never moves.
 #[test]
-fn the_stone_wall_must_be_climbed_before_the_guttering_torch() {
+fn the_staircase_leads_up_and_over_before_the_guttering_torch() {
     let mut game = EmberLane::new();
-    let (stone_x, half, ..) = CRATES[STONE];
-    assert!(stone_x < LIGHTS[FLICKER].0 - LIGHTS[FLICKER].2 * 0.85, "the wall stands before the torch's light");
-    run(&mut game, BUTTON_RIGHT, 12.0); // just keep walking
-    assert!(game.player_x() <= stone_x - half - HALF_BODY + 0.5, "walking alone can't pass the wall ({})", game.player_x());
-    assert_eq!(game.crate_x(STONE), stone_x, "the stone never moves");
-    assert_eq!(game.state(), STATE_WALK, "she walks against it rather than pushing");
-    assert_eq!(game.deaths(), 0);
-    assert!(game.player_lit(), "the wall stands in the previous torch's light");
-    assert!(game.world.is_lit(stone_x + half + 12.0), "and it casts no shadow on the far side");
-    assert_eq!(game.prompt(), PROMPT_CLIMB);
-    // climbing up and hopping down takes real time
+    let (stairs_x, half, height, ..) = CRATES[STAIRS];
+    assert!(stairs_x + half < LIGHTS[FLICKER].0 - LIGHTS[FLICKER].2 * 0.85, "the stairs stand before the torch's light");
+    // the steps rise evenly to the landing on both sides
+    let world = World::new();
+    let profile: Vec<f32> = (0..=14).map(|i| world.stairs_height(stairs_x - half - 2.0 + i as f32 * 2.0)).collect();
+    assert!(profile.windows(2).all(|pair| pair[1] >= pair[0]), "steps go up, never down, towards the landing");
+    assert_eq!(world.stairs_height(stairs_x), height);
+    assert_eq!(world.stairs_height(stairs_x + half - 1.0), height / STAIRS_STEPS, "one step from the bottom");
+    assert_eq!(world.stairs_height(stairs_x + half + 1.0), 0.0);
+    // walk up by just holding right
     let start = game.time();
-    game.interact();
-    let mut crossed_at = None;
+    let mut heights = Vec::new();
+    game.set_input(BUTTON_RIGHT);
+    for _ in 0..60 * 8 {
+        game.advance(1000.0 / 60.0);
+        if game.state() == STATE_CLIMB { heights.push(game.player_y()); }
+        if game.standing_on() == STAIRS as i32 && game.state() != STATE_CLIMB { break; }
+    }
+    assert_eq!(game.standing_on(), STAIRS as i32, "walking into the staircase walks her up it");
+    assert!(heights.iter().any(|&y| y > 2.0 && y < height - 2.0), "she goes up step by step");
+    assert_eq!(game.crate_x(STAIRS), stairs_x, "the staircase never moves");
+    assert_eq!(game.deaths(), 0);
+    // still holding right: she waits on the landing
+    run(&mut game, BUTTON_RIGHT, 1.5);
+    assert_eq!(game.standing_on(), STAIRS as i32, "she stops on the landing while the key is held");
+    assert!((game.player_x() - stairs_x).abs() <= STAIRS_LANDING && game.player_y() == height);
+    assert!(game.sibling_y() >= OUT_OF_REACH && (game.sibling_x() - stairs_x).abs() <= STAIRS_LANDING, "Lio is up on the landing too ({} {} / {})", game.sibling_x(), game.sibling_y(), game.player_x());
+    assert!(game.player_lit(), "the staircase stands in the previous torch's light");
+    assert!(game.world.is_lit(stairs_x + half + 12.0), "and it casts no shadow on the far side");
+    assert_eq!(game.prompt(), PROMPT_HOP_DOWN);
+    // let go, then walk on: down the far flight
+    run(&mut game, 0, 0.1);
+    let mut down_at = None;
     game.set_input(BUTTON_RIGHT);
     for _ in 0..60 * 5 {
         game.advance(1000.0 / 60.0);
-        if game.player_x() > stone_x + half + HALF_BODY && game.player_y() == 0.0 { crossed_at = Some(game.time()); break; }
+        if game.player_x() > stairs_x + half + HALF_BODY && game.player_y() == 0.0 && game.state() != STATE_CLIMB { down_at = Some(game.time()); break; }
     }
-    let took = crossed_at.expect("over the wall") - start;
-    assert!(took >= 2.0 * CLIMB_SECONDS, "the climb takes time ({took:.2} s)");
-    // Lio comes over too
-    walk_to(&mut game, stone_x + half + 40.0);
+    let took = down_at.expect("down the far side") - start;
+    assert!(took >= 2.0 * CLIMB_SECONDS, "up and down takes real time ({took:.2} s)");
+    walk_to(&mut game, stairs_x + half + 40.0);
     run(&mut game, 0, 1.5);
-    assert!(game.sibling_x() > stone_x + half && game.sibling_y() < 1.0, "Lio follows over the wall");
+    assert!(game.sibling_x() > stairs_x + half && game.sibling_y() < 1.0, "Lio follows down the steps");
+    // E at the foot climbs it too
+    let mut game = EmberLane::new();
+    walk_to(&mut game, stairs_x - half - HALF_BODY - 4.0);
+    run(&mut game, 0, 0.3);
+    game.world.facing = 1.0;
+    assert_eq!(game.prompt(), PROMPT_CLIMB);
+    game.interact();
+    run(&mut game, 0, CLIMB_SECONDS + 0.1);
+    assert_eq!(game.standing_on(), STAIRS as i32);
 }

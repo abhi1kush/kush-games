@@ -88,38 +88,42 @@ async function hintClearOfCharacters(page) {
   check((await page.getByTestId('mute').first().getAttribute('aria-pressed')) !== pressedBefore, 'M toggles mute');
   await press(page, 'm');
 
-  // the guttering torch burns steadily until Mira is up on the stone wall; then it goes out, flares and cycles
+  // the guttering torch burns steadily until Mira is up on the staircase's landing; then it goes out, flares and cycles
   await begin(page, 0);
   await page.waitForTimeout(1500);
-  check(await page.evaluate(() => window.__emberTest.flicker()) === 1, 'the guttering torch burns steadily before Mira reaches the wall');
-  await page.evaluate(() => document.activeElement?.blur());
-  await hold(page, 'ArrowRight', 6000);
-  let wall = await info(page);
-  check(wall.x < 484 && wall.prompt === 4 && wall.deaths === 0, `a fixed stone wall stops Mira before the guttering torch (x ${wall.x.toFixed(0)})`);
+  check(await page.evaluate(() => window.__emberTest.flicker()) === 1, 'the guttering torch burns steadily before Mira reaches the stairs');
+  await walkTo(page, 466);
   await page.waitForTimeout(1500);
-  check(await page.evaluate(() => window.__emberTest.flicker()) === 1, 'standing at the foot of the wall does not start it');
-  await press(page, 'e');
-  await waitFor(async () => { const now = await info(page); return now.standingOn === 1 && now.state !== 3; }, 3000, 20).catch(() => {});
+  let wall = await info(page);
+  check(wall.prompt === 4 && wall.standingOn === -1 && wall.deaths === 0, `stone steps stand before the guttering torch, offering a climb (x ${wall.x.toFixed(0)})`);
+  check(await page.evaluate(() => window.__emberTest.flicker()) === 1, 'standing at the foot of the steps does not start it');
+  await page.screenshot({ path: `${shots}/kush-games-ember-stairs.png` });
+  await page.evaluate(() => document.activeElement?.blur());
+  await page.keyboard.down('ArrowRight');
+  await waitFor(async () => { const now = await info(page); return now.standingOn === 1 && now.state !== 3; }, 4000, 20).catch(() => {});
   wall = await info(page);
-  check(wall.standingOn === 1 && wall.deaths === 0, 'E climbs onto the wall');
+  check(wall.standingOn === 1 && wall.deaths === 0, 'walking right walks Mira up the steps onto the landing');
   await waitFor(async () => (await page.evaluate(() => window.__emberTest.flicker())) === 0, 400, 10).catch(() => {});
   const outOnTop = await page.evaluate(() => [window.__emberTest.flicker(), window.__emberTest.info().standingOn]);
-  check(outOnTop[0] === 0 && outOnTop[1] === 1, `on top of the wall the torch goes out (${outOnTop})`);
-  check((await page.getByTestId('ember-hint').textContent()).includes('flare'), 'the hint says to watch the torch from the top');
-  await page.screenshot({ path: `${shots}/kush-games-ember-stone-dark.png` });
+  check(outOnTop[0] === 0 && outOnTop[1] === 1, `on the landing the torch goes out (${outOnTop})`);
+  await page.waitForTimeout(600);
+  wall = await info(page);
+  check(wall.standingOn === 1 && Math.abs(wall.x - 505) <= 8, 'she waits on the landing while the key is still held');
+  await page.keyboard.up('ArrowRight');
+  check((await page.getByTestId('ember-hint').textContent()).includes('flare'), 'the hint says to watch the torch from the landing');
+  await page.screenshot({ path: `${shots}/kush-games-ember-stairs-dark.png` });
   await waitFor(async () => (await page.evaluate(() => window.__emberTest.flicker())) === 1, 3000, 20).catch(() => {});
   check(await page.evaluate(() => window.__emberTest.flicker()) === 1, 'after a dark beat it flares up');
-  await page.screenshot({ path: `${shots}/kush-games-ember-stone.png` });
+  await page.screenshot({ path: `${shots}/kush-games-ember-stairs-flare.png` });
   await waitFor(async () => (await page.evaluate(() => window.__emberTest.flicker())) === 0, 7000, 20).catch(() => {});
   check(await page.evaluate(() => window.__emberTest.flicker()) === 0, 'and gutters out again (its cycle)');
   await waitFor(async () => (await page.evaluate(() => window.__emberTest.flicker())) === 1, 4000, 20).catch(() => {});
-  await press(page, 'e');
   await page.evaluate(() => document.activeElement?.blur());
   await page.keyboard.down('ArrowRight');
   await waitFor(async () => (await info(page)).checkpoint === 1 || (await info(page)).deaths > 0, 15000, 50).catch(() => {});
   await page.keyboard.up('ArrowRight');
   wall = await info(page);
-  check(wall.checkpoint === 1 && wall.deaths === 0, 'hopping down as it flares and crossing reaches Torch Lane safely');
+  check(wall.checkpoint === 1 && wall.deaths === 0, 'walking down the steps as it flares and crossing reaches Torch Lane safely');
 
   // braziers: throw an ember with F
   await begin(page, 1);

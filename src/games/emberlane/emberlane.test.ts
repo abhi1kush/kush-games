@@ -18,7 +18,7 @@ describe('Ember Lane helpers', () => {
     expect(hintFor(1060, false, 3)).toMatch(/ember/i);
     expect(hintFor(1760, false, 0)).toMatch(/lantern/i);
     expect(hintFor(1760, true, 0)).toBe('');
-    expect(hintFor(470, false, 3, { onCrate: false, potLit: false, crateX: 2575 })).toMatch(/stone wall/i);
+    expect(hintFor(470, false, 3, { onCrate: false, potLit: false, crateX: 2575 })).toMatch(/stone steps/i);
     expect(hintFor(505, false, 3, { onCrate: true, potLit: false, crateX: 2575 })).toMatch(/gutter out and flare/i);
     expect(hintFor(540, false, 3, { onCrate: false, potLit: false, crateX: 2575 })).toMatch(/while the torch burns/i);
     const yard = { onCrate: false, potLit: false, crateX: 2575 };
