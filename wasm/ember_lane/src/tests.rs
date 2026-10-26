@@ -228,7 +228,7 @@ fn hopping_into_the_dark_can_climb_back() {
     game.interact();
     wait(&mut game, 3.0);
     assert!(game.on_crate());
-    assert!(game.sibling_y() > OUT_OF_REACH, "Lio climbs up beside Mira");
+    assert!(game.sibling_y() > OUT_OF_REACH, "Kabir climbs up beside Mira");
     assert_eq!(game.deaths(), 0);
 }
 
@@ -306,7 +306,7 @@ fn the_guttering_torch_starts_its_cycle_when_mira_is_on_the_landing() {
 
 /// The stone wall before the guttering torch can't be walked through or pushed: Mira must climb it, which takes
 /// time, so she sees the torch gutter before she can cross. It doesn't shade the street.
-/// A fixed stone staircase stands before the guttering torch. Walking into it walks Mira up the steps (Lio trots up
+/// A fixed stone staircase stands before the guttering torch. Walking into it walks Mira up the steps (Kabir trots up
 /// after her); she stops on the landing until the key is let go, then walks on down the far flight. It never moves.
 #[test]
 fn the_staircase_leads_up_and_over_before_the_guttering_torch() {
@@ -337,7 +337,7 @@ fn the_staircase_leads_up_and_over_before_the_guttering_torch() {
     run(&mut game, BUTTON_RIGHT, 1.5);
     assert_eq!(game.standing_on(), STAIRS as i32, "she stops on the landing while the key is held");
     assert!((game.player_x() - stairs_x).abs() <= STAIRS_LANDING && game.player_y() == height);
-    assert!(game.sibling_y() >= OUT_OF_REACH && (game.sibling_x() - stairs_x).abs() <= STAIRS_LANDING, "Lio is up on the landing too ({} {} / {})", game.sibling_x(), game.sibling_y(), game.player_x());
+    assert!(game.sibling_y() >= OUT_OF_REACH && (game.sibling_x() - stairs_x).abs() <= STAIRS_LANDING, "Kabir is up on the landing too ({} {} / {})", game.sibling_x(), game.sibling_y(), game.player_x());
     assert!(game.player_lit(), "the staircase stands in the previous torch's light");
     assert!(game.world.is_lit(stairs_x + half + 12.0), "and it casts no shadow on the far side");
     assert_eq!(game.prompt(), PROMPT_HOP_DOWN);
@@ -353,7 +353,7 @@ fn the_staircase_leads_up_and_over_before_the_guttering_torch() {
     assert!(took >= 2.0 * CLIMB_SECONDS, "up and down takes real time ({took:.2} s)");
     walk_to(&mut game, stairs_x + half + 40.0);
     run(&mut game, 0, 1.5);
-    assert!(game.sibling_x() > stairs_x + half && game.sibling_y() < 1.0, "Lio follows down the steps");
+    assert!(game.sibling_x() > stairs_x + half && game.sibling_y() < 1.0, "Kabir follows down the steps");
     // E at the foot climbs it too
     let mut game = EmberLane::new();
     walk_to(&mut game, stairs_x - half - HALF_BODY - 4.0);

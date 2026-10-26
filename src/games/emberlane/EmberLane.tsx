@@ -1,5 +1,5 @@
 /**
- * Ember Lane — lead Mira and her little brother Lio down a dark village street at night. Rats swarm any
+ * Ember Lane — lead Mira and her little brother Kabir down a dark village street at night. Rats swarm any
  * shadow and flee from flame, so keep both children in the light: wait out a guttering torch, throw embers into cold
  * braziers, carry a lantern, push a crate out of the light and work the shutter levers to reach the sanctuary door.
  * Rust/wasm owns the light, rats, puzzles and movement on a fixed step; this file runs screens, input and drawing.
@@ -41,7 +41,7 @@ function ControlsCard({ touch }: { touch: boolean }) {
     <section className="ember-card ember-controls" data-testid="ember-controls">
       <h2>How to survive</h2>
       <ul>
-        <li><b>Rats own the dark.</b> Step out of the light — or let Lio fall behind in it — and they swarm. Flame drives them back.</li>
+        <li><b>Rats own the dark.</b> Step out of the light — or let Kabir fall behind in it — and they swarm. Flame drives them back.</li>
         <li><b>Embers</b> light cold braziers and fire pots in the direction you face. You only carry a few.</li>
         <li>Carry the <b>lantern</b> while its oil lasts, push <b>crates</b> out of the light — or climb onto one: rats can’t climb — and pull <b>levers</b> to open shutters.</li>
         <li>Fall, and you wake at the last lit <b>checkpoint</b>.</li>
@@ -317,7 +317,7 @@ function EmberLaneScreens() {
             <div className="ember-title">
               <p className="ember-title__kicker">Chapter one · The night street</p>
               <h1>Ember Lane</h1>
-              <p className="ember-title__tag">Keep to the light. Keep Lio close.</p>
+              <p className="ember-title__tag">Keep to the light. Keep Kabir close.</p>
             </div>
             <div className="ember-actions">
               {continueFrom > 0 && <button type="button" className="online-button online-button--primary" onClick={() => begin(continueFrom)} data-testid="ember-continue">Continue · {SECTION_NAMES[continueFrom + 1]}</button>}
@@ -345,7 +345,7 @@ function EmberLaneScreens() {
           <div className="ember-overlay ember-overlay--clear" data-testid="ember-clear">
             <p className="ember-title__kicker">Stage clear</p>
             <h2 className="ember-overlay__heading">Safe in the sanctuary</h2>
-            <p className="ember-clear__line">Mira and Lio made it through the night street.</p>
+            <p className="ember-clear__line">Mira and Kabir made it through the night street.</p>
             <dl className="ember-stats">
               <div><dt>Time</dt><dd data-testid="ember-clear-time">{formatTime(clearStats.seconds)}</dd></div>
               <div><dt>Falls</dt><dd data-testid="ember-clear-deaths">{clearStats.deaths}</dd></div>

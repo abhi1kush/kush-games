@@ -72,12 +72,12 @@ export const CRATE_CLEAR_X = 2535;
 /** The tutorial line for where Mira stands. */
 export function hintFor(x: number, carrying: boolean, embers: number, yard?: Yard): string {
   if (yard && x > 2390 && x < 2800) {
-    if (yard.crateX <= CRATE_CLEAR_X) return x < 2700 ? 'The brazier lights the whole yard now. Go on — keep Lio close.' : '';
+    if (yard.crateX <= CRATE_CLEAR_X) return x < 2700 ? 'The brazier lights the whole yard now. Go on — keep Kabir close.' : '';
     if (yard.onCrate) return yard.potLit ? 'Quick, while the pot burns: hop down on the far side, then push the crate back left, behind the brazier.' : 'Safe up here — rats can’t climb. Throw an ember at the fire pot ahead.';
     if (x > yard.crateX) return yard.potLit ? 'Push the crate left, behind the brazier, before the pot burns out.' : 'Too dark! Turn round and climb back onto the crate.';
     if (x > 2450) return 'The crate blocks the brazier’s light. Climb onto it — rats can’t reach you up there.';
   }
-  if (x < 300) return 'Rats fear the light. Keep yourself — and Lio — inside it.';
+  if (x < 300) return 'Rats fear the light. Keep yourself — and Kabir — inside it.';
   if (x > 380 && x < 640 && yard?.onCrate) return 'From the landing, watch the torch ahead gutter out and flare up. As it flares, walk down the steps and cross while it burns.';
   if (x > 430 && x < STAIRS.x) return 'Stone steps. Walk up them — once you are on the landing, the torch ahead starts to gutter.';
   if (x > STAIRS.x && x < 640) return 'Cross while the torch burns. If it gutters out, wait in the light behind you.';

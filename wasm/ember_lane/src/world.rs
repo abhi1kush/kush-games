@@ -1,5 +1,5 @@
 //! The game state and its fixed 60 Hz step: Mira (the player) walks, pushes crates, climbs onto them, carries the
-//! lantern, pulls levers and throws embers at braziers; her little brother Lio follows. Light comes from flames,
+//! lantern, pulls levers and throws embers at braziers; her little brother Kabir follows. Light comes from flames,
 //! windows and the lantern; crates block it. Rats live in the dark (see rats.rs) and bite anyone standing in it.
 
 use crate::rats::*;
@@ -417,7 +417,7 @@ impl World {
         let gap = if self.carrying { SIBLING_GAP * 0.8 } else { SIBLING_GAP };
         let mut target = self.player_x - self.facing * gap;
         if self.on_crate >= 0 {
-            // Mira is up on a crate: Lio scrambles up beside her, out of the rats' reach
+            // Mira is up on a crate: Kabir scrambles up beside her, out of the rats' reach
             let crate_box = self.crates[self.on_crate as usize];
             let reach = if self.on_crate == STAIRS as i8 { STAIRS_LANDING - 4.0 } else { crate_box.half - 4.0 };
             target = target.within(crate_box.x - reach, crate_box.x + reach);

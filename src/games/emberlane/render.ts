@@ -1,10 +1,10 @@
 /**
- * Ember Lane frame: sky, parallax village, the street, props, rats, Mira and Lio, then the light pass — a darkness
+ * Ember Lane frame: sky, parallax village, the street, props, rats, Mira and Kabir, then the light pass — a darkness
  * layer with soft holes cut by every flame (clipped by crate shadows), warm additive glows and light shafts — then
  * embers, smoke, low mist, rat eyes glinting in the dark, a danger tint and the vignette.
  */
 import { drawBrazier, drawCrate, drawStairs, drawFirePot, drawFlame, drawLantern, drawLever, drawTorch, drawWindow, hash, LayerCache, paintFar, paintMid, paintSky, paintStreet, toScreenX, toScreenY, type View } from './art';
-import { drawLio, drawMira } from './characters';
+import { drawKabir, drawMira } from './characters';
 import { CRATE, type EmberLane, LANTERN_OIL, KIND, LEVER_X, type Light, PROMPT, PROMPT_TEXT, STAIRS, RAT_STRIDE, ratView, readLights, STAGE_END, STATE } from './engine';
 
 /** World units visible from the bottom of the street band to the top of the view. */
@@ -181,18 +181,18 @@ export class Renderer {
     const fear = game.danger();
     const charY = view.ground + 7 * s;
     const playerX = toScreenX(view, game.player_x());
-    const lioX = toScreenX(view, game.sibling_x());
-    const lioMoving = Math.abs(game.sibling_x() - (this.lastLio ?? game.sibling_x())) > 0.05;
-    this.lastLio = game.sibling_x();
+    const kabirX = toScreenX(view, game.sibling_x());
+    const kabirMoving = Math.abs(game.sibling_x() - (this.lastKabir ?? game.sibling_x())) > 0.05;
+    this.lastKabir = game.sibling_x();
     // contact shadows
     context.fillStyle = 'rgba(0, 0, 0, 0.35)';
-    for (const [x, w, y] of [[playerX, 8, game.player_y()], [lioX, 6, game.sibling_y()]] as const) { context.beginPath(); context.ellipse(x, charY - y * s, w * s * (1 - Math.min(0.5, y / 80)), 1.8 * s, 0, 0, Math.PI * 2); context.fill(); }
+    for (const [x, w, y] of [[playerX, 8, game.player_y()], [kabirX, 6, game.sibling_y()]] as const) { context.beginPath(); context.ellipse(x, charY - y * s, w * s * (1 - Math.min(0.5, y / 80)), 1.8 * s, 0, 0, Math.PI * 2); context.fill(); }
     const miraHands = drawMira(context, {
       x: playerX, y: charY - game.player_y() * s, s, facing: game.facing(), walked: game.walked(), moving: state === STATE.walk || state === STATE.push, time, fear,
       pushing: state === STATE.push, throwing: state === STATE.throw ? game.state_time() : undefined, climbing: state === STATE.climb, carrying: game.carrying(), dead: isDead ? deadT : 0,
     });
-    const holdHands = !game.carrying() && state === STATE.idle && !lioMoving && Math.abs(game.sibling_x() - game.player_x()) < 30 ? miraHands.back : null;
-    drawLio(context, { x: lioX, y: charY - 0.5 * s - game.sibling_y() * s, s, facing: game.sibling_facing(), walked: game.sibling_walked(), moving: lioMoving, time, fear, dead: isDead ? deadT : 0 }, holdHands);
+    const holdHands = !game.carrying() && state === STATE.idle && !kabirMoving && Math.abs(game.sibling_x() - game.player_x()) < 30 ? miraHands.back : null;
+    drawKabir(context, { x: kabirX, y: charY - 0.5 * s - game.sibling_y() * s, s, facing: game.sibling_facing(), walked: game.sibling_walked(), moving: kabirMoving, time, fear, dead: isDead ? deadT : 0 }, holdHands);
     if (game.carrying()) drawLantern(context, miraHands.front[0], miraHands.front[1] + 9 * s, s, lantern.lit, lantern.intensity, time);
     this.drawRats(context, view, rats, ratCount, time, true);
 
@@ -239,7 +239,7 @@ export class Renderer {
     if (overlay.prompt && !isDead) this.drawPrompt(context, view, playerX, charY - (54 + game.player_y()) * s, game.player_x() < 1000 && overlay.prompt === PROMPT.climb ? 'Climb the steps' : game.player_x() < 1000 && overlay.prompt === PROMPT.hopDown ? 'Step down' : PROMPT_TEXT[overlay.prompt], overlay.touch);
   }
 
-  private lastLio: number | null = null;
+  private lastKabir: number | null = null;
   private lightAt: (x: number) => number = () => 0;
 
   private drawHearth(context: CanvasRenderingContext2D, view: View, light: Light, time: number) {

@@ -1,4 +1,4 @@
-// Ember Lane e2e: title screen + controls card, walking with real keys (Lio follows), pause (frame loop sleeps,
+// Ember Lane e2e: title screen + controls card, walking with real keys (Kabir follows), pause (frame loop sleeps,
 // controls card shown), throwing an ember into a cold brazier, death in the dark to the rats and waking at the
 // checkpoint, Continue after a refresh, taking the lantern, the shutter levers and clearing the stage at the
 // sanctuary door (saved), mute, and phones in portrait/landscape with touch controls and no sideways scroll.
@@ -23,7 +23,7 @@ const canvasHash = page => page.evaluate(() => { const data = document.querySele
 const press = async (page, key) => { await page.evaluate(() => document.activeElement?.blur()); await page.keyboard.press(key); };
 async function hold(page, key, ms) { await page.evaluate(() => document.activeElement?.blur()); await page.keyboard.down(key); await page.waitForTimeout(ms); await page.keyboard.up(key); }
 
-/** The tutorial line must sit in the upper part of the stage: below the HUD and above Mira's and Lio's heads. */
+/** The tutorial line must sit in the upper part of the stage: below the HUD and above Mira's and Kabir's heads. */
 async function hintClearOfCharacters(page) {
   return page.evaluate(() => {
     const hint = document.querySelector('[data-testid=ember-hint]')?.getBoundingClientRect();
@@ -63,7 +63,7 @@ async function hintClearOfCharacters(page) {
   check(walked.x > before.x + 80, `ArrowRight walks Mira forward (${before.x.toFixed(0)} → ${walked.x.toFixed(0)})`);
   await page.waitForTimeout(700);
   const after = await info(page);
-  check(after.sibling > before.sibling + 60 && after.sibling < after.x, `Lio follows behind (${after.sibling.toFixed(0)})`);
+  check(after.sibling > before.sibling + 60 && after.sibling < after.x, `Kabir follows behind (${after.sibling.toFixed(0)})`);
   check(after.lit && after.deaths === 0, 'the torch-lit start is safe');
   check(before.embers === 3, `a new run starts with three embers (${before.embers})`);
   await hold(page, 'd', 900);
@@ -174,7 +174,7 @@ async function hintClearOfCharacters(page) {
   await press(page, 'e');
   await page.waitForTimeout(2500);
   yard = await info(page);
-  check(yard.onCrate && yard.deaths === 0 && yard.siblingY > 10, 'E climbs ONTO the crate; Mira and Lio are safe up there');
+  check(yard.onCrate && yard.deaths === 0 && yard.siblingY > 10, 'E climbs ONTO the crate; Mira and Kabir are safe up there');
   check((await page.getByTestId('ember-hint').textContent()).includes('fire pot'), 'the hint says to light the fire pot from the crate');
   await press(page, 'f');
   await page.waitForTimeout(1400);

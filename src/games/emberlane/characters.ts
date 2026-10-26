@@ -1,7 +1,7 @@
 /**
- * Mira (the older sister, the player) and Lio (her little brother). Drawn with paths at world scale: walk cycles from
+ * Mira (the older sister, the player) and Kabir (her little brother). Drawn with paths at world scale: walk cycles from
  * distance walked, breathing and blinking when idle, a lean when pushing, a throwing arm, trembling when the rats
- * are close, and Lio reaching for her hand when they stand together.
+ * are close, and Kabir reaching for her hand when they stand together.
  */
 export interface Pose {
   x: number;
@@ -29,7 +29,7 @@ function limb(context: CanvasRenderingContext2D, x1: number, y1: number, x2: num
   context.beginPath(); context.moveTo(x1, y1); context.lineTo(x2, y2); context.stroke();
 }
 
-/** Returns the screen positions of her front hand (where the lantern hangs) and her back hand (for Lio). */
+/** Returns the screen positions of her front hand (where the lantern hangs) and her back hand (for Kabir). */
 export function drawMira(context: CanvasRenderingContext2D, pose: Pose): { front: [number, number]; back: [number, number] } {
   const { s, facing, time } = pose;
   const stride = pose.moving ? Math.sin(pose.walked * 0.21) : 0;
@@ -119,7 +119,7 @@ export function drawMira(context: CanvasRenderingContext2D, pose: Pose): { front
   return { front: toScreen(handX, handY), back: toScreen(-3 * s + stride * 3 * s, hip - 3 * s) };
 }
 
-export function drawLio(context: CanvasRenderingContext2D, pose: Pose, reachHand: [number, number] | null) {
+export function drawKabir(context: CanvasRenderingContext2D, pose: Pose, reachHand: [number, number] | null) {
   const { s, facing, time } = pose;
   const stride = pose.moving ? Math.sin(pose.walked * 0.32) : 0;
   const bob = pose.moving ? Math.abs(Math.cos(pose.walked * 0.32)) * 1 * s : Math.sin(time * 2.6 + 1) * 0.3 * s;
