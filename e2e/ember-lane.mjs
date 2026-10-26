@@ -23,6 +23,19 @@ const canvasHash = page => page.evaluate(() => { const data = document.querySele
 const press = async (page, key) => { await page.evaluate(() => document.activeElement?.blur()); await page.keyboard.press(key); };
 async function hold(page, key, ms) { await page.evaluate(() => document.activeElement?.blur()); await page.keyboard.down(key); await page.waitForTimeout(ms); await page.keyboard.up(key); }
 
+/** The tutorial line must sit in the upper part of the stage: below the HUD and above Mira's and Lio's heads. */
+async function hintClearOfCharacters(page) {
+  return page.evaluate(() => {
+    const hint = document.querySelector('[data-testid=ember-hint]')?.getBoundingClientRect();
+    const stage = document.querySelector('[data-testid=ember-stage]').getBoundingClientRect();
+    if (!hint) return { ok: false, why: 'no hint' };
+    const scale = Math.min(stage.height / 178, stage.width / 255);
+    const headTop = stage.top + stage.height - 27 * scale + 7 * scale - 52 * scale;
+    const hudBottom = Math.max(...[...document.querySelectorAll('[data-testid=ember-hud] > * > *')].map(element => element.getBoundingClientRect().bottom));
+    return { ok: hint.bottom < headTop && hint.top >= hudBottom - 1, hintTop: Math.round(hint.top - stage.top), hintBottom: Math.round(hint.bottom - stage.top), headTop: Math.round(headTop - stage.top), hudBottom: Math.round(hudBottom - stage.top) };
+  });
+}
+
 // ---------- desktop ----------
 {
   const context = await browser.newContext({ viewport: { width: 1280, height: 860 } });
@@ -41,6 +54,9 @@ async function hold(page, key, ms) { await page.evaluate(() => document.activeEl
 
   await page.getByTestId('ember-play').click();
   await page.getByTestId('ember-hud').waitFor();
+  await page.getByTestId('ember-hint').waitFor();
+  const hintSpot = await hintClearOfCharacters(page);
+  check(hintSpot.ok, `desktop: tutorial text sits above the characters and below the HUD ${JSON.stringify(hintSpot)}`);
   const before = await info(page);
   await hold(page, 'ArrowRight', 1600);
   const walked = await info(page);
@@ -159,6 +175,9 @@ for (const [label, viewport] of [['portrait', { width: 390, height: 844 }], ['la
   await page.getByTestId('ember-play').tap();
   await page.getByTestId('ember-touch').waitFor();
   check(await page.getByTestId('touch-throw').isVisible(), `${label}: touch controls show`);
+  await page.getByTestId('ember-hint').waitFor();
+  const hintSpot = await hintClearOfCharacters(page);
+  check(hintSpot.ok, `${label}: tutorial text sits above the characters and below the HUD ${JSON.stringify(hintSpot)}`);
   const start = (await info(page)).x;
   const box = await page.getByTestId('touch-right').boundingBox();
   const cdp = await context.newCDPSession(page);
