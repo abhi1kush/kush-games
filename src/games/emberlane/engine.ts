@@ -27,6 +27,8 @@ export const CHECKPOINT_X = [120, 990, 1700, 2410, 3000];
 export const SECTION_NAMES = ['The Hearth', 'Torch Lane', 'Brazier Square', 'Lantern Alley', 'Cooper’s Yard', 'Shutter Row'];
 export const CRATE = { half: 15, height: 30 };
 export const LEVER_X = [3060, 3262];
+/** The fixed stone wall before the guttering torch (block index 1 in the engine). */
+export const STONE = { index: 1, x: 505, half: 14, height: 26 };
 
 export interface Light { x: number; height: number; radius: number; intensity: number; kind: number; lit: boolean; left: number; right: number }
 export interface Rat { x: number; vx: number; lane: number; state: number; phase: number }
@@ -74,7 +76,9 @@ export function hintFor(x: number, carrying: boolean, embers: number, yard?: Yar
     if (x > 2450) return 'The crate blocks the brazier’s light. Climb onto it — rats can’t reach you up there.';
   }
   if (x < 300) return 'Rats fear the light. Keep yourself — and Lio — inside it.';
-  if (x > 480 && x < 610) return 'That torch gutters out and flares up again. Watch it, then cross while it burns.';
+  if (x > 380 && x < 640 && yard?.onCrate) return 'Watch the torch ahead gutter out and flare up. Hop down as it flares, then cross while it burns.';
+  if (x > 430 && x < STONE.x) return 'A stone wall. Climb it — from the top you can watch the torch ahead.';
+  if (x > STONE.x && x < 640) return 'Cross while the torch burns. If it gutters out, wait in the light behind you.';
   if (x > 960 && x < 1120) return embers > 0 ? 'A cold brazier in the dark. Throw an ember at it.' : 'A cold brazier in the dark…';
   if (x > 1240 && x < 1330) return 'Light the next brazier from here.';
   if (x > 1690 && x < 1800 && !carrying) return 'A lantern! Take it — the oil won’t last long.';

@@ -122,8 +122,13 @@ fn the_advance_clock_survives_bad_frame_gaps() {
 fn the_whole_stage_can_be_cleared_without_dying() {
     let mut game = EmberLane::new();
     // 1. torches and the flickering torch: wait for the flare, then cross
-    walk_to(&mut game, 540.0);
-    wait_for_flare(&mut game);
+    walk_to(&mut game, 480.0); // up against the stone wall
+    assert_eq!(game.prompt(), PROMPT_CLIMB);
+    game.interact();
+    wait(&mut game, 0.7);
+    assert_eq!(game.standing_on(), STONE as i32);
+    wait_for_flare(&mut game); // watch it from the top of the wall
+    game.interact(); // hop down
     walk_to(&mut game, 1000.0);
     assert_eq!(game.deaths(), 0, "flicker section");
     assert_eq!(game.checkpoint(), 1);
@@ -286,4 +291,36 @@ fn the_guttering_torch_wakes_dark_when_mira_arrives() {
     run(&mut game, 0, DEATH_SECONDS + 0.2);
     assert!(game.player_x() < FLICKER_WAKE_X && game.world.flicker_start < 0.0);
     assert_eq!(game.world.lights[torch].intensity, 0.0);
+}
+
+/// The stone wall before the guttering torch can't be walked through or pushed: Mira must climb it, which takes
+/// time, so she sees the torch gutter before she can cross. It doesn't shade the street.
+#[test]
+fn the_stone_wall_must_be_climbed_before_the_guttering_torch() {
+    let mut game = EmberLane::new();
+    let (stone_x, half, ..) = CRATES[STONE];
+    assert!(stone_x < LIGHTS[FLICKER].0 - LIGHTS[FLICKER].2 * 0.85, "the wall stands before the torch's light");
+    run(&mut game, BUTTON_RIGHT, 12.0); // just keep walking
+    assert!(game.player_x() <= stone_x - half - HALF_BODY + 0.5, "walking alone can't pass the wall ({})", game.player_x());
+    assert_eq!(game.crate_x(STONE), stone_x, "the stone never moves");
+    assert_eq!(game.state(), STATE_WALK, "she walks against it rather than pushing");
+    assert_eq!(game.deaths(), 0);
+    assert!(game.player_lit(), "the wall stands in the previous torch's light");
+    assert!(game.world.is_lit(stone_x + half + 12.0), "and it casts no shadow on the far side");
+    assert_eq!(game.prompt(), PROMPT_CLIMB);
+    // climbing up and hopping down takes real time
+    let start = game.time();
+    game.interact();
+    let mut crossed_at = None;
+    game.set_input(BUTTON_RIGHT);
+    for _ in 0..60 * 5 {
+        game.advance(1000.0 / 60.0);
+        if game.player_x() > stone_x + half + HALF_BODY && game.player_y() == 0.0 { crossed_at = Some(game.time()); break; }
+    }
+    let took = crossed_at.expect("over the wall") - start;
+    assert!(took >= 2.0 * CLIMB_SECONDS, "the climb takes time ({took:.2} s)");
+    // Lio comes over too
+    walk_to(&mut game, stone_x + half + 40.0);
+    run(&mut game, 0, 1.5);
+    assert!(game.sibling_x() > stone_x + half && game.sibling_y() < 1.0, "Lio follows over the wall");
 }

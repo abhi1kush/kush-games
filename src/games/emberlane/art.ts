@@ -566,3 +566,45 @@ export function drawWindow(context: CanvasRenderingContext2D, view: View, x: num
   }
   context.fillStyle = '#3d2718'; context.fillRect(cx - w / 2 - 3 * s, cy + h / 2, w + 6 * s, 3 * s);
 }
+
+/** The low stone wall before the guttering torch: dressed blocks, mortar, a mossy top. */
+export function drawStone(context: CanvasRenderingContext2D, view: View, x: number, half: number, height: number) {
+  const s = view.scale;
+  const left = toScreenX(view, x - half);
+  const width = half * 2 * s;
+  const top = view.ground - height * s;
+  // contact shadow on the cobbles, then the block with a dark outline so it reads in front of the house plinths
+  context.fillStyle = 'rgba(0, 0, 0, 0.4)';
+  context.beginPath(); context.ellipse(left + width / 2, view.ground + 1 * s, width * 0.62, 3 * s, 0, 0, Math.PI * 2); context.fill();
+  const face = context.createLinearGradient(left, top, left + width, view.ground);
+  face.addColorStop(0, '#a08c74'); face.addColorStop(1, '#5e4f42');
+  context.fillStyle = face;
+  context.strokeStyle = '#231a14';
+  context.lineWidth = 1.6 * s;
+  context.beginPath(); context.roundRect(left, top, width, height * s, 2 * s); context.fill(); context.stroke();
+  // courses of blocks
+  context.strokeStyle = 'rgba(40, 34, 32, 0.75)';
+  context.lineWidth = 1.1 * s;
+  const rows = 3;
+  context.beginPath();
+  for (let row = 1; row < rows; row++) { const y = top + (height * s * row) / rows; context.moveTo(left, y); context.lineTo(left + width, y); }
+  for (let row = 0; row < rows; row++) {
+    const y0 = top + (height * s * row) / rows;
+    const y1 = top + (height * s * (row + 1)) / rows;
+    const offsets = row % 2 ? [0.5] : [0.28, 0.72];
+    for (const offset of offsets) { const jx = left + width * offset; context.moveTo(jx, y0); context.lineTo(jx, y1); }
+  }
+  context.stroke();
+  // chips and highlights
+  context.fillStyle = 'rgba(255, 240, 220, 0.12)';
+  context.fillRect(left + 1 * s, top + 1 * s, width - 2 * s, 2 * s);
+  context.fillStyle = 'rgba(0, 0, 0, 0.18)';
+  context.fillRect(left + width - 3 * s, top, 3 * s, height * s);
+  // moss on top
+  context.fillStyle = '#4f6b3a';
+  context.beginPath();
+  context.moveTo(left - 1 * s, top + 1.5 * s);
+  for (let step = 0; step <= 8; step++) { const px = left - 1 * s + ((width + 2 * s) * step) / 8; context.lineTo(px, top - (step % 2 ? 1.6 : 0.4) * s); }
+  context.lineTo(left + width + 1 * s, top + 1.5 * s);
+  context.closePath(); context.fill();
+}

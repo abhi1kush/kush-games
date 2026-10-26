@@ -251,6 +251,14 @@ export class EmberLane {
         return ret;
     }
     /**
+     * Which block Mira stands on (-1: the ground; 0 the crate, 1 the stone wall).
+     * @returns {number}
+     */
+    standing_on() {
+        const ret = wasm.emberlane_standing_on(this.__wbg_ptr);
+        return ret;
+    }
+    /**
      * @returns {number}
      */
     state() {

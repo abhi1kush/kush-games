@@ -49,8 +49,12 @@ pub const RAT_COUNT: usize = 220;
 /// Checkpoints: x, and the embers Mira carries from there (topped up to at least this many; the first is the start)
 pub const CHECKPOINTS: [(f32, u8); 5] = [(START_X, 3), (990.0, 3), (1700.0, 1), (2410.0, 2), (3000.0, 1)];
 
-/// Crate: start x (centre), half width, height, how far it may slide
-pub const CRATES: [(f32, f32, f32, f32, f32); 1] = [(2575.0, 15.0, 30.0, 2440.0, 2590.0)];
+/// Blocks: start x (centre), half width, height, how far it may slide. The first is Cooper's Yard's crate; the
+/// second is a fixed stone wall just before the guttering torch (it can't slide, and light spills over it): Mira has
+/// to climb it, and from the top she can watch the torch gutter before she crosses.
+pub const CRATES: [(f32, f32, f32, f32, f32); 2] = [(2575.0, 15.0, 30.0, 2440.0, 2590.0), (STONE_X, 14.0, 26.0, STONE_X, STONE_X)];
+pub const STONE_X: f32 = 505.0;
+pub const STONE: usize = 1;
 
 /// Levers: x, and which window each opens (the other one closes: a shared rope).
 pub const LEVERS: [(f32, usize); 2] = [(3060.0, WINDOW_A), (3262.0, WINDOW_B)];

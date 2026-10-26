@@ -95,6 +95,8 @@ impl EmberLane {
     /// rat_count × 8 × 4 bytes: x, vx, lane, state (0 hidden, 1 active, 2 fleeing), timer, phase, nest, rng
     pub fn rats_ptr(&self) -> *const rats::Rat { self.world.rats.as_ptr() }
     pub fn crate_x(&self, index: usize) -> f32 { self.world.crates.get(index).map_or(0.0, |c| c.x) }
+    /// Which block Mira stands on (-1: the ground; 0 the crate, 1 the stone wall).
+    pub fn standing_on(&self) -> i32 { self.world.on_crate as i32 }
     pub fn lever(&self, index: usize) -> bool { self.world.levers.get(index).copied().unwrap_or(false) }
     pub fn ember_active(&self) -> bool { self.world.ember.active }
     pub fn ember_x(&self) -> f32 { self.world.ember.x }

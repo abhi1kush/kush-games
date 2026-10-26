@@ -26,8 +26,12 @@ pub const HALF_BODY: f32 = 8.0;
 pub const FLICKER_WAKE_X: f32 = 420.0;
 /// Dark beat after it wakes before the first flare.
 pub const FLICKER_FIRST_DARK: f32 = 0.9;
-/// Its cycle: on 3.2 s, fade 0.3 s, dark 1.3 s, flare 0.2 s.
-pub const FLICKER_PERIOD: f32 = 5.0;
+/// Its cycle: bright, fading, dark, flaring back up.
+pub const FLICKER_ON: f32 = 4.2;
+pub const FLICKER_FADE: f32 = 0.3;
+pub const FLICKER_DARK: f32 = 1.3;
+pub const FLICKER_FLARE: f32 = 0.2;
+pub const FLICKER_PERIOD: f32 = FLICKER_ON + FLICKER_FADE + FLICKER_DARK + FLICKER_FLARE;
 /// Standing this high (on a crate) the rats can't reach you.
 pub const OUT_OF_REACH: f32 = 10.0;
 
@@ -70,6 +74,11 @@ pub struct Light { pub x: f32, pub height: f32, pub radius: f32, pub intensity: 
 
 #[derive(Clone, Copy, Debug)]
 pub struct Crate { pub x: f32, pub half: f32, pub height: f32, pub min_x: f32, pub max_x: f32 }
+
+impl Crate {
+    /// A fixed block (stone wall): never slides and doesn't block light.
+    pub fn fixed(&self) -> bool { self.min_x >= self.max_x }
+}
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Ember { pub active: bool, pub x: f32, pub y: f32, pub vx: f32, pub vy: f32, pub time: f32, pub flight: f32, pub target: i8 }
@@ -151,8 +160,12 @@ impl World {
     pub fn flicker_intensity(&self) -> f32 {
         if self.flicker_start < 0.0 { return 0.0; }
         // it wakes in the dark part of its cycle: FLICKER_FIRST_DARK of darkness, then the flare
-        let phase = (self.time - self.flicker_start + 4.8 - FLICKER_FIRST_DARK) % FLICKER_PERIOD;
-        if phase < 3.2 { 1.0 } else if phase < 3.5 { 1.0 - (phase - 3.2) / 0.3 } else if phase < 4.8 { 0.0 } else { (phase - 4.8) / 0.2 }
+        let dark_end = FLICKER_ON + FLICKER_FADE + FLICKER_DARK;
+        let phase = (self.time - self.flicker_start + dark_end - FLICKER_FIRST_DARK) % FLICKER_PERIOD;
+        if phase < FLICKER_ON { 1.0 }
+        else if phase < FLICKER_ON + FLICKER_FADE { 1.0 - (phase - FLICKER_ON) / FLICKER_FADE }
+        else if phase < dark_end { 0.0 }
+        else { (phase - dark_end) / FLICKER_FLARE }
     }
 
     pub fn update_lights(&mut self) {
@@ -178,7 +191,7 @@ impl World {
             let x = self.lights[index].x;
             let mut left = 0.0f32;
             let mut right = STAGE_END;
-            for crate_box in &self.crates {
+            for crate_box in self.crates.iter().filter(|crate_box| !crate_box.fixed()) {
                 // the crate itself stays lit on the light's side; the street beyond its far edge is in shadow
                 if crate_box.x + crate_box.half <= x { left = left.max(crate_box.x - crate_box.half); }
                 if crate_box.x - crate_box.half >= x { right = right.min(crate_box.x + crate_box.half); }
@@ -343,6 +356,8 @@ impl World {
         for crate_box in self.crates.iter_mut() {
             let edge_gap = if direction > 0.0 { (crate_box.x - crate_box.half) - (self.player_x + HALF_BODY) } else { (self.player_x - HALF_BODY) - (crate_box.x + crate_box.half) };
             if edge_gap < -0.5 || edge_gap > step.abs() { continue; }
+            // touching a fixed stone: it just stops her (climb it instead)
+            if crate_box.fixed() { step = direction * edge_gap.max(0.0); continue; }
             // touching: push it (slower) as far as its track allows
             let push = direction * PUSH_SPEED * STEP;
             let new_x = (crate_box.x + push).within(crate_box.min_x, crate_box.max_x);

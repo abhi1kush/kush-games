@@ -56,6 +56,10 @@ export class EmberLane {
     sibling_walked(): number;
     sibling_x(): number;
     sibling_y(): number;
+    /**
+     * Which block Mira stands on (-1: the ground; 0 the crate, 1 the stone wall).
+     */
+    standing_on(): number;
     state(): number;
     state_time(): number;
     /**
@@ -107,6 +111,7 @@ export interface InitOutput {
     readonly emberlane_sibling_walked: (a: number) => number;
     readonly emberlane_sibling_x: (a: number) => number;
     readonly emberlane_sibling_y: (a: number) => number;
+    readonly emberlane_standing_on: (a: number) => number;
     readonly emberlane_state: (a: number) => number;
     readonly emberlane_state_time: (a: number) => number;
     readonly emberlane_take_events: (a: number) => number;

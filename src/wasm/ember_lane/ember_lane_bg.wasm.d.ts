@@ -36,6 +36,7 @@ export const emberlane_sibling_lit: (a: number) => number;
 export const emberlane_sibling_walked: (a: number) => number;
 export const emberlane_sibling_x: (a: number) => number;
 export const emberlane_sibling_y: (a: number) => number;
+export const emberlane_standing_on: (a: number) => number;
 export const emberlane_state: (a: number) => number;
 export const emberlane_state_time: (a: number) => number;
 export const emberlane_take_events: (a: number) => number;
