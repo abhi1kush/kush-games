@@ -266,6 +266,7 @@ function EmberLaneScreens() {
         const game = gameRef.current;
         return { x: game.player_x(), sibling: game.sibling_x(), siblingY: game.sibling_y(), onCrate: game.on_crate(), pot: game.pot_left(), deaths: game.deaths(), checkpoint: game.checkpoint(), cleared: game.cleared(), embers: game.embers(), carrying: game.carrying(), prompt: game.prompt(), lit: game.player_lit(), state: game.state(), time: game.time(), danger: game.danger(), crate: game.crate_x(0) };
       },
+      flicker: () => readLights(gameRef.current).filter(light => light.kind === KIND.flicker)[0].intensity,
       windows: () => readLights(gameRef.current).filter(light => light.kind === KIND.window).map(light => light.lit),
       /** Walk Mira to x synchronously (the frame loop then catches up on drawing and events). */
       walkTo: (target: number) => {

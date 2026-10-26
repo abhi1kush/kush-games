@@ -23,6 +23,18 @@ fn walk_to(game: &mut EmberLane, x: f32) {
 
 fn wait(game: &mut EmberLane, seconds: f32) { run(game, 0, seconds); }
 
+/// Wait until the guttering torch has just flared up to full.
+fn wait_for_flare(game: &mut EmberLane) {
+    let mut was_full = game.world.flicker_intensity() >= 1.0;
+    for _ in 0..60 * 12 {
+        game.advance(1000.0 / 60.0);
+        let full = game.world.flicker_intensity() >= 1.0;
+        if full && !was_full { return; }
+        was_full = full;
+    }
+    panic!("the torch never flared");
+}
+
 #[test]
 fn light_falls_off_and_crates_cast_shadows() {
     let world = World::new();
@@ -111,8 +123,7 @@ fn the_whole_stage_can_be_cleared_without_dying() {
     let mut game = EmberLane::new();
     // 1. torches and the flickering torch: wait for the flare, then cross
     walk_to(&mut game, 540.0);
-    while game.world.time % 5.0 > 0.05 { game.advance(1000.0 / 60.0); }
-    wait(&mut game, 0.1);
+    wait_for_flare(&mut game);
     walk_to(&mut game, 1000.0);
     assert_eq!(game.deaths(), 0, "flicker section");
     assert_eq!(game.checkpoint(), 1);
@@ -235,4 +246,44 @@ fn a_new_run_starts_with_embers_and_checkpoints_top_them_up() {
     assert_eq!(again.embers(), CHECKPOINTS[0].1, "a fresh run is not affected by the old one");
     game.debug_warp(1);
     assert_eq!(game.embers(), 3, "Torch Lane tops up to three");
+}
+
+/// The guttering torch is dark until Mira arrives, stays dark for a beat, then flares and runs its cycle, so the
+/// first thing the player sees is it lighting up — never a torch caught halfway through its bright phase.
+#[test]
+fn the_guttering_torch_wakes_dark_when_mira_arrives() {
+    let mut game = EmberLane::new();
+    let torch = FLICKER;
+    run(&mut game, 0, 20.0); // dawdle at the start: it stays asleep
+    assert_eq!(game.world.lights[torch].intensity, 0.0, "dark before Mira gets there");
+    walk_to(&mut game, FLICKER_WAKE_X + 1.0);
+    let woke = game.world.flicker_start;
+    assert!(woke >= 0.0);
+    assert_eq!(game.world.lights[torch].intensity, 0.0, "still dark as it wakes");
+    run(&mut game, 0, FLICKER_FIRST_DARK - 0.1);
+    assert_eq!(game.world.lights[torch].intensity, 0.0, "a dark beat first");
+    run(&mut game, 0, 0.4);
+    assert_eq!(game.world.lights[torch].intensity, 1.0, "then it flares up");
+    // and keeps cycling: bright for a while, then dark again, then bright again
+    let mut seen_dark = false;
+    let mut seen_bright_again = false;
+    for _ in 0..60 * 6 {
+        game.advance(1000.0 / 60.0);
+        let level = game.world.lights[torch].intensity;
+        if level == 0.0 { seen_dark = true; }
+        if seen_dark && level == 1.0 { seen_bright_again = true; }
+    }
+    assert!(seen_dark && seen_bright_again, "it gutters out and flares again");
+    // a fall before Torch Lane's checkpoint puts it back to sleep, so it wakes dark again on the next try
+    let mut died = false;
+    for _ in 0..60 * 12 {
+        game.world.player_x = 690.0;
+        game.world.sibling_x = 670.0;
+        game.advance(1000.0 / 60.0);
+        if game.take_events() & EVENT_DEATH != 0 { died = true; break; }
+    }
+    assert!(died, "the dark stretch is deadly");
+    run(&mut game, 0, DEATH_SECONDS + 0.2);
+    assert!(game.player_x() < FLICKER_WAKE_X && game.world.flicker_start < 0.0);
+    assert_eq!(game.world.lights[torch].intensity, 0.0);
 }

@@ -22,6 +22,12 @@ pub const DEATH_SECONDS: f32 = 1.8;
 pub const BITE_SECONDS: f32 = 0.85;
 pub const GRAVITY: f32 = 620.0;
 pub const HALF_BODY: f32 = 8.0;
+/// The guttering torch sleeps (dark) until Mira gets this far, so its first flare happens in front of her.
+pub const FLICKER_WAKE_X: f32 = 420.0;
+/// Dark beat after it wakes before the first flare.
+pub const FLICKER_FIRST_DARK: f32 = 0.9;
+/// Its cycle: on 3.2 s, fade 0.3 s, dark 1.3 s, flare 0.2 s.
+pub const FLICKER_PERIOD: f32 = 5.0;
 /// Standing this high (on a crate) the rats can't reach you.
 pub const OUT_OF_REACH: f32 = 10.0;
 
@@ -82,6 +88,8 @@ pub struct World {
     pub climb_to_y: f32,
     /// The crate Mira stands on (-1: on the ground).
     pub on_crate: i8,
+    /// When the guttering torch woke up (-1: still asleep and dark).
+    pub flicker_start: f32,
     pub walked: f32,
     pub sibling_x: f32,
     pub sibling_y: f32,
@@ -115,7 +123,7 @@ impl World {
         }
         let crates = CRATES.map(|(x, half, height, min_x, max_x)| Crate { x, half, height, min_x, max_x });
         let mut world = World {
-            time: 0.0, player_x: START_X, player_y: 0.0, facing: 1.0, state: STATE_IDLE, state_time: 0.0, climb_from: 0.0, climb_to: 0.0, climb_from_y: 0.0, climb_to_y: 0.0, on_crate: -1, walked: 0.0,
+            time: 0.0, player_x: START_X, player_y: 0.0, facing: 1.0, state: STATE_IDLE, state_time: 0.0, climb_from: 0.0, climb_to: 0.0, climb_from_y: 0.0, climb_to_y: 0.0, on_crate: -1, flicker_start: -1.0, walked: 0.0,
             sibling_x: START_X - SIBLING_GAP, sibling_y: 0.0, sibling_facing: 1.0, sibling_walked: 0.0, danger: 0.0, sibling_danger: 0.0,
             lights, base_lit, pot_left: 0.0, carrying: false, lantern_used: false, oil: LANTERN_OIL, embers: CHECKPOINTS[0].1, ember: Ember::default(),
             crates, levers: [false; LEVERS.len()], rats: [Rat::default(); RAT_COUNT], checkpoint: 0, cleared: false, events: 0,
@@ -140,13 +148,15 @@ impl World {
 
     pub fn is_lit(&self, x: f32) -> bool { self.light_at(x) >= LIT_LEVEL }
 
-    fn flicker_intensity(&self) -> f32 {
-        // on 3.2 s, fade 0.3 s, dark 1.3 s, flare 0.2 s (period 5 s)
-        let phase = self.time % 5.0;
+    pub fn flicker_intensity(&self) -> f32 {
+        if self.flicker_start < 0.0 { return 0.0; }
+        // it wakes in the dark part of its cycle: FLICKER_FIRST_DARK of darkness, then the flare
+        let phase = (self.time - self.flicker_start + 4.8 - FLICKER_FIRST_DARK) % FLICKER_PERIOD;
         if phase < 3.2 { 1.0 } else if phase < 3.5 { 1.0 - (phase - 3.2) / 0.3 } else if phase < 4.8 { 0.0 } else { (phase - 4.8) / 0.2 }
     }
 
     pub fn update_lights(&mut self) {
+        if self.flicker_start < 0.0 && self.player_x >= FLICKER_WAKE_X { self.flicker_start = self.time; }
         let flicker = self.flicker_intensity();
         for index in 0..LIGHT_COUNT {
             let kind = self.lights[index].kind as u8;

@@ -88,6 +88,17 @@ async function hintClearOfCharacters(page) {
   check((await page.getByTestId('mute').first().getAttribute('aria-pressed')) !== pressedBefore, 'M toggles mute');
   await press(page, 'm');
 
+  // the guttering torch: dark until Mira arrives, a dark beat, then it flares and cycles
+  await begin(page, 0);
+  await page.waitForTimeout(1500);
+  check(await page.evaluate(() => window.__emberTest.flicker()) === 0, 'the guttering torch is dark before Mira gets there');
+  await walkTo(page, 425);
+  check(await page.evaluate(() => window.__emberTest.flicker()) === 0, 'it is still dark as she arrives');
+  await waitFor(async () => (await page.evaluate(() => window.__emberTest.flicker())) === 1, 3000, 30).catch(() => {});
+  check(await page.evaluate(() => window.__emberTest.flicker()) === 1, 'then it flares up in front of her');
+  await waitFor(async () => (await page.evaluate(() => window.__emberTest.flicker())) === 0, 6000, 30).catch(() => {});
+  check(await page.evaluate(() => window.__emberTest.flicker()) === 0, 'and gutters out again (its cycle)');
+
   // braziers: throw an ember with F
   await begin(page, 1);
   await page.waitForTimeout(200);
