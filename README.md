@@ -167,7 +167,7 @@ The UI is React + TypeScript; the rules, physics and AI are Rust crates in `wasm
 | connect_four | 26.0 KB | 12.4 KB |
 | checkers | 31.1 KB | 14.6 KB |
 | kush_jump | 30.3 KB | 13.9 KB |
-| ember_lane | 26.8 KB | 12.5 KB |
+| ember_lane | 27.6 KB | 12.8 KB |
 
 Size settings: `opt-level = "z"`, `lto`, `codegen-units = 1`, `panic = "abort"`, `strip`, then `wasm-opt -Oz`; `wasm-bindgen` without default features. Float formatting (pulled in by `f32::clamp`'s panic message) and libm `sin`/`cos` were avoided by hand (≈ 30 KB saved in Breakout).
 
