@@ -364,3 +364,44 @@ fn the_staircase_leads_up_and_over_before_the_guttering_torch() {
     run(&mut game, 0, CLIMB_SECONDS + 0.1);
     assert_eq!(game.standing_on(), STAIRS as i32);
 }
+
+/// From the lantern's hook, a non-stop walk crosses the dark alley safely, but the oil is spent before Mira reaches
+/// Cooper's Yard's crate, so the lantern can't light her way past the crate puzzle. A short stop in the alley is
+/// still fine.
+#[test]
+fn the_lantern_lasts_through_the_alley_but_not_past_the_crate() {
+    let crate_foot = CRATES[0].0 - CRATES[0].1 - HALF_BODY;
+    // non-stop
+    let mut game = EmberLane::new();
+    game.debug_warp(2);
+    walk_to(&mut game, LIGHTS[LANTERN].0);
+    assert_eq!(game.prompt(), PROMPT_TAKE_LANTERN);
+    game.interact();
+    game.set_input(BUTTON_RIGHT);
+    let mut out_at = None;
+    for _ in 0..60 * 20 {
+        game.advance(1000.0 / 60.0);
+        if game.take_events() & EVENT_LANTERN_OUT != 0 { out_at = Some(game.player_x()); break; }
+        if game.player_x() >= crate_foot - 1.0 { break; }
+    }
+    game.set_input(0);
+    let out_at = out_at.expect("the lantern went out before the crate");
+    assert!(out_at < crate_foot - 40.0, "spent well before the crate ({out_at:.0})");
+    assert!(!game.carrying());
+    assert!(out_at > ZONES[2].1 - 100.0 && game.world.is_lit(out_at) && game.world.is_lit(game.sibling_x()), "out in the brazier's light, not the alley ({out_at:.0})");
+    run(&mut game, 0, 2.0);
+    assert_eq!(game.deaths(), 0, "the non-stop walk is safe");
+    // walking on to the crate and over it with no lantern is what the puzzle is for
+    walk_to(&mut game, crate_foot - 2.0);
+    assert!(!game.carrying(), "no lantern at the crate");
+    // a short stop in the alley still gets them both into the light
+    let mut game = EmberLane::new();
+    game.debug_warp(2);
+    walk_to(&mut game, LIGHTS[LANTERN].0);
+    game.interact();
+    walk_to(&mut game, 2000.0);
+    run(&mut game, 0, 1.2);
+    walk_to(&mut game, 2440.0);
+    run(&mut game, 0, 2.0);
+    assert_eq!(game.deaths(), 0, "a short stop in the alley is fine");
+}

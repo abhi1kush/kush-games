@@ -5,7 +5,7 @@
  */
 import { drawBrazier, drawCrate, drawStairs, drawFirePot, drawFlame, drawLantern, drawLever, drawTorch, drawWindow, hash, LayerCache, paintFar, paintMid, paintSky, paintStreet, toScreenX, toScreenY, type View } from './art';
 import { drawLio, drawMira } from './characters';
-import { CRATE, type EmberLane, KIND, LEVER_X, type Light, PROMPT, PROMPT_TEXT, STAIRS, RAT_STRIDE, ratView, readLights, STAGE_END, STATE } from './engine';
+import { CRATE, type EmberLane, LANTERN_OIL, KIND, LEVER_X, type Light, PROMPT, PROMPT_TEXT, STAIRS, RAT_STRIDE, ratView, readLights, STAGE_END, STATE } from './engine';
 
 /** World units visible from the bottom of the street band to the top of the view. */
 export const VIEW_UNITS = 178;
@@ -163,7 +163,7 @@ export class Renderer {
     // --- lantern lying on its hook / the ground
     const lantern = lights.find(light => light.kind === KIND.lantern)!;
     if (!game.carrying() && visible(lantern.x)) {
-      const onHook = game.oil() >= 15.99 && !lantern.lit;
+      const onHook = game.oil() >= LANTERN_OIL - 0.01 && !lantern.lit;
       const lx = toScreenX(view, lantern.x);
       const ly = toScreenY(view, onHook ? 44 : 5);
       if (onHook) { context.strokeStyle = '#2b2b30'; context.lineWidth = 2 * s; context.beginPath(); context.moveTo(lx - 8 * s, ly - 14 * s); context.lineTo(lx, ly - 14 * s); context.lineTo(lx, ly - 11 * s); context.stroke(); }

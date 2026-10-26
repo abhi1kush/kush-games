@@ -8,7 +8,7 @@ import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useRef,
 import { homePath, navigate } from '../../routing';
 import { createSaveSlot, SAVE_VERSIONS } from '../persistence';
 import { MuteButton, unlockAudio, useSharedMute } from '../sharedSound';
-import { BUTTON, CHECKPOINT_X, EmberLane, emptyProgress, EVENT, hintFor, KIND, loadEmberLaneEngine, parseProgress, type Progress, PROMPT, readLights, SECTION_NAMES, STATE } from './engine';
+import { BUTTON, CHECKPOINT_X, EmberLane, emptyProgress, EVENT, hintFor, KIND, LANTERN_OIL, loadEmberLaneEngine, parseProgress, type Progress, PROMPT, readLights, SECTION_NAMES, STATE } from './engine';
 import { Renderer } from './render';
 import { type EmberSound, playEmberSound } from './sounds';
 import '../shared.css';
@@ -304,7 +304,7 @@ function EmberLaneScreens() {
                 {Array.from({ length: Math.max(hud.embers, 0) }, (_, index) => <i key={index} />)}
                 {hud.embers === 0 && <em>no embers</em>}
               </span>
-              {hud.carrying && <span className="ember-hud__oil" data-testid="ember-oil" title="Lantern oil"><b style={{ width: `${(hud.oil / 16) * 100}%` }} /></span>}
+              {hud.carrying && <span className="ember-hud__oil" data-testid="ember-oil" title="Lantern oil"><b style={{ width: `${(hud.oil / LANTERN_OIL) * 100}%` }} /></span>}
               <button type="button" className="ember-icon-button ember-icon-button--menu" onClick={togglePause} data-testid="ember-pause" aria-label="Menu — pause, restart or quit (P)" title="Menu (P)" aria-haspopup="dialog">⋮</button>
               {mute}
             </div>

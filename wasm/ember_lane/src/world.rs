@@ -14,7 +14,10 @@ pub const SIBLING_SPEED: f32 = 104.0;
 pub const SIBLING_GAP: f32 = 24.0;
 pub const REACH: f32 = 22.0;
 pub const LIT_LEVEL: f32 = 0.5;
-pub const LANTERN_OIL: f32 = 16.0;
+/// Seconds of lantern oil (it burns from the moment she picks it up). Enough to cross the dark alley to the
+/// brazier's light with a short stop, but spent before a non-stop walk reaches Cooper's Yard's crate, so the
+/// lantern can't be carried past the crate puzzle.
+pub const LANTERN_OIL: f32 = 8.0;
 pub const FIRE_POT_SECONDS: f32 = 12.0;
 pub const THROW_RANGE: f32 = 250.0;
 pub const CLIMB_SECONDS: f32 = 0.55;

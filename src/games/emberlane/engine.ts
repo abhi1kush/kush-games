@@ -26,6 +26,8 @@ export const BUTTON = { left: 1, right: 2 } as const;
 export const CHECKPOINT_X = [120, 990, 1700, 2410, 3000];
 export const SECTION_NAMES = ['The Hearth', 'Torch Lane', 'Brazier Square', 'Lantern Alley', 'Cooper’s Yard', 'Shutter Row'];
 export const CRATE = { half: 15, height: 30 };
+/** Seconds of lantern oil (matches the engine). */
+export const LANTERN_OIL = 8;
 export const LEVER_X = [3060, 3262];
 /** The fixed stone staircase before the guttering torch (block index 1 in the engine): steps up, a landing, steps down. */
 export const STAIRS = { index: 1, x: 505, half: 26, height: 26, steps: 3, landing: 8 };

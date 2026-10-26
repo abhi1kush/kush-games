@@ -203,6 +203,15 @@ async function hintClearOfCharacters(page) {
   await press(page, 'e');
   await page.waitForTimeout(150);
   check((await info(page)).carrying && (await page.getByTestId('ember-oil').isVisible()), 'E takes the lantern; the oil gauge shows');
+  // a non-stop walk to Cooper's Yard: the oil runs out in the brazier's light, before the crate
+  await page.evaluate(() => document.activeElement?.blur());
+  await page.keyboard.down('ArrowRight');
+  await waitFor(async () => { const now = await info(page); return !now.carrying || now.x >= 2550 || now.deaths > 0; }, 15000, 20).catch(() => {});
+  await page.keyboard.up('ArrowRight');
+  const spent = await info(page);
+  check(!spent.carrying && spent.x < 2500 && spent.lit && spent.deaths === 0, `walking straight on, the lantern is spent before the crate, in the brazier's light (x ${spent.x.toFixed(0)})`);
+  await page.waitForTimeout(1500);
+  check((await info(page)).deaths === 0, 'and both children are safe there');
 
   // shutter levers and the sanctuary door
   await begin(page, 4);
