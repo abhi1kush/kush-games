@@ -17,33 +17,58 @@ interface Particle { x: number; y: number; vx: number; vy: number; life: number;
 export interface Overlay { prompt: number; touch: boolean; }
 
 
+/** Where a light's shadows are cast from: the middle of the flame as drawn (a brazier's flame stands well above its
+ * bowl, so its shadows fall from there, not from the rim). World units above the ground. */
+export function shadowSourceHeight(light: Light): number {
+  if (light.kind === KIND.brazier) return light.height - 1 + (light.radius > 200 ? 30 : 24) * 0.45;
+  if (light.kind === KIND.firePot) return 16 + 20 * 0.45;
+  return light.height;
+}
+
 /**
- * Clip to the part of the scene a light reaches: a crate blocks the street behind it, but the light still spills
- * over the crate's top edge onto the walls above (a shadow wedge cast from the flame through the crate corner).
+ * The crate's shadow for one light, as a screen polygon: everything the crate hides from the flame. Its upper edge is
+ * the ray from the flame grazing the crate's top (over the far corner when the flame is above the crate, the near
+ * corner when it is below) down to the foot of the walls, and its lower edge is the ray from the flame past the
+ * crate's foot across the cobbles, so both edges point straight back at the light (the street beyond stays dark, as
+ * in the game). `side` is +1 when the shadow falls to the right of the crate, -1 to the left; `farX`
+ * is the crate's far edge (screen x).
  */
-function clipToShadow(context: CanvasRenderingContext2D, view: View, light: Light, flameX: number, flameY: number) {
-  const top = -10;
+export function crateShadow(view: View, farX: number, side: 1 | -1, flameX: number, flameY: number): [number, number][] {
+  const width = CRATE.half * 2 * view.scale;
+  const nearX = farX - side * width;
+  const topY = toScreenY(view, CRATE.height);
+  const baseY = view.ground;
   const bottom = view.height + 10;
-  const far = 4000;
-  const cornerY = toScreenY(view, CRATE.height);
-  const lineY = (cornerX: number, atX: number) => {
-    const dx = cornerX - flameX;
-    return Math.abs(dx) < 1 ? top : cornerY + ((cornerY - flameY) / dx) * (atX - cornerX);
-  };
-  const points: [number, number][] = [];
+  const reach = farX + side * 4000;
+  const upperX = flameY <= topY ? farX : nearX;
+  const dx = (x: number) => (Math.abs(x - flameX) < 1 ? side : x - flameX);
+  const upperSlope = (topY - flameY) / dx(upperX);
+  const upperY = topY + upperSlope * (reach - upperX);
+  // the upper edge runs along the ray until it meets the foot of the walls; the street beyond stays in shadow
+  const upper: [number, number][] = upperY > baseY
+    ? [[upperX + (baseY - topY) / upperSlope, baseY], [reach, baseY]]
+    : [[reach, Math.max(-4000, upperY)]];
+  // the lower edge runs from the crate's foot away from the flame, down across the cobbles
+  const drop = Math.max(1, baseY - flameY);
+  const lowerX = farX + ((bottom - baseY) * dx(farX)) / drop;
+  return [[upperX, topY], ...upper, [reach, bottom], [side > 0 ? Math.max(lowerX, farX) : Math.min(lowerX, farX), bottom], [farX, baseY], [farX, topY]];
+}
+
+/** Clip to the part of the scene a light reaches: the crate's shadow (if it blocks this light) is cut out. */
+function clipToShadow(context: CanvasRenderingContext2D, view: View, light: Light, flameX: number, flameY: number) {
   const hasLeft = light.left > 0.5;
   const hasRight = light.right < STAGE_END - 0.5;
-  const leftX = toScreenX(view, light.left);
-  const rightX = toScreenX(view, light.right);
-  points.push([hasLeft ? leftX - far : -far, top]);
-  if (hasRight) points.push([rightX + far, top], [rightX + far, Math.max(top, lineY(rightX, rightX + far))], [rightX, cornerY], [rightX, bottom]);
-  else points.push([far, top], [far, bottom]);
-  if (hasLeft) points.push([leftX, bottom], [leftX, cornerY], [leftX - far, Math.max(top, lineY(leftX, leftX - far))]);
-  else points.push([-far, bottom]);
+  if (!hasLeft && !hasRight) return;
   context.beginPath();
-  points.forEach(([x, y], index) => (index ? context.lineTo(x, y) : context.moveTo(x, y)));
-  context.closePath();
-  context.clip();
+  context.rect(-10, -10, view.width + 20, view.height + 20);
+  const shadows: [number, number][][] = [];
+  if (hasRight) shadows.push(crateShadow(view, toScreenX(view, light.right), 1, flameX, flameY));
+  if (hasLeft) shadows.push(crateShadow(view, toScreenX(view, light.left), -1, flameX, flameY));
+  for (const polygon of shadows) {
+    polygon.forEach(([x, y], index) => (index ? context.lineTo(x, y) : context.moveTo(x, y)));
+    context.closePath();
+  }
+  context.clip('evenodd');
 }
 
 export class Renderer {
@@ -312,7 +337,7 @@ export class Renderer {
       const radius = light.radius * s * (light.kind === KIND.brazier && light.radius > 200 ? 0.95 : 1.05) * flicker;
       if (x + radius < 0 || x - radius > view.width) return;
       dark.save();
-      clipToShadow(dark, view, light, x, y);
+      clipToShadow(dark, view, light, x, light.kind === KIND.lantern ? y : toScreenY(view, shadowSourceHeight(light)));
       const hole = dark.createRadialGradient(x, y, 0, x, y, radius);
       const strength = light.intensity;
       hole.addColorStop(0, `rgba(0, 0, 0, ${strength})`);
@@ -350,7 +375,7 @@ export class Renderer {
       const flicker = 0.9 + 0.1 * Math.sin(time * 11 + index * 1.7);
       const warm = light.kind === KIND.window || light.kind === KIND.door ? '255, 196, 120' : '255, 150, 60';
       context.save();
-      clipToShadow(context, view, light, x, y);
+      clipToShadow(context, view, light, x, light.kind === KIND.lantern ? y : toScreenY(view, shadowSourceHeight(light)));
       const halo = context.createRadialGradient(x, y, 0, x, y, light.radius * s * 0.75);
       halo.addColorStop(0, `rgba(${warm}, ${0.32 * light.intensity * flicker})`);
       halo.addColorStop(0.4, `rgba(${warm}, ${0.12 * light.intensity * flicker})`);
