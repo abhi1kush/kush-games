@@ -65,6 +65,7 @@ async function hintClearOfCharacters(page) {
   const after = await info(page);
   check(after.sibling > before.sibling + 60 && after.sibling < after.x, `Lio follows behind (${after.sibling.toFixed(0)})`);
   check(after.lit && after.deaths === 0, 'the torch-lit start is safe');
+  check(before.embers === 3, `a new run starts with three embers (${before.embers})`);
   await hold(page, 'd', 900);
   await page.screenshot({ path: `${shots}/kush-games-ember-desktop.png` });
 
@@ -72,6 +73,7 @@ async function hintClearOfCharacters(page) {
   await press(page, 'p');
   await page.getByTestId('ember-paused').waitFor();
   check(await page.getByTestId('ember-paused').getByTestId('ember-controls').isVisible(), 'pause shows the controls card');
+  check(await page.getByTestId('ember-quit').isVisible() && await page.getByTestId('ember-restart').isVisible(), 'the ⋮ menu offers Restart stage and Quit game');
   const pausedAt = (await info(page)).time;
   const hashA = await canvasHash(page);
   await page.waitForTimeout(600);
@@ -186,10 +188,25 @@ async function hintClearOfCharacters(page) {
   check((await info(page)).deaths === 0, 'cleared without a fall');
   await page.waitForTimeout(600);
   await page.screenshot({ path: `${shots}/kush-games-ember-clear.png` });
+  check((await page.getByTestId('ember-again').textContent()) === 'Play again', 'the clear card says “Play again”');
+  await page.evaluate(() => { const game = window.__emberTest.game(); game.set_input(2); });
+  await page.getByTestId('ember-again').click();
+  await page.waitForTimeout(300);
+  const replay = await info(page);
+  check(replay.embers === 3 && replay.checkpoint === 0 && replay.deaths === 0 && replay.x < 130 && !replay.cleared, `Play again resets the stage: embers ${replay.embers}, checkpoint ${replay.checkpoint}, x ${replay.x.toFixed(0)}`);
+  check(replay.crate === 2575 && replay.pot === 0, 'Play again resets the crate and fire pot too');
   await page.reload();
   await page.getByTestId('ember-start').waitFor({ timeout: 20000 });
   const record = await page.getByTestId('ember-record').textContent().catch(() => '');
   check(record.includes('1×'), `the clear is saved ("${record}")`);
+  // quit from the ⋮ menu goes back to the games hub
+  await page.getByTestId('ember-play').click();
+  await page.getByTestId('ember-hud').waitFor();
+  await page.getByTestId('ember-pause').click();
+  await page.getByTestId('ember-quit').click();
+  await waitFor(async () => (await page.evaluate(() => location.hash)) === '#/', 5000, 50).catch(() => {});
+  const quitHash = await page.evaluate(() => location.hash);
+  check(quitHash === '#/' && !(await page.getByTestId('player').count()) && !(await page.getByTestId('ember-canvas').count()), `Quit game leaves to the games hub (${quitHash})`);
   await context.close();
 }
 

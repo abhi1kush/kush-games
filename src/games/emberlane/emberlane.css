@@ -24,6 +24,7 @@
 .ember-hud__oil { width: 70px; height: 9px; border-radius: 999px; background: rgba(0, 0, 0, 0.5); border: 1px solid rgba(255, 210, 140, 0.35); overflow: hidden; }
 .ember-hud__oil b { display: block; height: 100%; background: linear-gradient(90deg, #c66a1a, #ffd27a); box-shadow: 0 0 8px rgba(255, 190, 90, 0.8); transition: width 0.4s linear; }
 .ember-icon-button, .ember .ember-mute { width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(255, 200, 140, 0.3); background: rgba(8, 8, 18, 0.55); color: #ffe2b8; font: 700 12px/1 system-ui, sans-serif; cursor: pointer; display: grid; place-items: center; padding: 0; }
+.ember-icon-button--menu { font-size: 20px; line-height: 1; }
 .ember-icon-button:hover, .ember .ember-mute:hover { background: rgba(60, 30, 14, 0.7); }
 
 .ember-hint { position: absolute; left: 50%; top: 56px; transform: translateX(-50%); max-width: min(92%, 640px); margin: 0; padding: 8px 16px; border-radius: 12px;

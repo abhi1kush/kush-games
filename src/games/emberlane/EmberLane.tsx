@@ -5,6 +5,7 @@
  * Rust/wasm owns the light, rats, puzzles and movement on a fixed step; this file runs screens, input and drawing.
  */
 import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { homePath, navigate } from '../../routing';
 import { createSaveSlot, SAVE_VERSIONS } from '../persistence';
 import { MuteButton, unlockAudio, useSharedMute } from '../sharedSound';
 import { BUTTON, CHECKPOINT_X, EmberLane, emptyProgress, EVENT, hintFor, KIND, loadEmberLaneEngine, parseProgress, type Progress, PROMPT, readLights, SECTION_NAMES, STATE } from './engine';
@@ -303,7 +304,7 @@ function EmberLaneScreens() {
                 {hud.embers === 0 && <em>no embers</em>}
               </span>
               {hud.carrying && <span className="ember-hud__oil" data-testid="ember-oil" title="Lantern oil"><b style={{ width: `${(hud.oil / 16) * 100}%` }} /></span>}
-              <button type="button" className="ember-icon-button" onClick={togglePause} data-testid="ember-pause" aria-label="Pause (P)" title="Pause (P)">❚❚</button>
+              <button type="button" className="ember-icon-button ember-icon-button--menu" onClick={togglePause} data-testid="ember-pause" aria-label="Menu — pause, restart or quit (P)" title="Menu (P)" aria-haspopup="dialog">⋮</button>
               {mute}
             </div>
           </div>
@@ -319,7 +320,7 @@ function EmberLaneScreens() {
             </div>
             <div className="ember-actions">
               {continueFrom > 0 && <button type="button" className="online-button online-button--primary" onClick={() => begin(continueFrom)} data-testid="ember-continue">Continue · {SECTION_NAMES[continueFrom + 1]}</button>}
-              <button type="button" className={`online-button${continueFrom > 0 ? '' : ' online-button--primary'}`} onClick={() => begin(0)} data-testid="ember-play">{continueFrom > 0 ? 'Start over' : progress.cleared ? 'Walk it again' : 'Begin'}</button>
+              <button type="button" className={`online-button${continueFrom > 0 ? '' : ' online-button--primary'}`} onClick={() => begin(0)} data-testid="ember-play">{continueFrom > 0 ? 'Start over' : progress.cleared ? 'Play again' : 'Begin'}</button>
               {mute}
             </div>
             {progress.cleared && <p className="ember-record" data-testid="ember-record">Reached the sanctuary {progress.clears}× · best {formatTime(progress.bestSeconds)}</p>}
@@ -331,7 +332,9 @@ function EmberLaneScreens() {
             <h2 className="ember-overlay__heading">Paused</h2>
             <div className="ember-actions">
               <button type="button" className="online-button online-button--primary" onClick={() => setIsPaused(false)} data-testid="ember-resume">Resume</button>
-              <button type="button" className="online-button" onClick={() => { setIsPaused(false); setScreen('start'); }} data-testid="ember-quit">Leave the street</button>
+              <button type="button" className="online-button" onClick={() => begin(0)} data-testid="ember-restart">Restart stage</button>
+              <button type="button" className="online-button" onClick={() => { setIsPaused(false); setScreen('start'); }} data-testid="ember-title">Title screen</button>
+              <button type="button" className="online-button" onClick={() => navigate(homePath)} data-testid="ember-quit">Quit game</button>
               {mute}
             </div>
             <ControlsCard touch={touch} />
@@ -349,8 +352,9 @@ function EmberLaneScreens() {
             </dl>
             <p className="ember-clear__next">More of the village waits beyond the sanctuary — the next stage is coming.</p>
             <div className="ember-actions">
-              <button type="button" className="online-button online-button--primary" onClick={() => begin(0)} data-testid="ember-again">Walk it again</button>
+              <button type="button" className="online-button online-button--primary" onClick={() => begin(0)} data-testid="ember-again">Play again</button>
               <button type="button" className="online-button" onClick={() => setScreen('start')} data-testid="ember-menu">Title</button>
+              <button type="button" className="online-button" onClick={() => navigate(homePath)} data-testid="ember-clear-quit">Quit game</button>
             </div>
           </div>
         )}

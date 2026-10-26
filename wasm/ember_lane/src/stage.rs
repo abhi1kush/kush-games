@@ -46,8 +46,8 @@ pub const FLICKER: usize = 3;
 pub const ZONES: [(f32, f32, u8); 5] = [(575.0, 740.0, 24), (1110.0, 1640.0, 52), (1830.0, 2330.0, 56), (2565.0, 2795.0, 34), (3085.0, 3530.0, 52)];
 pub const RAT_COUNT: usize = 220;
 
-/// Checkpoints: x, embers given (at least), lantern oil topped up to (0 = unchanged)
-pub const CHECKPOINTS: [(f32, u8); 5] = [(START_X, 0), (990.0, 3), (1700.0, 0), (2410.0, 2), (3000.0, 0)];
+/// Checkpoints: x, and the embers Mira carries from there (topped up to at least this many; the first is the start)
+pub const CHECKPOINTS: [(f32, u8); 5] = [(START_X, 3), (990.0, 3), (1700.0, 1), (2410.0, 2), (3000.0, 1)];
 
 /// Crate: start x (centre), half width, height, how far it may slide
 pub const CRATES: [(f32, f32, f32, f32, f32); 1] = [(2575.0, 15.0, 30.0, 2440.0, 2590.0)];

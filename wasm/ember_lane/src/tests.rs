@@ -219,3 +219,20 @@ fn hopping_into_the_dark_can_climb_back() {
     assert!(game.sibling_y() > OUT_OF_REACH, "Lio climbs up beside Mira");
     assert_eq!(game.deaths(), 0);
 }
+
+/// A new run (Play again, Start over) starts with a full set of embers, and every checkpoint tops them up.
+#[test]
+fn a_new_run_starts_with_embers_and_checkpoints_top_them_up() {
+    let mut game = EmberLane::new();
+    assert_eq!(game.embers(), CHECKPOINTS[0].1);
+    assert!(game.embers() >= 3);
+    walk_to(&mut game, 300.0);
+    game.world.facing = 1.0;
+    assert!(game.throw_ember()); // waste one
+    wait(&mut game, 1.0);
+    assert_eq!(game.embers(), 2);
+    let again = EmberLane::new();
+    assert_eq!(again.embers(), CHECKPOINTS[0].1, "a fresh run is not affected by the old one");
+    game.debug_warp(1);
+    assert_eq!(game.embers(), 3, "Torch Lane tops up to three");
+}

@@ -117,7 +117,7 @@ impl World {
         let mut world = World {
             time: 0.0, player_x: START_X, player_y: 0.0, facing: 1.0, state: STATE_IDLE, state_time: 0.0, climb_from: 0.0, climb_to: 0.0, climb_from_y: 0.0, climb_to_y: 0.0, on_crate: -1, walked: 0.0,
             sibling_x: START_X - SIBLING_GAP, sibling_y: 0.0, sibling_facing: 1.0, sibling_walked: 0.0, danger: 0.0, sibling_danger: 0.0,
-            lights, base_lit, pot_left: 0.0, carrying: false, lantern_used: false, oil: LANTERN_OIL, embers: 0, ember: Ember::default(),
+            lights, base_lit, pot_left: 0.0, carrying: false, lantern_used: false, oil: LANTERN_OIL, embers: CHECKPOINTS[0].1, ember: Ember::default(),
             crates, levers: [false; LEVERS.len()], rats: [Rat::default(); RAT_COUNT], checkpoint: 0, cleared: false, events: 0,
         };
         world.update_lights();
