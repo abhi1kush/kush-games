@@ -84,6 +84,7 @@ export const guardsteps_prompt: (a: number) => number;
 export const guardsteps_rat_count: (a: number) => number;
 export const guardsteps_rats_ptr: (a: number) => number;
 export const guardsteps_relight_progress: (a: number) => number;
+export const guardsteps_scorpions_ptr: (a: number) => number;
 export const guardsteps_select_item: (a: number, b: number) => void;
 export const guardsteps_set_input: (a: number, b: number) => void;
 export const guardsteps_sibling_facing: (a: number) => number;

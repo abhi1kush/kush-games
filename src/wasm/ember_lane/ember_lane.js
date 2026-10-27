@@ -604,6 +604,14 @@ export class GuardSteps {
         return ret;
     }
     /**
+     * SCORPION_COUNT (10, GUARD.scorpionCount in TS) × 8 × 4 bytes, the rat layout.
+     * @returns {number}
+     */
+    scorpions_ptr() {
+        const ret = wasm.guardsteps_scorpions_ptr(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
      * 0 ember, 1 stone.
      * @param {number} item
      */

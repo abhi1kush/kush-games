@@ -7,7 +7,7 @@
  */
 import { drawFlame, drawLantern, drawTorch, hash, LayerCache, paintFar, paintSky, toScreenX, toScreenY, type View } from './art';
 import { drawKabir, drawMira } from './characters';
-import { GUARD, GUARD_PROMPT, GUARD_PROMPT_TEXT, GUARD_STATE, type GuardSteps, ITEM, KIND_HANGING_LAMP, type Light, MIRA_STRIKE, ratView, readGuardLights, STATE } from './engine';
+import { GUARD, GUARD_PROMPT, GUARD_PROMPT_TEXT, GUARD_STATE, type GuardSteps, ITEM, KIND_HANGING_LAMP, type Light, MIRA_STRIKE, ratView, readGuardLights, RAT_STRIDE, scorpionView, STATE } from './engine';
 import { drawRatEyes, drawRatSwarm } from './render';
 import { drawSoldier, drawSuspicion } from './soldier';
 
@@ -95,6 +95,14 @@ function paintYard(context: CanvasRenderingContext2D, u0: number, u1: number, sc
     context.fillStyle = '#16141a'; context.fillRect(S(GUARD.lampX + 30), Y(-D) + S(3), S(18), S(4));
     context.strokeStyle = '#3a3640'; context.lineWidth = S(0.8);
     context.beginPath(); for (let bar = 2; bar < 18; bar += 4) { context.moveTo(S(GUARD.lampX + 30 + bar), Y(-D) + S(3)); context.lineTo(S(GUARD.lampX + 30 + bar), Y(-D) + S(7)); } context.stroke();
+    // a jagged crack across the flagstones: the scorpions' home
+    const cx = GUARD.crackX;
+    context.fillStyle = '#121014';
+    context.beginPath();
+    context.moveTo(S(cx - 14), Y(-D) + S(4));
+    for (const [dx, dy] of [[-9, 2.6], [-5, 5.2], [-1, 3.4], [3, 6], [7, 3.8], [11, 5.4], [14, 4.4]] as const) context.lineTo(S(cx + dx), Y(-D) + S(dy));
+    for (const [dx, dy] of [[11, 7], [6, 5.4], [2, 8], [-3, 5.6], [-8, 6.8]] as const) context.lineTo(S(cx + dx), Y(-D) + S(dy));
+    context.closePath(); context.fill();
   }
   // the two staircases: solid stone with lit nosings
   for (const [top, bottom] of [[GUARD.stairsTop, GUARD.stairsBottom], [GUARD.exitTop, GUARD.exitBottom]] as const) {
@@ -216,6 +224,9 @@ export class GuardRenderer {
     const lightAt = (x: number) => game.light_at(x);
     const floorAt = (x: number) => toScreenY(view, game.ground_at(x));
     drawRatSwarm(context, view, rats, ratCount, time, false, lightAt, floorAt);
+    const scorpions = scorpionView(game);
+    const scorpionCount = GUARD.scorpionCount;
+    drawScorpions(context, view, scorpions, scorpionCount, time, false, lightAt, floorAt);
 
     // --- characters
     const state = game.state();
@@ -246,6 +257,7 @@ export class GuardRenderer {
       throwing: state === STATE.throw ? game.state_time() : state === MIRA_STRIKE ? game.state_time() * 0.75 : undefined, dead: isDead ? deadT : 0,
     });
     drawRatSwarm(context, view, rats, ratCount, time, true, lightAt, floorAt);
+    drawScorpions(context, view, scorpions, scorpionCount, time, true, lightAt, floorAt);
     if (state === MIRA_STRIKE && game.state_time() < 0.35) {
       // the takedown: a hard swing with a stone in her fist
       context.fillStyle = '#8c8a86';
@@ -281,12 +293,15 @@ export class GuardRenderer {
     context.setTransform(ratio, 0, 0, ratio, 0, 0);
     drawRatSwarm(context, view, rats, ratCount, time, false, lightAt, floorAt, true);
     drawRatSwarm(context, view, rats, ratCount, time, true, lightAt, floorAt, true);
+    drawScorpions(context, view, scorpions, scorpionCount, time, false, lightAt, floorAt, true);
+    drawScorpions(context, view, scorpions, scorpionCount, time, true, lightAt, floorAt, true);
     this.drawGlows(context, view, lights, time);
     // a dark lamp still catches the moonlight, so Mira can see her target
     const lamp = lights.find(light => light.kind === KIND_HANGING_LAMP);
     if (lamp && !lamp.lit && visible(lamp.x, 80)) { context.save(); context.globalAlpha = 0.55; this.drawLampPost(context, view, lamp, time); context.restore(); }
     this.stepParticles(context, view, lights, dt, time);
     drawRatEyes(context, view, rats, ratCount, time, lightAt, floorAt);
+    drawScorpionGlints(context, view, scorpions, scorpionCount, time, lightAt, floorAt);
     this.drawDrainEyes(context, view, game, time);
     // the soldier's eye stays readable in the dark; the suspicion meter rides above his cap
     drawSuspicion(context, guardX, charY(game.guard_y()) - 60 * s, s, game.suspicion(), guardState, game.relight_progress(), time);
@@ -540,4 +555,97 @@ export class GuardRenderer {
     context.fillText(label, x, y - height / 2 + 1);
     context.textAlign = 'start'; context.textBaseline = 'alphabetic';
   }
+}
+
+/**
+ * Stage two's scorpions: chunky, kid-friendly silhouettes — a rounded amber body, two big pincers held out front and
+ * a segmented tail curled up over the back with a stinger — so they read clearly next to the rats, even small on a
+ * phone. Same lanes as the rats (back / front half); `moonlit` draws their faint shapes over the darkness.
+ */
+function drawScorpions(context: CanvasRenderingContext2D, view: View, list: Float32Array, count: number, time: number, front: boolean, lightAt: (x: number) => number, groundAt: (x: number) => number, moonlit = false) {
+  const s = view.scale;
+  context.save();
+  for (let index = 0; index < count; index++) {
+    const base = index * RAT_STRIDE;
+    if (list[base + 3] < 0.5) continue;
+    const lane = list[base + 2];
+    if ((lane >= 0.5) !== front) continue;
+    const wx = list[base];
+    const x = toScreenX(view, wx);
+    if (x < -24 || x > view.width + 24) continue;
+    if (moonlit) { const shade = 1 - lightAt(wx); if (shade < 0.05) continue; context.globalAlpha = 0.6 * shade; } else context.globalAlpha = 1;
+    const vx = list[base + 1];
+    const phase = list[base + 5];
+    const moving = Math.abs(vx) > 12;
+    const y = groundAt(wx) + (1.5 + lane * 20) * s;
+    const dir = vx >= 0 ? 1 : -1;
+    const size = (1.0 + hash(index * 3 + 7) * 0.3) * s;
+    const body = moonlit ? '#3a3a58' : index % 2 ? '#a5552a' : '#8c4520';
+    const dark = moonlit ? '#24243a' : '#5a2a12';
+    context.save();
+    context.translate(x, y);
+    context.scale(dir, 1);
+    // eight little legs, scuttling
+    context.strokeStyle = dark; context.lineWidth = 0.8 * size; context.lineCap = 'round';
+    context.beginPath();
+    for (let leg = 0; leg < 4; leg++) {
+      const lx = (-2.6 + leg * 1.8) * size;
+      const swing = (moving ? Math.sin(phase * 2.4 + leg * 1.6) : 0.3) * 1.3 * size;
+      context.moveTo(lx, -1.6 * size); context.lineTo(lx - 1.2 * size + swing, -0.8 * size); context.lineTo(lx - 1.6 * size + swing, 0);
+    }
+    context.stroke();
+    // tail: five beads arching up and forward over the back, ending in a stinger
+    const curl = Math.sin(time * 3 + index) * 0.12 + (moving ? 0 : 0.1);
+    let tx = -4 * size; let ty = -2.2 * size;
+    context.fillStyle = body;
+    for (let seg = 0; seg < 5; seg++) {
+      const angle = Math.PI * (0.95 - seg * 0.24 - curl);
+      tx += Math.cos(angle) * 2.1 * size; ty -= Math.sin(angle) * 2.1 * size;
+      context.beginPath(); context.arc(tx, ty, (1.4 - seg * 0.12) * size, 0, Math.PI * 2); context.fill();
+    }
+    context.fillStyle = moonlit ? '#5a5a80' : '#f0c040';
+    context.beginPath(); context.moveTo(tx + 0.8 * size, ty - 0.4 * size); context.lineTo(tx + 2.6 * size, ty + 1.2 * size); context.lineTo(tx + 0.4 * size, ty + 0.9 * size); context.closePath(); context.fill();
+    // body: a rounded plated oval
+    context.fillStyle = body;
+    context.beginPath(); context.ellipse(0, -2.2 * size, 4.4 * size, 2 * size, 0, 0, Math.PI * 2); context.fill();
+    context.strokeStyle = dark; context.lineWidth = 0.5 * size;
+    context.beginPath(); for (const px of [-2, 0, 2]) { context.moveTo(px * size, -3.9 * size); context.lineTo(px * size, -0.6 * size); } context.stroke();
+    // pincers: arm out front, a snapping claw
+    const snap = moving ? 0.25 + 0.25 * Math.sin(phase * 3) : 0.35 + 0.2 * Math.sin(time * 5 + index);
+    context.strokeStyle = body; context.lineWidth = 1 * size;
+    context.beginPath(); context.moveTo(3.4 * size, -2.4 * size); context.lineTo(5.6 * size, -3.4 * size); context.stroke();
+    context.fillStyle = body;
+    context.save(); context.translate(6.4 * size, -3.6 * size);
+    context.beginPath(); context.ellipse(0, 0, 1.6 * size, 1.1 * size, 0, 0, Math.PI * 2); context.fill();
+    context.rotate(-snap); context.beginPath(); context.ellipse(1.6 * size, -0.4 * size, 1.4 * size, 0.6 * size, 0, 0, Math.PI * 2); context.fill();
+    context.rotate(snap * 2); context.beginPath(); context.ellipse(1.6 * size, 0.4 * size, 1.4 * size, 0.6 * size, 0, 0, Math.PI * 2); context.fill();
+    context.restore();
+    // a soft highlight so the shape pops on the dark flagstones
+    context.fillStyle = moonlit ? 'rgba(180, 190, 255, 0.12)' : 'rgba(255, 210, 150, 0.22)';
+    context.beginPath(); context.ellipse(-0.6 * size, -3.3 * size, 3 * size, 0.6 * size, 0, 0, Math.PI * 2); context.fill();
+    context.restore();
+  }
+  context.restore();
+}
+
+/** Two tiny green-white eye glints per scorpion in the dark (rats' are red), so you can tell them apart. */
+function drawScorpionGlints(context: CanvasRenderingContext2D, view: View, list: Float32Array, count: number, time: number, lightAt: (x: number) => number, groundAt: (x: number) => number) {
+  const s = view.scale;
+  context.save();
+  context.globalCompositeOperation = 'lighter';
+  for (let index = 0; index < count; index++) {
+    const base = index * RAT_STRIDE;
+    if (list[base + 3] < 0.5) continue;
+    const wx = list[base];
+    const x = toScreenX(view, wx);
+    if (x < -10 || x > view.width + 10) continue;
+    if ((time * 0.6 + hash(index * 13)) % 1 < 0.05) continue;
+    const near = Math.max(0.2, Math.min(1, 1 - lightAt(wx) * 0.7));
+    const dir = list[base + 1] >= 0 ? 1 : -1;
+    const size = (1.0 + hash(index * 3 + 7) * 0.3) * s;
+    const y = groundAt(wx) + (1.5 + list[base + 2] * 20) * s - 3.6 * size;
+    context.fillStyle = `rgba(170, 255, 190, ${0.7 * near})`;
+    for (const dx of [2.6, 3.6]) { context.beginPath(); context.arc(x + dir * dx * size, y, 0.45 * size, 0, Math.PI * 2); context.fill(); }
+  }
+  context.restore();
 }

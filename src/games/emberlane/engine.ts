@@ -53,6 +53,15 @@ export function ratView(game: EmberLane | GuardSteps): Float32Array {
   return new Float32Array(memory.buffer, game.rats_ptr(), game.rat_count() * RAT_STRIDE);
 }
 
+/** Stage two's scorpions (the rat layout: x, vx, lane, state, timer, phase, nest, rng). */
+export function scorpionView(game: GuardSteps): Float32Array {
+  if (!memory) throw new Error('engine not loaded');
+  return new Float32Array(memory.buffer, game.scorpions_ptr(), GUARD.scorpionCount * RAT_STRIDE);
+}
+
+/** How many scorpions are out of the crack (test hook). */
+export const scorpionsOut = (game: GuardSteps) => { const view = scorpionView(game); let out = 0; for (let index = 0; index < GUARD.scorpionCount; index++) if (view[index * RAT_STRIDE + 3] > 0.5) out++; return out; };
+
 /** Saved progress. `stage` is where Continue picks up (1 the night street, 2 the guard steps); stage two keeps its
  * own unlock, clear count and best time. Saves from before stage two existed load with stage two locked. */
 export interface Progress {
@@ -84,9 +93,11 @@ export function parseProgress(data: unknown): Progress | null {
 // ---------------------------------------------------------------- stage two: the guard steps
 export const GUARD = {
   stageEnd: 1200, yardDepth: 48, stairsTop: 380, stairsBottom: 476, exitBottom: 960, exitTop: 1040, steps: 6, gateX: 1130,
-  kabirHideX: 335, stonePileX: 250, torchX: 150, lampX: 700, patrolLeft: 545, patrolRight: 860, maxStones: 3,
+  kabirHideX: 335, stonePileX: 250, torchX: 200, lampX: 700, patrolLeft: 545, patrolRight: 860, maxStones: 3,
   /** The rats' drain under the lamp, and how long the lamp is dark before they climb out of it. */
   drainX: 739, drainDelay: 5.5,
+  /** The scorpions' crack in the yard floor, and how long the lamp is dark before they come out (after the rats). */
+  crackX: 860, scorpionDelay: 6.5, scorpionCount: 10,
 } as const;
 export const GUARD_STATE = { patrol: 0, suspicious: 1, charge: 2, spear: 3, relight: 4, down: 5 } as const;
 export const MIRA_STRIKE = 6;
@@ -132,14 +143,14 @@ export function guardHint(scene: GuardScene): string {
   }
   if (down) {
     if (lampLit) return '';
-    if (ratsOut && inYard) return 'Rats in the dark! Relight the lamp now — or run back up the steps.';
+    if (ratsOut && inYard) return 'Rats and scorpions in the dark! Relight the lamp now — or run back up the steps.';
     const lead = guardEaten ? 'The rats took him. ' : '';
     if (embers === 0) return `${lead}Kabir won’t come down into the dark. Fetch an ember from the torch on the terrace.`;
     return item === 1 ? `${lead}Kabir won’t come down into the dark. Switch to the ember and throw it at the lamp.` : `${lead}Kabir won’t come down into the dark. Face the lamp and throw the ember to relight it.`;
   }
   if (!lampLit && ratsOut) {
-    if (inYard) return 'The rats are out of the drain — get out of the dark, up the steps!';
-    return guardBeset ? 'The rats are on him. Stay up here on the steps.' : 'Rats swarm the dark yard. Wait on the steps — they’ll find him.';
+    if (inYard) return 'The rats are out of the drain, scorpions close behind — get out of the dark, up the steps!';
+    return guardBeset ? 'The rats are on him. Stay up here on the steps.' : 'Rats and scorpions swarm the dark yard. Wait on the steps — they’ll find him.';
   }
   if (guardState === GUARD_STATE.relight) {
     if (!inYard) return 'Dark! The rats under the grate will wake soon — wait here and let them find him, or hurry down and take him down first.';

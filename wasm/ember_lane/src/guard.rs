@@ -5,7 +5,9 @@
 //! take him down. Kabir won't come down into a dark yard, so she must relight the lamp with an ember before the two
 //! of them can leave by the far gate. Rats live in a drain under the lamp: while it burns the yard is theirs to
 //! fear, but a few seconds after it goes out they pour up out of the grate and swarm anyone standing in the dark
-//! (the stage-one rules) — Mira, Kabir, and the soldier too, so a snuffed lamp left dark lets them take him. World units: x left to right, y up; the terrace is y = 0, the yard y = -YARD_DEPTH.
+//! (the stage-one rules) — Mira, Kabir, and the soldier too, so a snuffed lamp left dark lets them take him.
+//! Scorpions (stage two only) live in a crack in the yard wall near the far end of his beat: the same rules as the
+//! rats — harmless while the lamp burns, out a little after the rats once it is dark, fleeing any light. World units: x left to right, y up; the terrace is y = 0, the yard y = -YARD_DEPTH.
 
 use crate::rats::{spawn_swarm, step_swarm, swarm_touching, Emerge, Lit, Rat};
 use crate::world::{Light, BITE_SECONDS, BUTTON_LEFT, BUTTON_RIGHT, GRAVITY, SIBLING_GAP, SIBLING_SPEED, STEP, MAX_STEPS, WALK_SPEED, LIT_LEVEL};
@@ -26,7 +28,7 @@ pub const GATE_X: f32 = 1130.0;
 /// Kabir hides behind the barrels at the top of the steps until the yard is safe.
 pub const KABIR_HIDE_X: f32 = 335.0;
 pub const STONE_PILE_X: f32 = 250.0;
-pub const TORCH_X: f32 = 150.0;
+pub const TORCH_X: f32 = 200.0;
 pub const LAMP_X: f32 = 700.0;
 pub const LAMP: usize = 1;
 pub const GUARD_LIGHT_COUNT: usize = 3;
@@ -70,6 +72,12 @@ pub const DRAIN_X: f32 = LAMP_X + 39.0;
 pub const DRAIN_DELAY: f32 = 5.5;
 /// The soldier stamps and swats, so they need a little longer on him than on Mira.
 pub const GUARD_BITE_SECONDS: f32 = 1.4;
+/// The scorpions' nest (also all inside the lamp light while it burns) and the wall crack they come out of.
+pub const SCORPION_NEST: [(f32, f32, u8); 1] = [(540.0, 895.0, 10)];
+pub const SCORPION_COUNT: usize = 10;
+pub const CRACK_X: f32 = 860.0;
+/// They follow the rats out a little later.
+pub const SCORPION_DELAY: f32 = 6.5;
 
 pub const KILLED_BY_SPEAR: u8 = 0;
 pub const KILLED_BY_RATS: u8 = 1;
@@ -161,6 +169,7 @@ pub struct GuardWorld {
     pub caught: bool,
     pub events: u32,
     pub rats: [Rat; GUARD_RAT_COUNT],
+    pub scorpions: [Rat; SCORPION_COUNT],
     /// Seconds the lamp has been out (0 while it burns).
     pub dark_time: f32,
     pub danger: f32,
@@ -185,13 +194,21 @@ impl GuardWorld {
             lights, embers: 1, stones: MAX_STONES, item: ITEM_STONE, missile: Missile::default(),
             guard_x: 640.0, guard_facing: 1.0, guard_state: GUARD_PATROL, guard_time: 0.0, guard_walked: 0.0, suspicion: 0.0, guard_target: 640.0, unseen: 9.0, relight: 0.0,
             cleared: false, caught: false, events: 0,
-            rats: [Rat::default(); GUARD_RAT_COUNT], dark_time: 0.0, danger: 0.0, sibling_danger: 0.0, guard_danger: 0.0, guard_eaten: false, killed_by: KILLED_BY_SPEAR,
+            rats: [Rat::default(); GUARD_RAT_COUNT], scorpions: [Rat::default(); SCORPION_COUNT], dark_time: 0.0, danger: 0.0, sibling_danger: 0.0, guard_danger: 0.0, guard_eaten: false, killed_by: KILLED_BY_SPEAR,
         };
         let mut rats = world.rats;
         spawn_swarm(&world, &mut rats, &YARD_NEST);
         world.rats = rats;
+        let mut scorpions = world.scorpions;
+        spawn_swarm(&world, &mut scorpions, &SCORPION_NEST);
+        // their own random streams, not the first rats' twins
+        for scorpion in scorpions.iter_mut() { scorpion.seed ^= 0x2545_f491; }
+        world.scorpions = scorpions;
         world
     }
+
+    /// A rat or a scorpion on whoever stands at x.
+    pub fn swarmed(&self, x: f32) -> bool { swarm_touching(&self.rats, x) || swarm_touching(&self.scorpions, x) }
 
     pub fn lamp_lit(&self) -> bool { self.lights[LAMP].lit > 0.5 }
 
@@ -314,11 +331,15 @@ impl GuardWorld {
         let mut rats = self.rats;
         step_swarm(self, &mut rats, &YARD_NEST, &prey, emerge);
         self.rats = rats;
+        let crack = if self.dark_time >= SCORPION_DELAY { Emerge::Drain(CRACK_X) } else { Emerge::Closed };
+        let mut scorpions = self.scorpions;
+        step_swarm(self, &mut scorpions, &SCORPION_NEST, &prey, crack);
+        self.scorpions = scorpions;
     }
 
     /// The stage-one rule for everyone: rats touching someone in the dark wear them down, and the light lets them recover.
     fn check_bites(&mut self) {
-        let bitten = |world: &GuardWorld, x: f32| !world.is_lit(x) && swarm_touching(&world.rats, x);
+        let bitten = |world: &GuardWorld, x: f32| !world.is_lit(x) && world.swarmed(x);
         let (player, sibling) = (bitten(self, self.player_x), bitten(self, self.sibling_x));
         let guard = self.guard_state != GUARD_DOWN && bitten(self, self.guard_x);
         self.danger = if player { self.danger + STEP / BITE_SECONDS } else { (self.danger - STEP * 0.9).max(0.0) };
@@ -342,7 +363,7 @@ impl GuardWorld {
     }
 
     /// Rats are on him: he stamps and swats instead of striking his tinder.
-    pub fn guard_beset(&self) -> bool { self.guard_state != GUARD_DOWN && !self.is_lit(self.guard_x) && swarm_touching(&self.rats, self.guard_x) }
+    pub fn guard_beset(&self) -> bool { self.guard_state != GUARD_DOWN && !self.is_lit(self.guard_x) && self.swarmed(self.guard_x) }
 
     fn move_player(&mut self, buttons: u8) {
         if self.state == STATE_STRIKE && self.state_time < STRIKE_SECONDS { return; }
@@ -612,6 +633,8 @@ impl GuardSteps {
     pub fn rat_count(&self) -> usize { GUARD_RAT_COUNT }
     /// rat_count × 8 × 4 bytes, the same layout as stage one's rats.
     pub fn rats_ptr(&self) -> *const Rat { self.world.rats.as_ptr() }
+    /// SCORPION_COUNT (10, GUARD.scorpionCount in TS) × 8 × 4 bytes, the rat layout.
+    pub fn scorpions_ptr(&self) -> *const Rat { self.world.scorpions.as_ptr() }
     pub fn time(&self) -> f32 { self.world.time }
 
     pub fn guard_x(&self) -> f32 { self.world.guard_x }
@@ -726,6 +749,7 @@ mod guard_tests {
         assert_eq!(game.stones(), MAX_STONES);
     }
 
+    fn scorpions_out(game: &GuardSteps) -> usize { game.world.scorpions.iter().filter(|s| s.state != crate::rats::RAT_HIDDEN).count() }
     fn rats_out(game: &GuardSteps) -> usize { game.world.rats.iter().filter(|rat| rat.state != crate::rats::RAT_HIDDEN).count() }
 
     #[test]
@@ -735,7 +759,32 @@ mod guard_tests {
         walk_to(&mut game, 340.0);
         run(&mut game, 0, 8.0);
         assert_eq!(rats_out(&game), 0);
+        assert_eq!(scorpions_out(&game), 0);
         assert_eq!(game.guard_danger(), 0.0);
+    }
+
+    #[test]
+    fn scorpions_come_out_of_the_crack_after_the_rats_and_flee_the_relit_lamp() {
+        let mut game = GuardSteps::new();
+        game.debug_guard(855.0, 1.0);
+        walk_to(&mut game, 375.0);
+        run(&mut game, BUTTON_RIGHT, 0.02); game.set_input(0);
+        assert!(game.throw_selected());
+        run(&mut game, 0, 1.0 + DRAIN_DELAY + 0.3);
+        assert!(rats_out(&game) > 0);
+        assert_eq!(scorpions_out(&game), 0, "the scorpions wait a little longer");
+        run(&mut game, 0, SCORPION_DELAY - DRAIN_DELAY + 1.5);
+        assert!(scorpions_out(&game) > 0, "out of the wall crack");
+        assert!(game.world.scorpions.iter().all(|s| s.state == crate::rats::RAT_HIDDEN || !game.world.is_lit(s.x)), "never in the light");
+        run(&mut game, 0, 4.0);
+        assert!(game.guard_eaten());
+        assert_ne!(game.state(), STATE_DEAD, "nothing reaches Mira on the steps");
+        walk_to(&mut game, 400.0);
+        game.select_item(ITEM_EMBER);
+        assert!(game.throw_selected());
+        run(&mut game, 0, 4.0);
+        assert!(game.lamp_lit());
+        assert_eq!(scorpions_out(&game), 0, "back into the crack once the lamp burns");
     }
 
     #[test]

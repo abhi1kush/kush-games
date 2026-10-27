@@ -148,6 +148,10 @@ export class GuardSteps {
      */
     relight_progress(): number;
     /**
+     * SCORPION_COUNT (10, GUARD.scorpionCount in TS) × 8 × 4 bytes, the rat layout.
+     */
+    scorpions_ptr(): number;
+    /**
      * 0 ember, 1 stone.
      */
     select_item(item: number): void;
@@ -261,6 +265,7 @@ export interface InitOutput {
     readonly guardsteps_rat_count: (a: number) => number;
     readonly guardsteps_rats_ptr: (a: number) => number;
     readonly guardsteps_relight_progress: (a: number) => number;
+    readonly guardsteps_scorpions_ptr: (a: number) => number;
     readonly guardsteps_select_item: (a: number, b: number) => void;
     readonly guardsteps_set_input: (a: number, b: number) => void;
     readonly guardsteps_sibling_facing: (a: number) => number;
