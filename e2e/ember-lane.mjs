@@ -3,7 +3,7 @@
 // checkpoint, Continue after a refresh, taking the lantern, the shutter levers and clearing the stage at the
 // sanctuary door (saved); stage 2 (the ember/stone selector, a stone snuffing the soldier's lamp, the takedown in the
 // dark, the ember relighting it, the gate, and the spear game over); mute, and phones in portrait/landscape with touch
-// controls (and the stage-2 selector) and no sideways scroll.
+// controls (and the stage-2 selector) and no sideways scroll; phones held upright get a rotate-to-landscape prompt.
 // Usage: node e2e/ember-lane.mjs [siteUrl] [screenshotDirectory]
 import { chromium } from 'playwright-core';
 import { noOverflow, waitFor } from './relay.mjs';
@@ -311,20 +311,37 @@ async function hintClearOfCharacters(page) {
   await context.close();
 }
 
-// ---------- phone portrait + landscape ----------
-for (const [label, viewport] of [['portrait', { width: 390, height: 844 }], ['landscape', { width: 844, height: 390 }]]) {
-  const context = await browser.newContext({ viewport, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+// ---------- phones: portrait asks to turn sideways, landscape plays ----------
+for (const [label, viewport] of [['phone', { width: 844, height: 390 }], ['small phone', { width: 667, height: 375 }]]) {
+  const context = await browser.newContext({ viewport: { width: viewport.height, height: viewport.width }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   const page = await context.newPage();
   watch(page, label);
   await page.goto(testUrl);
+  // held upright: a rotate prompt instead of a cramped street
+  await page.getByTestId('ember-rotate').waitFor({ timeout: 20000 });
+  check(await page.getByText('Turn your phone sideways').isVisible(), `${label} portrait: the rotate-to-landscape prompt shows`);
+  check(await page.getByTestId('ember-rotate-back').isVisible(), `${label} portrait: the prompt offers a way back to the games`);
+  check(await noOverflow(page), `${label} portrait: no sideways scroll`);
+  if (label === 'phone') { await page.waitForTimeout(700); await page.screenshot({ path: `${shots}/kush-games-ember-portrait.png` }); }
+  // turned sideways: the prompt goes and the start screen is there
+  await page.setViewportSize(viewport);
+  await waitFor(async () => !(await page.getByTestId('ember-rotate').count()), 5000, 50).catch(() => {});
+  check(!(await page.getByTestId('ember-rotate').count()), `${label} landscape: the rotate prompt is gone`);
   await page.getByTestId('ember-start').waitFor({ timeout: 20000 });
-  check(await noOverflow(page), `${label}: start screen has no sideways scroll`);
+  check(await noOverflow(page), `${label} landscape: start screen has no sideways scroll`);
   await page.getByTestId('ember-play').tap();
   await page.getByTestId('ember-touch').waitFor();
-  check(await page.getByTestId('touch-throw').isVisible(), `${label}: touch controls show`);
+  check(await page.getByTestId('touch-throw').isVisible(), `${label} landscape: touch controls show`);
+  const fit = await page.evaluate(() => {
+    const stage = document.querySelector('[data-testid=ember-stage]').getBoundingClientRect();
+    const keys = [...document.querySelectorAll('.ember-touch__key')].map(key => key.getBoundingClientRect());
+    return { width: stage.width, height: stage.height, bottom: stage.bottom, keysInside: keys.every(key => key.bottom <= stage.bottom + 1 && key.top >= stage.top), innerHeight, innerWidth };
+  });
+  check(fit.width >= fit.innerWidth - 20 && fit.height >= fit.innerHeight * 0.75 && fit.bottom <= fit.innerHeight, `${label} landscape: the street fills the screen ${JSON.stringify(fit)}`);
+  check(fit.keysInside, `${label} landscape: the touch buttons float over the street`);
   await page.getByTestId('ember-hint').waitFor();
   const hintSpot = await hintClearOfCharacters(page);
-  check(hintSpot.ok, `${label}: tutorial text sits above the characters and below the HUD ${JSON.stringify(hintSpot)}`);
+  check(hintSpot.ok, `${label} landscape: tutorial text sits above the characters and below the HUD ${JSON.stringify(hintSpot)}`);
   const start = (await info(page)).x;
   const box = await page.getByTestId('touch-right').boundingBox();
   const cdp = await context.newCDPSession(page);
@@ -333,12 +350,20 @@ for (const [label, viewport] of [['portrait', { width: 390, height: 844 }], ['la
   await page.waitForTimeout(1500);
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   const moved = (await info(page)).x;
-  check(moved > start + 60, `${label}: holding ▶ walks (${start.toFixed(0)} → ${moved.toFixed(0)})`);
-  check(await noOverflow(page), `${label}: playing has no sideways scroll`);
-  if (label === 'portrait') {
-    await page.waitForTimeout(400);
-    await page.screenshot({ path: `${shots}/kush-games-ember-mobile.png` });
-  }
+  check(moved > start + 60, `${label} landscape: holding ▶ walks (${start.toFixed(0)} → ${moved.toFixed(0)})`);
+  check(await noOverflow(page), `${label} landscape: playing has no sideways scroll`);
+  if (label === 'phone') { await page.waitForTimeout(400); await page.screenshot({ path: `${shots}/kush-games-ember-mobile.png` }); }
+  // turned upright mid-run: the game pauses under the prompt; back sideways shows the pause menu
+  await page.setViewportSize({ width: viewport.height, height: viewport.width });
+  await page.getByTestId('ember-rotate').waitFor({ timeout: 5000 });
+  const frozen = (await info(page)).time;
+  await page.waitForTimeout(600);
+  check((await info(page)).time === frozen && !(await page.getByTestId('ember-touch').count()), `${label}: turning upright mid-run pauses the street and hides the controls`);
+  await page.setViewportSize(viewport);
+  await page.getByTestId('ember-paused').waitFor({ timeout: 5000 });
+  check(!(await page.getByTestId('ember-rotate').count()), `${label}: turning back sideways shows the pause menu`);
+  await page.getByTestId('ember-resume').tap();
+  await page.getByTestId('ember-touch').waitFor();
   // stage 2 on a phone: the ember / stone selector sits beside ✋ and the throw button follows it
   await page.evaluate(() => window.__emberTest.beginGuard());
   await page.getByTestId('touch-select').waitFor();
@@ -347,7 +372,7 @@ for (const [label, viewport] of [['portrait', { width: 390, height: 844 }], ['la
   await page.getByTestId('touch-select').tap();
   check((await selectLabel()).includes('ember') && (await page.getByTestId('touch-throw').getAttribute('aria-label')) === 'Throw an ember', `${label}: tapping the selector switches to the ember`);
   check(await noOverflow(page), `${label}: stage 2 has no sideways scroll`);
-  if (label === 'portrait') await page.screenshot({ path: `${shots}/kush-games-ember-stage2-mobile.png` });
+  if (label === 'phone') { await page.waitForTimeout(400); await page.screenshot({ path: `${shots}/kush-games-ember-stage2-mobile.png` }); }
   await context.close();
 }
 

@@ -101,3 +101,23 @@
   .ember-card { padding: 8px 12px; }
   .ember-card ul { font-size: 12px; gap: 2px; }
 }
+
+/* phones and tablets held sideways: the street fills the screen below the player bar, controls float over its corners */
+@media (pointer: coarse) and (orientation: landscape) {
+  .ember.is-touch { padding: 4px 6px 6px; gap: 0; }
+  .ember.is-touch .ember-frame { max-width: none; }
+  .ember.is-touch .ember-stage { aspect-ratio: auto; max-width: none; width: 100%; height: calc(100dvh - var(--ember-bar, 66px)); max-height: none; min-height: 220px; border-radius: 10px; }
+  .ember.is-touch .ember-touch { bottom: 8px; padding: 0 10px; }
+  .ember.is-touch .ember-touch__key { opacity: 0.85; }
+}
+
+/* phone held upright: ask to turn it sideways instead of playing a cramped street */
+.ember-rotate { position: fixed; inset: 0; z-index: 300; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px 22px; text-align: center;
+  background: radial-gradient(ellipse at 50% 35%, rgba(255, 150, 60, 0.18), rgba(5, 6, 15, 0.97) 60%), #05060f; color: #f3e2cc; animation: ember-fade-in 0.3s ease both; overflow-y: auto; }
+.ember-rotate h2 { margin: 0; font: 700 clamp(24px, 7vw, 32px)/1.1 Georgia, 'Times New Roman', serif; color: #ffe6bf; text-shadow: 0 0 22px rgba(255, 140, 50, 0.6), 0 2px 3px #000; }
+.ember-rotate p { margin: 0; max-width: 340px; font: italic 15px/1.45 Georgia, serif; color: #f0d9bc; }
+.ember-rotate .ember-rotate__note { font: 12.5px/1.4 system-ui, sans-serif; color: rgba(255, 215, 170, 0.65); }
+.ember-rotate__phone { width: 54px; height: 92px; border: 3px solid #ffd9a3; border-radius: 10px; position: relative; box-shadow: 0 0 22px rgba(255, 150, 60, 0.45); animation: ember-rotate-phone 2.4s ease-in-out infinite; margin-bottom: 8px; }
+.ember-rotate__phone span { position: absolute; inset: 7px 5px; border-radius: 4px; background: linear-gradient(180deg, #1a1420, #3a2216); box-shadow: inset 0 -10px 16px rgba(255, 150, 60, 0.45); }
+@keyframes ember-rotate-phone { 0%, 20% { transform: rotate(0deg); } 50%, 75% { transform: rotate(-90deg); } 100% { transform: rotate(0deg); } }
+@media (prefers-reduced-motion: reduce) { .ember-rotate__phone { animation: none; transform: rotate(-90deg); } }

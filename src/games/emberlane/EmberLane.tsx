@@ -22,6 +22,49 @@ const createProgressSlot = () => createSaveSlot<Progress>({ gameId: 'ember-lane'
 const SECTION_STARTS = [0, 300, 990, 1700, 2410, 3000];
 const sectionAt = (x: number) => SECTION_STARTS.reduce((found, start, index) => (x >= start ? index : found), 0);
 const isTouchDevice = () => typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
+/** Phones held upright: the street is a wide stealth stage, so we ask for landscape instead of playing cramped. */
+const PORTRAIT_PHONE = '(pointer: coarse) and (orientation: portrait) and (max-width: 700px)';
+const isPortraitPhone = () => typeof window !== 'undefined' && !!window.matchMedia?.(PORTRAIT_PHONE).matches;
+function usePortraitPhone() {
+  const [portrait, setPortrait] = useState(isPortraitPhone);
+  useEffect(() => {
+    const query = window.matchMedia?.(PORTRAIT_PHONE);
+    if (!query) return;
+    const onChange = () => setPortrait(query.matches);
+    onChange();
+    query.addEventListener?.('change', onChange);
+    window.addEventListener('resize', onChange);
+    return () => { query.removeEventListener?.('change', onChange); window.removeEventListener('resize', onChange); };
+  }, []);
+  return portrait;
+}
+type LockableOrientation = ScreenOrientation & { lock?: (orientation: string) => Promise<void> };
+const canForceLandscape = () => typeof document !== 'undefined' && !!document.documentElement.requestFullscreen && !!(window.screen.orientation as LockableOrientation | undefined)?.lock;
+/** Android browsers can go full screen and lock sideways; iOS can't, so the prompt just asks to turn the phone. */
+async function forceLandscape() {
+  try {
+    if (!document.fullscreenElement) await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+    await (window.screen.orientation as LockableOrientation).lock?.('landscape');
+  } catch { /* not allowed here: the rotate prompt stays up */ }
+}
+
+/** Shown over everything on a phone held upright. */
+function RotatePrompt({ onBack }: { onBack: () => void }) {
+  const [canForce] = useState(canForceLandscape);
+  return (
+    <div className="ember-rotate" role="dialog" aria-modal="true" aria-labelledby="ember-rotate-title" data-testid="ember-rotate">
+      <div className="ember-rotate__phone" aria-hidden="true"><span /></div>
+      <h2 id="ember-rotate-title">Turn your phone sideways</h2>
+      <p>Ember Lane is played in landscape — you need the whole street in view to keep to the light and slip past the guard.</p>
+      <div className="ember-actions">
+        {canForce && <button type="button" className="online-button online-button--primary" onClick={() => { unlockAudio(); void forceLandscape(); }} data-testid="ember-rotate-fullscreen">Play full screen</button>}
+        <button type="button" className="online-button" onClick={onBack} data-testid="ember-rotate-back">← Back to games</button>
+      </div>
+      <p className="ember-rotate__note">Your progress waits for you — the game pauses while the phone is upright.</p>
+    </div>
+  );
+}
+
 const formatTime = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
 
 export default function EmberLaneGame() {
@@ -91,6 +134,7 @@ function EmberLaneScreens() {
   const { isMuted, isMutedRef, toggleMute } = useSharedMute();
   const sound = useCallback((kind: EmberSound) => playEmberSound(kind, isMutedRef.current), [isMutedRef]);
   const [touch] = useState(isTouchDevice);
+  const portrait = usePortraitPhone();
 
   const [screen, setScreen] = useState<Screen>('start');
   const [stage, setStage] = useState<Stage>(1);
@@ -297,6 +341,16 @@ function EmberLaneScreens() {
     return () => observer.disconnect();
   }, [drawFrame]);
 
+  // a phone turned upright mid-run pauses (the rotate prompt covers the game); turning back shows the pause menu
+  useEffect(() => { if (portrait && screenRef.current === 'playing') { keysRef.current = 0; touchRef.current = 0; setIsPaused(true); } }, [portrait]);
+
+  // leaving the game undoes a full-screen landscape lock taken from the rotate prompt
+  useEffect(() => () => {
+    if (!document.fullscreenElement) return;
+    try { (window.screen.orientation as LockableOrientation & { unlock?: () => void }).unlock?.(); } catch { /* nothing locked */ }
+    void document.exitFullscreen?.().catch(() => {});
+  }, []);
+
   // pause when the tab is hidden
   useEffect(() => {
     const onHidden = () => { if (document.hidden && screenRef.current === 'playing') setIsPaused(true); };
@@ -453,7 +507,8 @@ function EmberLaneScreens() {
   const continueFrom = progress.checkpoint;
 
   return (
-    <div className="game-shell ember" data-testid="ember-lane">
+    <div className={`game-shell ember${touch ? ' is-touch' : ''}`} data-testid="ember-lane">
+      {portrait && <RotatePrompt onBack={() => navigate(homePath)} />}
       <div className="ember-frame">
       <div className={`ember-stage${screen === 'playing' ? ' is-playing' : ''}`} ref={stageRef} data-testid="ember-stage">
         <canvas ref={canvasRef} className="ember-canvas" data-testid="ember-canvas" aria-label="Ember Lane street" />
@@ -565,7 +620,7 @@ function EmberLaneScreens() {
           </div>
         )}
       </div>
-      {screen === 'playing' && touch && !isPaused && (
+      {screen === 'playing' && touch && !isPaused && !portrait && (
         <TouchControls buttonsRef={touchRef} onInteract={interact} onThrow={throwEmber} prompt={hud.prompt} embers={hud.embers}
           items={stage === 2 ? { item: hud.item, stones: hud.stones, onToggle: () => selectItem('toggle') } : undefined} />
       )}
