@@ -72,11 +72,91 @@ export class EmberLane {
     walked(): number;
 }
 
+/**
+ * Stage two as JavaScript sees it: the same fixed 60 Hz step as stage one.
+ */
+export class GuardSteps {
+    free(): void;
+    [Symbol.dispose](): void;
+    advance(ms: number): void;
+    /**
+     * The spear found her and the fall is over: game over.
+     */
+    caught(): boolean;
+    cleared(): boolean;
+    /**
+     * Test hook: put the soldier at x facing the given way, back on patrol.
+     */
+    debug_guard(x: number, facing: number): void;
+    /**
+     * Test hook: put Mira at x (standing on the ground there).
+     */
+    debug_place(x: number): void;
+    embers(): number;
+    facing(): number;
+    ground_at(x: number): number;
+    guard_facing(): number;
+    guard_state(): number;
+    guard_time(): number;
+    guard_walked(): number;
+    guard_x(): number;
+    guard_y(): number;
+    interact(): void;
+    item(): number;
+    kabir_follows(): boolean;
+    lamp_lit(): boolean;
+    light_at(x: number): number;
+    light_count(): number;
+    /**
+     * light_count × 8 f32, the same layout as stage one's lights.
+     */
+    lights_ptr(): number;
+    missile_active(): boolean;
+    missile_item(): number;
+    missile_x(): number;
+    missile_y(): number;
+    constructor();
+    player_lit(): boolean;
+    player_x(): number;
+    player_y(): number;
+    prompt(): number;
+    /**
+     * 0…1 while he strikes his tinder at the lamp post.
+     */
+    relight_progress(): number;
+    /**
+     * 0 ember, 1 stone.
+     */
+    select_item(item: number): void;
+    /**
+     * Held buttons: 1 left, 2 right.
+     */
+    set_input(buttons: number): void;
+    sibling_facing(): number;
+    sibling_walked(): number;
+    sibling_x(): number;
+    sibling_y(): number;
+    state(): number;
+    state_time(): number;
+    stones(): number;
+    suspicion(): number;
+    take_events(): number;
+    /**
+     * Throw whatever is selected (stone or ember). False if nothing was thrown.
+     */
+    throw_selected(): boolean;
+    throw_target(): boolean;
+    time(): number;
+    toggle_item(): void;
+    walked(): number;
+}
+
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly __wbg_emberlane_free: (a: number, b: number) => void;
+    readonly __wbg_guardsteps_free: (a: number, b: number) => void;
     readonly emberlane_advance: (a: number, b: number) => void;
     readonly emberlane_carrying: (a: number) => number;
     readonly emberlane_checkpoint: (a: number) => number;
@@ -119,6 +199,53 @@ export interface InitOutput {
     readonly emberlane_throw_target: (a: number) => number;
     readonly emberlane_time: (a: number) => number;
     readonly emberlane_walked: (a: number) => number;
+    readonly guardsteps_advance: (a: number, b: number) => void;
+    readonly guardsteps_caught: (a: number) => number;
+    readonly guardsteps_cleared: (a: number) => number;
+    readonly guardsteps_debug_guard: (a: number, b: number, c: number) => void;
+    readonly guardsteps_debug_place: (a: number, b: number) => void;
+    readonly guardsteps_embers: (a: number) => number;
+    readonly guardsteps_facing: (a: number) => number;
+    readonly guardsteps_ground_at: (a: number, b: number) => number;
+    readonly guardsteps_guard_facing: (a: number) => number;
+    readonly guardsteps_guard_state: (a: number) => number;
+    readonly guardsteps_guard_time: (a: number) => number;
+    readonly guardsteps_guard_walked: (a: number) => number;
+    readonly guardsteps_guard_x: (a: number) => number;
+    readonly guardsteps_guard_y: (a: number) => number;
+    readonly guardsteps_interact: (a: number) => void;
+    readonly guardsteps_item: (a: number) => number;
+    readonly guardsteps_kabir_follows: (a: number) => number;
+    readonly guardsteps_lamp_lit: (a: number) => number;
+    readonly guardsteps_light_at: (a: number, b: number) => number;
+    readonly guardsteps_light_count: (a: number) => number;
+    readonly guardsteps_lights_ptr: (a: number) => number;
+    readonly guardsteps_missile_active: (a: number) => number;
+    readonly guardsteps_missile_item: (a: number) => number;
+    readonly guardsteps_missile_x: (a: number) => number;
+    readonly guardsteps_missile_y: (a: number) => number;
+    readonly guardsteps_new: () => number;
+    readonly guardsteps_player_lit: (a: number) => number;
+    readonly guardsteps_player_x: (a: number) => number;
+    readonly guardsteps_player_y: (a: number) => number;
+    readonly guardsteps_prompt: (a: number) => number;
+    readonly guardsteps_relight_progress: (a: number) => number;
+    readonly guardsteps_select_item: (a: number, b: number) => void;
+    readonly guardsteps_set_input: (a: number, b: number) => void;
+    readonly guardsteps_sibling_facing: (a: number) => number;
+    readonly guardsteps_sibling_walked: (a: number) => number;
+    readonly guardsteps_sibling_x: (a: number) => number;
+    readonly guardsteps_sibling_y: (a: number) => number;
+    readonly guardsteps_state: (a: number) => number;
+    readonly guardsteps_state_time: (a: number) => number;
+    readonly guardsteps_stones: (a: number) => number;
+    readonly guardsteps_suspicion: (a: number) => number;
+    readonly guardsteps_take_events: (a: number) => number;
+    readonly guardsteps_throw_selected: (a: number) => number;
+    readonly guardsteps_throw_target: (a: number) => number;
+    readonly guardsteps_time: (a: number) => number;
+    readonly guardsteps_toggle_item: (a: number) => void;
+    readonly guardsteps_walked: (a: number) => number;
 }
 
 export type SyncInitInput = BufferSource | WebAssembly.Module;

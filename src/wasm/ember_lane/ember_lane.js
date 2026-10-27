@@ -310,6 +310,349 @@ export class EmberLane {
     }
 }
 if (Symbol.dispose) EmberLane.prototype[Symbol.dispose] = EmberLane.prototype.free;
+
+/**
+ * Stage two as JavaScript sees it: the same fixed 60 Hz step as stage one.
+ */
+export class GuardSteps {
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        GuardStepsFinalization.unregister(this);
+        return ptr;
+    }
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_guardsteps_free(ptr, 0);
+    }
+    /**
+     * @param {number} ms
+     */
+    advance(ms) {
+        wasm.guardsteps_advance(this.__wbg_ptr, ms);
+    }
+    /**
+     * The spear found her and the fall is over: game over.
+     * @returns {boolean}
+     */
+    caught() {
+        const ret = wasm.guardsteps_caught(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
+     * @returns {boolean}
+     */
+    cleared() {
+        const ret = wasm.guardsteps_cleared(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
+     * Test hook: put the soldier at x facing the given way, back on patrol.
+     * @param {number} x
+     * @param {number} facing
+     */
+    debug_guard(x, facing) {
+        wasm.guardsteps_debug_guard(this.__wbg_ptr, x, facing);
+    }
+    /**
+     * Test hook: put Mira at x (standing on the ground there).
+     * @param {number} x
+     */
+    debug_place(x) {
+        wasm.guardsteps_debug_place(this.__wbg_ptr, x);
+    }
+    /**
+     * @returns {number}
+     */
+    embers() {
+        const ret = wasm.guardsteps_embers(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    facing() {
+        const ret = wasm.guardsteps_facing(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @param {number} x
+     * @returns {number}
+     */
+    ground_at(x) {
+        const ret = wasm.guardsteps_ground_at(this.__wbg_ptr, x);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    guard_facing() {
+        const ret = wasm.guardsteps_guard_facing(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    guard_state() {
+        const ret = wasm.guardsteps_guard_state(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    guard_time() {
+        const ret = wasm.guardsteps_guard_time(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    guard_walked() {
+        const ret = wasm.guardsteps_guard_walked(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    guard_x() {
+        const ret = wasm.guardsteps_guard_x(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    guard_y() {
+        const ret = wasm.guardsteps_guard_y(this.__wbg_ptr);
+        return ret;
+    }
+    interact() {
+        wasm.guardsteps_interact(this.__wbg_ptr);
+    }
+    /**
+     * @returns {number}
+     */
+    item() {
+        const ret = wasm.guardsteps_item(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {boolean}
+     */
+    kabir_follows() {
+        const ret = wasm.guardsteps_kabir_follows(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
+     * @returns {boolean}
+     */
+    lamp_lit() {
+        const ret = wasm.guardsteps_lamp_lit(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
+     * @param {number} x
+     * @returns {number}
+     */
+    light_at(x) {
+        const ret = wasm.guardsteps_light_at(this.__wbg_ptr, x);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    light_count() {
+        const ret = wasm.guardsteps_light_count(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * light_count × 8 f32, the same layout as stage one's lights.
+     * @returns {number}
+     */
+    lights_ptr() {
+        const ret = wasm.guardsteps_lights_ptr(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @returns {boolean}
+     */
+    missile_active() {
+        const ret = wasm.guardsteps_missile_active(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
+     * @returns {number}
+     */
+    missile_item() {
+        const ret = wasm.guardsteps_missile_item(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    missile_x() {
+        const ret = wasm.guardsteps_missile_x(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    missile_y() {
+        const ret = wasm.guardsteps_missile_y(this.__wbg_ptr);
+        return ret;
+    }
+    constructor() {
+        const ret = wasm.guardsteps_new();
+        this.__wbg_ptr = ret;
+        GuardStepsFinalization.register(this, this.__wbg_ptr, this);
+        return this;
+    }
+    /**
+     * @returns {boolean}
+     */
+    player_lit() {
+        const ret = wasm.guardsteps_player_lit(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
+     * @returns {number}
+     */
+    player_x() {
+        const ret = wasm.guardsteps_player_x(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    player_y() {
+        const ret = wasm.guardsteps_player_y(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    prompt() {
+        const ret = wasm.guardsteps_prompt(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * 0…1 while he strikes his tinder at the lamp post.
+     * @returns {number}
+     */
+    relight_progress() {
+        const ret = wasm.guardsteps_relight_progress(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * 0 ember, 1 stone.
+     * @param {number} item
+     */
+    select_item(item) {
+        wasm.guardsteps_select_item(this.__wbg_ptr, item);
+    }
+    /**
+     * Held buttons: 1 left, 2 right.
+     * @param {number} buttons
+     */
+    set_input(buttons) {
+        wasm.guardsteps_set_input(this.__wbg_ptr, buttons);
+    }
+    /**
+     * @returns {number}
+     */
+    sibling_facing() {
+        const ret = wasm.guardsteps_sibling_facing(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    sibling_walked() {
+        const ret = wasm.guardsteps_sibling_walked(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    sibling_x() {
+        const ret = wasm.guardsteps_sibling_x(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    sibling_y() {
+        const ret = wasm.guardsteps_sibling_y(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    state() {
+        const ret = wasm.guardsteps_state(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    state_time() {
+        const ret = wasm.guardsteps_state_time(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    stones() {
+        const ret = wasm.guardsteps_stones(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    suspicion() {
+        const ret = wasm.guardsteps_suspicion(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    take_events() {
+        const ret = wasm.guardsteps_take_events(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * Throw whatever is selected (stone or ember). False if nothing was thrown.
+     * @returns {boolean}
+     */
+    throw_selected() {
+        const ret = wasm.guardsteps_throw_selected(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
+     * @returns {boolean}
+     */
+    throw_target() {
+        const ret = wasm.guardsteps_throw_target(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
+     * @returns {number}
+     */
+    time() {
+        const ret = wasm.guardsteps_time(this.__wbg_ptr);
+        return ret;
+    }
+    toggle_item() {
+        wasm.guardsteps_toggle_item(this.__wbg_ptr);
+    }
+    /**
+     * @returns {number}
+     */
+    walked() {
+        const ret = wasm.guardsteps_walked(this.__wbg_ptr);
+        return ret;
+    }
+}
+if (Symbol.dispose) GuardSteps.prototype[Symbol.dispose] = GuardSteps.prototype.free;
 function __wbg_get_imports() {
     const import0 = {
         __proto__: null,
@@ -326,6 +669,9 @@ function __wbg_get_imports() {
 const EmberLaneFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_emberlane_free(ptr, 1));
+const GuardStepsFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_guardsteps_free(ptr, 1));
 
 function getStringFromWasm0(ptr, len) {
     return decodeText(ptr >>> 0, len);

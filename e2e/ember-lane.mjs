@@ -1,7 +1,9 @@
 // Ember Lane e2e: title screen + controls card, walking with real keys (Kabir follows), pause (frame loop sleeps,
 // controls card shown), throwing an ember into a cold brazier, death in the dark to the rats and waking at the
 // checkpoint, Continue after a refresh, taking the lantern, the shutter levers and clearing the stage at the
-// sanctuary door (saved), mute, and phones in portrait/landscape with touch controls and no sideways scroll.
+// sanctuary door (saved); stage 2 (the ember/stone selector, a stone snuffing the soldier's lamp, the takedown in the
+// dark, the ember relighting it, the gate, and the spear game over); mute, and phones in portrait/landscape with touch
+// controls (and the stage-2 selector) and no sideways scroll.
 // Usage: node e2e/ember-lane.mjs [siteUrl] [screenshotDirectory]
 import { chromium } from 'playwright-core';
 import { noOverflow, waitFor } from './relay.mjs';
@@ -234,7 +236,8 @@ async function hintClearOfCharacters(page) {
   check((await info(page)).deaths === 0, 'cleared without a fall');
   await page.waitForTimeout(600);
   await page.screenshot({ path: `${shots}/kush-games-ember-clear.png` });
-  check((await page.getByTestId('ember-again').textContent()) === 'Play again', 'the clear card says “Play again”');
+  check((await page.getByTestId('ember-next').textContent()).includes('Stage 2'), 'the clear card leads on to stage 2');
+  check((await page.getByTestId('ember-again').textContent()) === 'Play stage 1 again', 'the clear card offers “Play stage 1 again”');
   await page.evaluate(() => { const game = window.__emberTest.game(); game.set_input(2); });
   await page.getByTestId('ember-again').click();
   await page.waitForTimeout(300);
@@ -245,6 +248,58 @@ async function hintClearOfCharacters(page) {
   await page.getByTestId('ember-start').waitFor({ timeout: 20000 });
   const record = await page.getByTestId('ember-record').textContent().catch(() => '');
   check(record.includes('1×'), `the clear is saved ("${record}")`);
+  check((await page.getByTestId('ember-stage2').textContent()).includes('Stage 2'), 'after a refresh, the title offers the unlocked stage 2');
+
+  // ---------- stage 2: the guard steps ----------
+  await page.getByTestId('ember-stage2').click();
+  await page.getByTestId('ember-items').waitFor();
+  const guardInfo = () => page.evaluate(() => window.__emberTest.guard());
+  const guardWalkTo = x => page.evaluate(target => window.__emberTest.guardWalkTo(target), x);
+  check((await page.getByTestId('ember-section').textContent()) === 'The Guard Steps', 'stage 2 starts on the terrace above the guard’s yard');
+  check((await page.getByTestId('item-stone').getAttribute('aria-checked')) === 'true', 'the selector starts on stones');
+  await press(page, 'q');
+  check((await guardInfo()).item === 0 && (await page.getByTestId('item-ember').getAttribute('aria-checked')) === 'true', 'Q switches the selector to the ember');
+  await page.getByTestId('item-stone').click();
+  check((await guardInfo()).item === 1, 'clicking Stone selects stones');
+  await guardWalkTo(372);
+  check((await guardInfo()).target, 'from the top of the steps the lamp is in stone range');
+  await press(page, 'f');
+  await page.waitForTimeout(1600);
+  let guardYard = await guardInfo();
+  check(!guardYard.lamp && guardYard.stones === 2 && guardYard.guardState === 4, `a thrown stone snuffs the lamp and sends the soldier to relight it (state ${guardYard.guardState})`);
+  await guardWalkTo(560);
+  await waitFor(async () => (await guardInfo()).relight > 0.05, 12000, 100).catch(() => {});
+  for (let index = 0; index < 60 && (await guardInfo()).prompt !== 3; index++) await page.evaluate(() => { const t = window.__emberTest; const g = t.guard(); t.guardWalkTo(g.x + Math.sign(g.guardX - g.x) * 8); });
+  check((await guardInfo()).prompt === 3, 'creeping up in the dark while he strikes his tinder offers “Take him down”');
+  await press(page, 'e');
+  await page.waitForTimeout(800);
+  guardYard = await guardInfo();
+  check(guardYard.guardState === 5 && !guardYard.kabirFollows, 'E takes the soldier down; Kabir still won’t come into the dark');
+  await guardWalkTo(530); await guardWalkTo(545);
+  await press(page, 'q');
+  await press(page, 'f');
+  await page.waitForTimeout(2200);
+  guardYard = await guardInfo();
+  check(guardYard.lamp && guardYard.kabirFollows, 'an ember relights the lamp and Kabir comes down');
+  await guardWalkTo(1180);
+  await page.getByTestId('ember-clear').waitFor({ timeout: 8000 }).catch(() => {});
+  check((await page.getByTestId('ember-clear').textContent()).includes('Stage 2 clear'), 'leading Kabir through the far gate clears stage 2');
+  // the other way out: seen in the lamp light, the soldier's suspicion fills and his spear ends the run
+  await page.getByTestId('ember-again').click();
+  await page.waitForTimeout(300);
+  await page.evaluate(() => window.__emberTest.guardPlace(520, 640, -1));
+  await page.waitForTimeout(700);
+  check((await guardInfo()).suspicion > 0.2, 'standing in his light fills the suspicion eye');
+  await page.getByTestId('ember-caught').waitFor({ timeout: 8000 }).catch(() => {});
+  check(await page.getByTestId('ember-caught').isVisible(), 'full suspicion: he charges, the spear strikes, game over');
+  await page.screenshot({ path: `${shots}/kush-games-ember-caught.png` });
+  await page.getByTestId('ember-retry').click();
+  await page.waitForTimeout(300);
+  guardYard = await guardInfo();
+  check(!guardYard.caught && guardYard.lamp && guardYard.stones === 3 && guardYard.x < 120, 'Try again restarts stage 2');
+  await page.reload();
+  await page.getByTestId('ember-start').waitFor({ timeout: 20000 });
+  check((await page.getByTestId('ember-continue').textContent()).includes('Stage 2'), 'after a refresh mid stage 2, Continue picks up at stage 2');
   // quit from the ⋮ menu goes back to the games hub
   await page.getByTestId('ember-play').click();
   await page.getByTestId('ember-hud').waitFor();
@@ -284,6 +339,15 @@ for (const [label, viewport] of [['portrait', { width: 390, height: 844 }], ['la
     await page.waitForTimeout(400);
     await page.screenshot({ path: `${shots}/kush-games-ember-mobile.png` });
   }
+  // stage 2 on a phone: the ember / stone selector sits beside ✋ and the throw button follows it
+  await page.evaluate(() => window.__emberTest.beginGuard());
+  await page.getByTestId('touch-select').waitFor();
+  const selectLabel = () => page.getByTestId('touch-select').getAttribute('aria-label');
+  check((await selectLabel()).includes('stone') && (await page.getByTestId('touch-throw').getAttribute('aria-label')) === 'Throw a stone', `${label}: stage 2 shows the selector (stone) beside ✋`);
+  await page.getByTestId('touch-select').tap();
+  check((await selectLabel()).includes('ember') && (await page.getByTestId('touch-throw').getAttribute('aria-label')) === 'Throw an ember', `${label}: tapping the selector switches to the ember`);
+  check(await noOverflow(page), `${label}: stage 2 has no sideways scroll`);
+  if (label === 'portrait') await page.screenshot({ path: `${shots}/kush-games-ember-stage2-mobile.png` });
   await context.close();
 }
 

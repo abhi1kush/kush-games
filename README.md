@@ -48,7 +48,7 @@ Built with **React + TypeScript + Vite**; Breakout, Connect Four, Checkers, Kush
 | Carrom — the Indian board game with real-feel physics: vs computer (Easy/Medium/Hard), 2 players on one device, or online 1v1 (Rust/WebAssembly) | ✅ Playable |
 | Jal Path — "Save the thirsty village": turn pipes so water reaches three houses before the tank runs dry, 18 levels (Rust/WebAssembly) | ✅ Playable |
 | Paani Pour — sort the coloured water so every tube is one colour, 20 levels, undo, hints, par stars (Rust/WebAssembly) | ✅ Playable |
-| Ember Lane — lead your little brother down a night street where rats swarm every shadow; light, embers, a lantern, crates and shutters (stage 1, Rust/WebAssembly) | ✅ Playable |
+| Ember Lane — lead your little brother down a night street where rats swarm every shadow; light, embers, a lantern, crates and shutters (stage 1), then The Guard Steps: a patrolling spear soldier with a suspicion eye, stones to snuff his lamp, a takedown in the dark and an ember to relight it (stage 2) (Rust/WebAssembly) | ✅ Playable |
 
 ### Snake
 

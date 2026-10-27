@@ -2,6 +2,7 @@
 //! (with crate shadows), the rat swarms, the puzzles, movement and checkpoints on a fixed 60 Hz step; TypeScript
 //! paints it.
 
+pub mod guard;
 pub mod rats;
 pub mod stage;
 pub mod world;

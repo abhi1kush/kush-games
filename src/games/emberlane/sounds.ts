@@ -1,7 +1,7 @@
 /** Generated sounds for Ember Lane (no audio files): flames, embers, rats, the shutters and the sanctuary. */
 import { playSound } from '../sharedSound';
 
-export type EmberSound = 'step' | 'ignite' | 'throw' | 'fizzle' | 'take' | 'drop' | 'lever' | 'climb' | 'push' | 'squeak' | 'scurry' | 'death' | 'checkpoint' | 'respawn' | 'clear' | 'lanternOut' | 'potOut';
+export type EmberSound = 'step' | 'ignite' | 'throw' | 'fizzle' | 'take' | 'drop' | 'lever' | 'climb' | 'push' | 'squeak' | 'scurry' | 'death' | 'checkpoint' | 'respawn' | 'clear' | 'lanternOut' | 'potOut' | 'clatter' | 'snuff' | 'notice' | 'alarm' | 'spear' | 'takedown' | 'select';
 
 export function playEmberSound(kind: EmberSound, isMuted: boolean) {
   switch (kind) {
@@ -22,5 +22,12 @@ export function playEmberSound(kind: EmberSound, isMuted: boolean) {
     case 'clear': return playSound({ tones: [392, 494, 587, 784].map((frequency, index) => ({ frequency, durationSeconds: 0.9, volume: 0.07, type: 'sine' as OscillatorType, startSeconds: index * 0.16 })) }, isMuted);
     case 'lanternOut': return playSound({ noises: [{ durationSeconds: 0.35, volume: 0.08, filterFrequency: 1200, filterType: 'bandpass' }], tones: [{ frequency: 300, endFrequency: 150, durationSeconds: 0.4, volume: 0.05, type: 'triangle' }] }, isMuted);
     case 'potOut': return playSound({ noises: [{ durationSeconds: 0.3, volume: 0.07, filterFrequency: 1500, filterType: 'bandpass' }] }, isMuted);
+    case 'clatter': return playSound({ noises: [0, 0.07, 0.16].map((startSeconds, index) => ({ durationSeconds: 0.05, volume: 0.09 - index * 0.02, filterFrequency: 1900 + index * 400, filterType: 'bandpass' as BiquadFilterType, startSeconds })) }, isMuted);
+    case 'snuff': return playSound({ noises: [{ durationSeconds: 0.06, volume: 0.12, filterFrequency: 4200, filterType: 'highpass' }, { durationSeconds: 0.5, volume: 0.08, filterFrequency: 900, filterType: 'bandpass', startSeconds: 0.05 }], tones: [{ frequency: 1800, endFrequency: 1400, durationSeconds: 0.12, volume: 0.04, type: 'triangle' }] }, isMuted);
+    case 'notice': return playSound({ tones: [{ frequency: 180, endFrequency: 240, durationSeconds: 0.25, volume: 0.06, type: 'triangle' }] }, isMuted);
+    case 'alarm': return playSound({ tones: [{ frequency: 160, endFrequency: 320, durationSeconds: 0.22, volume: 0.12, type: 'sawtooth' }, { frequency: 330, durationSeconds: 0.3, volume: 0.08, type: 'square', startSeconds: 0.2 }] }, isMuted);
+    case 'spear': return playSound({ noises: [{ durationSeconds: 0.18, volume: 0.16, filterFrequency: 2600, filterType: 'highpass' }], tones: [{ frequency: 140, endFrequency: 60, durationSeconds: 0.5, volume: 0.14, type: 'sawtooth', startSeconds: 0.12 }] }, isMuted);
+    case 'takedown': return playSound({ noises: [{ durationSeconds: 0.12, volume: 0.16, filterFrequency: 300, filterType: 'lowpass' }, { durationSeconds: 0.35, volume: 0.1, filterFrequency: 500, filterType: 'lowpass', startSeconds: 0.35 }], tones: [{ frequency: 90, endFrequency: 50, durationSeconds: 0.3, volume: 0.12, type: 'triangle' }] }, isMuted);
+    case 'select': return playSound({ tones: [{ frequency: 740, durationSeconds: 0.05, volume: 0.05, type: 'triangle' }] }, isMuted);
   }
 }
