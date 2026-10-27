@@ -35,8 +35,8 @@ fn wait_for_flare(game: &mut EmberLane) {
     panic!("the torch never flared");
 }
 
-/// The windmill's lit sails turn half a turn per light cycle at a steady speed: a lit sail hangs low while the street
-/// is lit, and the lit pair is level while it is dark.
+/// The windmill's one lit sail turns a full turn per light cycle at a steady speed: it hangs low while the street
+/// is lit, and is high while it is dark.
 #[test]
 fn the_windmill_turns_in_step_with_its_light() {
     let mut game = EmberLane::new();
@@ -53,19 +53,19 @@ fn the_windmill_turns_in_step_with_its_light() {
         game.advance(1000.0 / 60.0);
         let angle = game.world.windmill_angle();
         let mut step = angle - last;
-        if step < -half { step += core::f32::consts::PI; } // the lit pair repeats every half turn
+        if step < -half { step += core::f32::consts::TAU; } // one lit sail: repeats every full turn
         assert!(step > 0.0 && step < 0.02, "steady clockwise turn");
         turned += step;
         last = angle;
-        // fold to the lit sail nearest straight down: 0 down, π/2 level
-        let folded = angle.rem_euclid(core::f32::consts::PI);
-        let from_down = folded.min(core::f32::consts::PI - folded);
+        // the lit sail's angle from straight down: 0 down, π/2 level, π straight up
+        let folded = angle.rem_euclid(core::f32::consts::TAU);
+        let from_down = folded.min(core::f32::consts::TAU - folded);
         let level = game.world.flicker_intensity();
-        if level >= 1.0 { assert!(from_down < 1.15, "lit only while a lit sail is low ({from_down})"); }
-        if level <= 0.0 { assert!(from_down > 1.2, "dark only while the lit pair is near level ({from_down})"); }
+        if level >= 1.0 { assert!(from_down < 2.25, "lit only while the lit sail is not high ({from_down})"); }
+        if level <= 0.0 { assert!(from_down > 2.35, "dark only while the lit sail is high ({from_down})"); }
     }
-    let expected = core::f32::consts::PI * 13.0 / FLICKER_PERIOD;
-    assert!((turned - expected).abs() < 0.05, "half a turn per cycle ({turned} vs {expected})");
+    let expected = core::f32::consts::TAU * 13.0 / FLICKER_PERIOD;
+    assert!((turned - expected).abs() < 0.1, "a full turn per cycle ({turned} vs {expected})");
 }
 
 #[test]

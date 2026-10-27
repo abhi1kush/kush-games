@@ -1,6 +1,6 @@
 /**
  * Ember Lane — lead Mira and her little brother Kabir down a dark village street at night. Rats swarm any
- * shadow and flee from flame, so keep both children in the light: wait for a windmill's lamp sails to swing low, throw embers into cold
+ * shadow and flee from flame, so keep both children in the light: wait for a windmill's lamp sail to swing low, throw embers into cold
  * braziers, carry a lantern, push a crate out of the light and work the shutter levers to reach the sanctuary door.
  * Stage two ("The Guard Steps") goes down a staircase into a soldier's yard: stay out of his lamp light, snuff it with
  * a thrown stone, take him down in the dark, then relight it with an ember so Kabir will follow to the far gate.

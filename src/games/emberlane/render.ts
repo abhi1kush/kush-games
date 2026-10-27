@@ -3,7 +3,7 @@
  * layer with soft holes cut by every flame (clipped by crate shadows), warm additive glows and light shafts — then
  * embers, smoke, low mist, rat eyes glinting in the dark, a danger tint and the vignette.
  */
-import { drawBrazier, drawCrate, drawCurb, drawEmberFlash, drawThrownEmber, drawStairs, drawWindmill, drawWindmillLights, drawFirePot, drawFlame, drawLantern, drawLever, drawTorch, drawWindow, hash, LayerCache, paintFar, paintMid, paintSky, paintStreet, toScreenX, toScreenY, type View } from './art';
+import { drawBrazier, drawCrate, drawCurb, drawEmberFlash, drawThrownEmber, drawStairs, drawWindmill, drawWindmillLights, windmillLamp, drawFirePot, drawFlame, drawLantern, drawLever, drawTorch, drawWindow, hash, LayerCache, paintFar, paintMid, paintSky, paintStreet, toScreenX, toScreenY, type View } from './art';
 import { drawKabir, drawMira } from './characters';
 import { CRATE, CURB, type EmberLane, LANTERN_OIL, KIND, LEVER_X, type Light, PROMPT, PROMPT_TEXT, STAIRS, RAT_STRIDE, ratView, readLights, STAGE_END, STATE, windmillAngle } from './engine';
 
@@ -227,13 +227,19 @@ export class Renderer {
     context.fillStyle = '#ffd6aa';
     context.fillRect(0, 0, width, height);
     context.restore();
-    this.drawDarkness(context, view, lights, game, ratio, charY);
+    // the windmill's light comes from the lamp at the end of its lit sail, not from the middle of the mill
+    const shining = lights.map(light => {
+      if (light.kind !== KIND.flicker) return light;
+      const [lx, lh] = windmillLamp(light.x, windmillAngle(game.flicker_phase()));
+      return { ...light, x: lx, height: lh };
+    });
+    this.drawDarkness(context, view, shining, game, ratio, charY);
     context.setTransform(ratio, 0, 0, ratio, 0, 0);
     if (visible(CURB.x)) drawCurb(context, view, CURB, Math.max(game.light_at(CURB.x - CURB.half - 1), game.light_at(CURB.x + CURB.half + 1)));
     if (visible(crateX)) this.drawShadedCrate(context, view, game, crateX);
     drawRatSwarm(context, view, rats, ratCount, time, false, this.lightAt, this.groundAt, true);
     drawRatSwarm(context, view, rats, ratCount, time, true, this.lightAt, this.groundAt, true);
-    this.drawGlows(context, view, lights, time, game, miraHands.front);
+    this.drawGlows(context, view, shining, time, game, miraHands.front);
     const windmill = lights.find(light => light.kind === KIND.flicker);
     if (windmill && visible(windmill.x, 100)) drawWindmillLights(context, view, windmill.x, windmillAngle(game.flicker_phase()), time);
     this.stepParticles(context, view, lights, dt, time);

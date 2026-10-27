@@ -716,7 +716,13 @@ export function drawStairs(context: CanvasRenderingContext2D, view: View, stairs
 }
 
 /** The windmill on Torch Lane: a tall timber-and-plaster tower with a pointed cap and four lattice sails. */
-export const WINDMILL = { hub: 105, sail: 74, sailWidth: 13, lamps: [0.42, 0.6, 0.78, 0.96] } as const;
+export const WINDMILL = { hub: 105, sail: 74, sailWidth: 13, lamps: [0.96] } as const;
+
+/** Where the one lamp at the end of the lit sail hangs, in world units (x, height above the ground). */
+export function windmillLamp(worldX: number, angle: number): [number, number] {
+  const reach = WINDMILL.sail * WINDMILL.lamps[WINDMILL.lamps.length - 1];
+  return [worldX - Math.sin(angle) * reach, WINDMILL.hub - Math.cos(angle) * reach];
+}
 
 /** Where a sail's spar points on screen (angle from straight down, clockwise). */
 const sailDirection = (angle: number): [number, number] => [-Math.sin(angle), Math.cos(angle)];
@@ -757,10 +763,10 @@ export function drawWindmill(context: CanvasRenderingContext2D, view: View, worl
   context.beginPath(); context.moveTo(x - topHalf - 4 * s, capBase); context.quadraticCurveTo(x - 6 * s, capTop + 8 * s, x, capTop); context.quadraticCurveTo(x + 6 * s, capTop + 8 * s, x + topHalf + 4 * s, capBase); context.closePath(); context.fill(); context.stroke();
   context.strokeStyle = 'rgba(0, 0, 0, 0.35)'; context.lineWidth = 0.8 * s;
   for (let row = 1; row < 4; row++) { const ry = capBase + (capTop - capBase) * row / 4; const half = (topHalf + 4 * s) * (1 - row / 4.4); context.beginPath(); context.moveTo(x - half, ry); context.lineTo(x + half, ry); context.stroke(); }
-  // four sails: the lit pair (0, 2) carries lamps on the spar, the other pair is plain canvas
+  // four sails: only sail 0 is lit, with a lamp at its tip; the other three are plain canvas
   for (let sail = 0; sail < 4; sail++) {
     const a = angle + sail * Math.PI / 2;
-    const lit = sail % 2 === 0;
+    const lit = sail === 0;
     const quad = sailQuad(x, hy, a, s);
     context.fillStyle = lit ? 'rgba(196, 150, 96, 0.92)' : 'rgba(150, 140, 128, 0.88)';
     context.strokeStyle = '#2a1d13'; context.lineWidth = 1.1 * s;
@@ -792,8 +798,8 @@ export function drawWindmill(context: CanvasRenderingContext2D, view: View, worl
   context.fillStyle = '#6a5a4c'; context.beginPath(); context.arc(x, hy, 1.6 * s, 0, Math.PI * 2); context.fill();
 }
 
-/** Over the darkness: a faint moonlit rim on every sail so the mill reads at night, a warm wash on the lit pair, and
- * their lamps burning bright (the lamps never go out; the street is lit only while a lit sail swings low). */
+/** Over the darkness: a faint moonlit rim on every sail so the mill reads at night, a warm wash on the one lit sail,
+ * and its tip lamp burning bright (it never goes out; the street is lit only while the lit sail swings low). */
 export function drawWindmillLights(context: CanvasRenderingContext2D, view: View, worldX: number, angle: number, time: number) {
   const s = view.scale;
   const x = toScreenX(view, worldX);
@@ -807,7 +813,7 @@ export function drawWindmillLights(context: CanvasRenderingContext2D, view: View
     context.beginPath(); quad.forEach(([px, py], index) => (index ? context.lineTo(px, py) : context.moveTo(px, py))); context.closePath(); context.stroke();
   }
   context.globalCompositeOperation = 'lighter';
-  for (const sail of [0, 2]) {
+  for (const sail of [0]) {
     const a = angle + sail * Math.PI / 2;
     const quad = sailQuad(x, hy, a, s);
     context.fillStyle = 'rgba(255, 150, 60, 0.16)';

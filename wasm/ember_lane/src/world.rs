@@ -25,11 +25,10 @@ pub const DEATH_SECONDS: f32 = 1.8;
 pub const BITE_SECONDS: f32 = 0.85;
 pub const GRAVITY: f32 = 620.0;
 pub const HALF_BODY: f32 = 8.0;
-/// The windmill before the staircase: a big four-sailed mill whose two opposite sails carry lamps. It stands still
-/// (lit sails low, light on the street) until Mira is up on the stone landing; then the wind takes it. Each half turn
-/// (the lit pair repeats every 180°) is one light cycle: while a lit sail swings low the street under it is lit; as
-/// the lit pair swings level the light leaves the street (fade), it stays dark while they pass the level, and floods
-/// back (flare) as the next lit sail comes down. It starts turning at the start of the fade, so she watches the whole
+/// The windmill before the staircase: a big four-sailed mill with ONE lit sail, a lamp at its tip. It stands still
+/// (lit sail low, light on the street) until Mira is up on the stone landing; then the wind takes it. Each full turn
+/// is one light cycle: while the lit sail swings low the street under it is lit; as it climbs past level the light
+/// leaves the street (fade), it stays dark while the lamp is high, and floods back (flare) as it comes down again. It starts turning at the start of the fade, so she watches the whole
 /// cycle — light, dark, light — from a safe spot.
 /// Its cycle: lit, fading, dark, flaring back up (seconds; the sum is one half turn).
 pub const FLICKER_ON: f32 = 4.2;
@@ -184,11 +183,11 @@ impl World {
         elapsed - (elapsed / FLICKER_PERIOD).floor() * FLICKER_PERIOD
     }
 
-    /// Angle of the lit sails from hanging straight down (radians, clockwise on screen). Half a turn per light cycle,
-    /// at a steady speed; a lit sail hangs straight down in the middle of the lit stretch, and the lit pair is level in
-    /// the middle of the dark stretch.
+    /// Angle of the lit sail from hanging straight down (radians, clockwise on screen). One full turn per light cycle,
+    /// at a steady speed; the lit sail hangs straight down in the middle of the lit stretch, and is high overhead in
+    /// the dark stretch.
     pub fn windmill_angle(&self) -> f32 {
-        core::f32::consts::PI * (self.flicker_phase() - FLICKER_ON * 0.5) / FLICKER_PERIOD
+        core::f32::consts::TAU * (self.flicker_phase() - FLICKER_ON * 0.5) / FLICKER_PERIOD
     }
 
     pub fn update_lights(&mut self) {

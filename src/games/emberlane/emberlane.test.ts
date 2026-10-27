@@ -17,11 +17,11 @@ describe('Ember Lane helpers', () => {
     expect(parseProgress(null)).toBeNull();
   });
 
-  it('turns the windmill half a turn per light cycle: a lit sail hangs low while lit, the lit pair is level while dark', () => {
+  it('turns the windmill a full turn per light cycle: the one lit sail hangs low while lit and is high while dark', () => {
     const { on, fade, dark, flare } = WINDMILL_CYCLE;
     expect(windmillAngle(on / 2)).toBeCloseTo(0);
-    expect(windmillAngle(on / 2 + on + fade + dark + flare) - windmillAngle(on / 2)).toBeCloseTo(Math.PI);
-    expect(Math.abs(windmillAngle(on + fade + dark / 2) - Math.PI / 2)).toBeLessThan(0.1);
+    expect(windmillAngle(on / 2 + on + fade + dark + flare) - windmillAngle(on / 2)).toBeCloseTo(2 * Math.PI);
+    expect(Math.abs(windmillAngle(on + fade + dark / 2) - Math.PI)).toBeLessThan(0.2);
     expect(Math.abs(windmillAngle(on))).toBeLessThan(Math.abs(windmillAngle(on + fade)));
   });
 
