@@ -122,6 +122,7 @@ export class Renderer {
     const s = view.scale;
     const lights = readLights(game);
     this.lightAt = x => game.light_at(x);
+    this.groundAt = () => view.ground;
     context.setTransform(ratio, 0, 0, ratio, 0, 0);
 
     // --- sky + parallax (cached)
@@ -174,7 +175,7 @@ export class Renderer {
     // --- rats (back half), characters, rats (front half)
     const rats = ratView(game);
     const ratCount = game.rat_count();
-    this.drawRats(context, view, rats, ratCount, time, false);
+    drawRatSwarm(context, view, rats, ratCount, time, false, this.lightAt, this.groundAt);
     const state = game.state();
     const isDead = state === STATE.dead;
     const deadT = isDead ? game.state_time() : 0;
@@ -194,7 +195,7 @@ export class Renderer {
     const holdHands = !game.carrying() && state === STATE.idle && !kabirMoving && Math.abs(game.sibling_x() - game.player_x()) < 30 ? miraHands.back : null;
     drawKabir(context, { x: kabirX, y: charY - 0.5 * s - game.sibling_y() * s, s, facing: game.sibling_facing(), walked: game.sibling_walked(), moving: kabirMoving, time, fear, dead: isDead ? deadT : 0 }, holdHands);
     if (game.carrying()) drawLantern(context, miraHands.front[0], miraHands.front[1] + 9 * s, s, lantern.lit, lantern.intensity, time);
-    this.drawRats(context, view, rats, ratCount, time, true);
+    drawRatSwarm(context, view, rats, ratCount, time, true, this.lightAt, this.groundAt);
 
     // --- ember in flight
     if (game.ember_active()) {
@@ -218,11 +219,11 @@ export class Renderer {
     this.drawDarkness(context, view, lights, game, ratio, charY);
     context.setTransform(ratio, 0, 0, ratio, 0, 0);
     if (visible(crateX)) this.drawShadedCrate(context, view, game, crateX);
-    this.drawRats(context, view, rats, ratCount, time, false, true);
-    this.drawRats(context, view, rats, ratCount, time, true, true);
+    drawRatSwarm(context, view, rats, ratCount, time, false, this.lightAt, this.groundAt, true);
+    drawRatSwarm(context, view, rats, ratCount, time, true, this.lightAt, this.groundAt, true);
     this.drawGlows(context, view, lights, time, game, miraHands.front);
     this.stepParticles(context, view, lights, dt, time);
-    this.drawEyes(context, view, game, rats, ratCount, time);
+    drawRatEyes(context, view, rats, ratCount, time, this.lightAt, this.groundAt);
     this.drawMist(context, view, time);
     if (game.throw_target() >= 0 && !isDead) this.drawAim(context, view, game, lights[game.throw_target()], time);
     // danger + vignette
@@ -241,6 +242,7 @@ export class Renderer {
 
   private lastKabir: number | null = null;
   private lightAt: (x: number) => number = () => 0;
+  private groundAt: (x: number) => number = () => 0;
 
   private drawHearth(context: CanvasRenderingContext2D, view: View, light: Light, time: number) {
     const s = view.scale;
@@ -267,52 +269,6 @@ export class Renderer {
   }
 
   /** Rat bodies; the moonlit pass draws them again after the darkness as faint cool silhouettes. */
-  private drawRats(context: CanvasRenderingContext2D, view: View, rats: Float32Array, count: number, time: number, front: boolean, moonlit = false) {
-    const s = view.scale;
-    if (moonlit) context.save();
-    for (let index = 0; index < count; index++) {
-      const base = index * RAT_STRIDE;
-      const state = rats[base + 3];
-      if (state < 0.5) continue;
-      const lane = rats[base + 2];
-      if ((lane >= 0.5) !== front) continue;
-      const x = toScreenX(view, rats[base]);
-      if (x < -20 || x > view.width + 20) continue;
-      if (moonlit) { const shade = 1 - this.lightAt(rats[base]); if (shade < 0.05) continue; context.globalAlpha = 0.34 * shade; }
-      const vx = rats[base + 1];
-      const phase = rats[base + 5];
-      const y = view.ground + (1.5 + lane * 20) * s;
-      const dir = vx >= 0 ? 1 : -1;
-      const size = (0.85 + hash(index) * 0.35) * s;
-      const hop = Math.abs(Math.sin(phase)) * 1.2 * size * (Math.abs(vx) > 20 ? 1 : 0.3);
-      context.save();
-      context.translate(x, y - hop);
-      context.scale(dir, 1);
-      // tail
-      context.strokeStyle = moonlit ? '#3e4660' : '#4a3a36';
-      context.lineWidth = 0.9 * size;
-      context.beginPath();
-      context.moveTo(-4 * size, -1.6 * size);
-      context.quadraticCurveTo(-8 * size, -1 * size + Math.sin(phase * 1.3) * 2 * size, -11 * size, -2.4 * size + Math.sin(phase) * 1.5 * size);
-      context.stroke();
-      // body
-      context.fillStyle = moonlit ? (index % 3 ? '#262b40' : '#30364e') : index % 3 ? '#2b2421' : '#3a302a';
-      context.beginPath(); context.ellipse(0, -2.4 * size, 5 * size, 2.5 * size, 0, 0, Math.PI * 2); context.fill();
-      context.beginPath(); context.ellipse(4.4 * size, -2.6 * size, 2.6 * size, 1.8 * size, 0.2, 0, Math.PI * 2); context.fill();
-      context.fillStyle = '#5a4a44';
-      context.beginPath(); context.arc(3.6 * size, -4.4 * size, 1.1 * size, 0, Math.PI * 2); context.fill();
-      context.fillStyle = 'rgba(255, 220, 200, 0.08)';
-      context.beginPath(); context.ellipse(-0.5 * size, -3.8 * size, 3.5 * size, 0.8 * size, 0, 0, Math.PI * 2); context.fill();
-      // scurrying legs
-      context.strokeStyle = '#1d1715'; context.lineWidth = 0.7 * size;
-      context.beginPath();
-      for (const offset of [-2.5, 2.5]) { const swing = Math.sin(phase * 2 + offset) * 1.4 * size; context.moveTo(offset * size, -1 * size); context.lineTo(offset * size + swing, 0); }
-      context.stroke();
-      context.restore();
-    }
-    if (moonlit) context.restore();
-  }
-
   private drawDarkness(context: CanvasRenderingContext2D, view: View, lights: Light[], game: EmberLane, ratio: number, charY: number) {
     const dark = this.dark.getContext('2d')!;
     const half = 0.5;
@@ -449,29 +405,6 @@ export class Renderer {
     context.restore();
   }
 
-  private drawEyes(context: CanvasRenderingContext2D, view: View, game: EmberLane, rats: Float32Array, count: number, time: number) {
-    const s = view.scale;
-    context.save();
-    context.globalCompositeOperation = 'lighter';
-    for (let index = 0; index < count; index++) {
-      const base = index * RAT_STRIDE;
-      if (rats[base + 3] < 0.5) continue;
-      const wx = rats[base];
-      const x = toScreenX(view, wx);
-      if (x < -10 || x > view.width + 10) continue;
-      // blink now and then
-      if ((time * 0.7 + hash(index * 7)) % 1 < 0.06) continue;
-      const light = game.light_at(wx);
-      const near = Math.max(0.25, Math.min(1, 1 - light * 0.6));
-      const dir = rats[base + 1] >= 0 ? 1 : -1;
-      const size = (0.85 + hash(index) * 0.35) * s;
-      const y = view.ground + (1.5 + rats[base + 2] * 20) * s - 4.4 * size;
-      context.fillStyle = `rgba(255, ${70 + Math.floor(light * 80)}, 40, ${0.75 * near})`;
-      context.beginPath(); context.arc(x + dir * 5.6 * size, y + 1.3 * size, 0.55 * size, 0, Math.PI * 2); context.fill();
-    }
-    context.restore();
-  }
-
   private drawMist(context: CanvasRenderingContext2D, view: View, time: number) {
     const s = view.scale;
     for (let band = 0; band < 3; band++) {
@@ -545,3 +478,77 @@ export class Renderer {
 }
 
 export { CRATE };
+
+/**
+ * The rat swarm (stage one's street and stage two's yard): the back or front half of the lanes, or (moonlit) their
+ * faint blue shapes over the darkness. `groundAt` gives the screen y of the ground under a world x.
+ */
+export function drawRatSwarm(context: CanvasRenderingContext2D, view: View, rats: Float32Array, count: number, time: number, front: boolean, lightAt: (x: number) => number, groundAt: (x: number) => number, moonlit = false) {
+  const s = view.scale;
+  if (moonlit) context.save();
+  for (let index = 0; index < count; index++) {
+    const base = index * RAT_STRIDE;
+    const state = rats[base + 3];
+    if (state < 0.5) continue;
+    const lane = rats[base + 2];
+    if ((lane >= 0.5) !== front) continue;
+    const x = toScreenX(view, rats[base]);
+    if (x < -20 || x > view.width + 20) continue;
+    if (moonlit) { const shade = 1 - lightAt(rats[base]); if (shade < 0.05) continue; context.globalAlpha = 0.34 * shade; }
+    const vx = rats[base + 1];
+    const phase = rats[base + 5];
+    const y = groundAt(rats[base]) + (1.5 + lane * 20) * s;
+    const dir = vx >= 0 ? 1 : -1;
+    const size = (0.85 + hash(index) * 0.35) * s;
+    const hop = Math.abs(Math.sin(phase)) * 1.2 * size * (Math.abs(vx) > 20 ? 1 : 0.3);
+    context.save();
+    context.translate(x, y - hop);
+    context.scale(dir, 1);
+    // tail
+    context.strokeStyle = moonlit ? '#3e4660' : '#4a3a36';
+    context.lineWidth = 0.9 * size;
+    context.beginPath();
+    context.moveTo(-4 * size, -1.6 * size);
+    context.quadraticCurveTo(-8 * size, -1 * size + Math.sin(phase * 1.3) * 2 * size, -11 * size, -2.4 * size + Math.sin(phase) * 1.5 * size);
+    context.stroke();
+    // body
+    context.fillStyle = moonlit ? (index % 3 ? '#262b40' : '#30364e') : index % 3 ? '#2b2421' : '#3a302a';
+    context.beginPath(); context.ellipse(0, -2.4 * size, 5 * size, 2.5 * size, 0, 0, Math.PI * 2); context.fill();
+    context.beginPath(); context.ellipse(4.4 * size, -2.6 * size, 2.6 * size, 1.8 * size, 0.2, 0, Math.PI * 2); context.fill();
+    context.fillStyle = '#5a4a44';
+    context.beginPath(); context.arc(3.6 * size, -4.4 * size, 1.1 * size, 0, Math.PI * 2); context.fill();
+    context.fillStyle = 'rgba(255, 220, 200, 0.08)';
+    context.beginPath(); context.ellipse(-0.5 * size, -3.8 * size, 3.5 * size, 0.8 * size, 0, 0, Math.PI * 2); context.fill();
+    // scurrying legs
+    context.strokeStyle = '#1d1715'; context.lineWidth = 0.7 * size;
+    context.beginPath();
+    for (const offset of [-2.5, 2.5]) { const swing = Math.sin(phase * 2 + offset) * 1.4 * size; context.moveTo(offset * size, -1 * size); context.lineTo(offset * size + swing, 0); }
+    context.stroke();
+    context.restore();
+  }
+  if (moonlit) context.restore();
+}
+
+/** Rat eyes glinting in the dark. */
+export function drawRatEyes(context: CanvasRenderingContext2D, view: View, rats: Float32Array, count: number, time: number, lightAt: (x: number) => number, groundAt: (x: number) => number) {
+  const s = view.scale;
+  context.save();
+  context.globalCompositeOperation = 'lighter';
+  for (let index = 0; index < count; index++) {
+    const base = index * RAT_STRIDE;
+    if (rats[base + 3] < 0.5) continue;
+    const wx = rats[base];
+    const x = toScreenX(view, wx);
+    if (x < -10 || x > view.width + 10) continue;
+    // blink now and then
+    if ((time * 0.7 + hash(index * 7)) % 1 < 0.06) continue;
+    const light = lightAt(wx);
+    const near = Math.max(0.25, Math.min(1, 1 - light * 0.6));
+    const dir = rats[base + 1] >= 0 ? 1 : -1;
+    const size = (0.85 + hash(index) * 0.35) * s;
+    const y = groundAt(wx) + (1.5 + rats[base + 2] * 20) * s - 4.4 * size;
+    context.fillStyle = `rgba(255, ${70 + Math.floor(light * 80)}, 40, ${0.75 * near})`;
+    context.beginPath(); context.arc(x + dir * 5.6 * size, y + 1.3 * size, 0.55 * size, 0, Math.PI * 2); context.fill();
+  }
+  context.restore();
+}

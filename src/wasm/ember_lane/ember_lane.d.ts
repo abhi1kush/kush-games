@@ -85,6 +85,14 @@ export class GuardSteps {
     caught(): boolean;
     cleared(): boolean;
     /**
+     * 0…1: how close the rats are to finishing Mira or Kabir.
+     */
+    danger(): number;
+    /**
+     * Seconds the lamp has been dark.
+     */
+    dark_time(): number;
+    /**
      * Test hook: put the soldier at x facing the given way, back on patrol.
      */
     debug_guard(x: number, facing: number): void;
@@ -95,6 +103,12 @@ export class GuardSteps {
     embers(): number;
     facing(): number;
     ground_at(x: number): number;
+    guard_beset(): boolean;
+    /**
+     * 0…1: how close the rats are to finishing the soldier.
+     */
+    guard_danger(): number;
+    guard_eaten(): boolean;
     guard_facing(): number;
     guard_state(): number;
     guard_time(): number;
@@ -104,6 +118,10 @@ export class GuardSteps {
     interact(): void;
     item(): number;
     kabir_follows(): boolean;
+    /**
+     * What ended the run: 0 the spear, 1 the rats.
+     */
+    killed_by(): number;
     lamp_lit(): boolean;
     light_at(x: number): number;
     light_count(): number;
@@ -120,6 +138,11 @@ export class GuardSteps {
     player_x(): number;
     player_y(): number;
     prompt(): number;
+    rat_count(): number;
+    /**
+     * rat_count × 8 × 4 bytes, the same layout as stage one's rats.
+     */
+    rats_ptr(): number;
     /**
      * 0…1 while he strikes his tinder at the lamp post.
      */
@@ -202,11 +225,16 @@ export interface InitOutput {
     readonly guardsteps_advance: (a: number, b: number) => void;
     readonly guardsteps_caught: (a: number) => number;
     readonly guardsteps_cleared: (a: number) => number;
+    readonly guardsteps_danger: (a: number) => number;
+    readonly guardsteps_dark_time: (a: number) => number;
     readonly guardsteps_debug_guard: (a: number, b: number, c: number) => void;
     readonly guardsteps_debug_place: (a: number, b: number) => void;
     readonly guardsteps_embers: (a: number) => number;
     readonly guardsteps_facing: (a: number) => number;
     readonly guardsteps_ground_at: (a: number, b: number) => number;
+    readonly guardsteps_guard_beset: (a: number) => number;
+    readonly guardsteps_guard_danger: (a: number) => number;
+    readonly guardsteps_guard_eaten: (a: number) => number;
     readonly guardsteps_guard_facing: (a: number) => number;
     readonly guardsteps_guard_state: (a: number) => number;
     readonly guardsteps_guard_time: (a: number) => number;
@@ -216,6 +244,7 @@ export interface InitOutput {
     readonly guardsteps_interact: (a: number) => void;
     readonly guardsteps_item: (a: number) => number;
     readonly guardsteps_kabir_follows: (a: number) => number;
+    readonly guardsteps_killed_by: (a: number) => number;
     readonly guardsteps_lamp_lit: (a: number) => number;
     readonly guardsteps_light_at: (a: number, b: number) => number;
     readonly guardsteps_light_count: (a: number) => number;
@@ -229,6 +258,8 @@ export interface InitOutput {
     readonly guardsteps_player_x: (a: number) => number;
     readonly guardsteps_player_y: (a: number) => number;
     readonly guardsteps_prompt: (a: number) => number;
+    readonly guardsteps_rat_count: (a: number) => number;
+    readonly guardsteps_rats_ptr: (a: number) => number;
     readonly guardsteps_relight_progress: (a: number) => number;
     readonly guardsteps_select_item: (a: number, b: number) => void;
     readonly guardsteps_set_input: (a: number, b: number) => void;

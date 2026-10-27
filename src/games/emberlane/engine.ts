@@ -48,7 +48,7 @@ export function readLights(game: EmberLane): Light[] {
 }
 
 /** Rats straight from wasm memory (the view is rebuilt each frame; memory may grow). */
-export function ratView(game: EmberLane): Float32Array {
+export function ratView(game: EmberLane | GuardSteps): Float32Array {
   if (!memory) throw new Error('engine not loaded');
   return new Float32Array(memory.buffer, game.rats_ptr(), game.rat_count() * RAT_STRIDE);
 }
@@ -85,6 +85,8 @@ export function parseProgress(data: unknown): Progress | null {
 export const GUARD = {
   stageEnd: 1200, yardDepth: 48, stairsTop: 380, stairsBottom: 476, exitBottom: 960, exitTop: 1040, steps: 6, gateX: 1130,
   kabirHideX: 335, stonePileX: 250, torchX: 150, lampX: 700, patrolLeft: 545, patrolRight: 860, maxStones: 3,
+  /** The rats' drain under the lamp, and how long the lamp is dark before they climb out of it. */
+  drainX: 739, drainDelay: 5.5,
 } as const;
 export const GUARD_STATE = { patrol: 0, suspicious: 1, charge: 2, spear: 3, relight: 4, down: 5 } as const;
 export const MIRA_STRIKE = 6;
@@ -93,8 +95,10 @@ export const GUARD_PROMPT = { none: 0, takeEmber: 1, takeStones: 2, strike: 3 } 
 export const GUARD_PROMPT_TEXT = ['', 'Take an ember from the torch', 'Pick up stones', 'Take him down'];
 export const GUARD_EVENT = {
   throw: 1, snuff: 2, clatter: 4, ignite: 8, fizzle: 16, notice: 32, alarm: 64, spear: 128, death: 256, takedown: 512,
-  guardRelit: 1024, take: 2048, kabirComes: 4096, clear: 8192, caught: 16384,
+  guardRelit: 1024, take: 2048, kabirComes: 4096, clear: 8192, caught: 16384, guardEaten: 32768, bitten: 65536, ratsOut: 131072,
 } as const;
+/** What ended a stage-two run. */
+export const KILLED_BY = { spear: 0, rats: 1 } as const;
 /** Light kind for the soldier's hanging lamp (stage one's kinds go up to 7). */
 export const KIND_HANGING_LAMP = 8;
 
@@ -109,18 +113,38 @@ export function readGuardLights(game: GuardSteps): Light[] {
 }
 
 /** Where the stage-two puzzle stands, for the tutorial line. */
-export interface GuardScene { dead?: boolean; x: number; lampLit: boolean; guardState: number; kabirFollows: boolean; stones: number; embers: number; item: number; relighting?: boolean }
+export interface GuardScene {
+  dead?: boolean; x: number; lampLit: boolean; guardState: number; kabirFollows: boolean; stones: number; embers: number; item: number; relighting?: boolean;
+  /** The rats are up out of the drain (the lamp has been dark a while). */ ratsOut?: boolean;
+  /** The rats brought the soldier down. */ guardEaten?: boolean;
+  /** Rats are on the soldier right now. */ guardBeset?: boolean;
+}
+/** Below this x on the top steps Mira is out of the yard rats' reach. */
+export const RAT_SAFE_X = 460;
 export function guardHint(scene: GuardScene): string {
-  const { x, lampLit, guardState, kabirFollows, stones, embers, item, relighting } = scene;
+  const { x, lampLit, guardState, kabirFollows, stones, embers, item, relighting, ratsOut, guardEaten, guardBeset } = scene;
   if (scene.dead) return '';
   const down = guardState === GUARD_STATE.down;
-  if (kabirFollows) return x > GUARD.exitBottom ? 'Through the gate together.' : 'The lamp is lit and the yard is safe. Lead Kabir to the gate.';
+  const inYard = x > RAT_SAFE_X;
+  if (kabirFollows) {
+    if (!lampLit) return inYard ? 'The lamp is out — rats! Relight it with an ember, or get Kabir back up the steps.' : 'Relight the lamp before you take Kabir into the yard.';
+    return x > GUARD.exitBottom ? 'Through the gate together.' : 'The lamp is lit and the yard is safe. Lead Kabir to the gate.';
+  }
   if (down) {
     if (lampLit) return '';
-    if (embers === 0) return 'Kabir won’t come down into the dark. Fetch an ember from the torch on the terrace.';
-    return item === 1 ? 'Kabir won’t come down into the dark. Switch to the ember and throw it at the lamp.' : 'Kabir won’t come down into the dark. Face the lamp and throw the ember to relight it.';
+    if (ratsOut && inYard) return 'Rats in the dark! Relight the lamp now — or run back up the steps.';
+    const lead = guardEaten ? 'The rats took him. ' : '';
+    if (embers === 0) return `${lead}Kabir won’t come down into the dark. Fetch an ember from the torch on the terrace.`;
+    return item === 1 ? `${lead}Kabir won’t come down into the dark. Switch to the ember and throw it at the lamp.` : `${lead}Kabir won’t come down into the dark. Face the lamp and throw the ember to relight it.`;
   }
-  if (guardState === GUARD_STATE.relight) return relighting ? 'He’s striking his tinder at the post — creep up now and take him down!' : 'Dark! Wait in the shadows until he kneels at the lamp post — don’t walk into his path.';
+  if (!lampLit && ratsOut) {
+    if (inYard) return 'The rats are out of the drain — get out of the dark, up the steps!';
+    return guardBeset ? 'The rats are on him. Stay up here on the steps.' : 'Rats swarm the dark yard. Wait on the steps — they’ll find him.';
+  }
+  if (guardState === GUARD_STATE.relight) {
+    if (!inYard) return 'Dark! The rats under the grate will wake soon — wait here and let them find him, or hurry down and take him down first.';
+    return relighting ? 'He’s striking his tinder at the post — take him down before the rats come up!' : 'Dark! Wait until he kneels at the lamp post, then get behind him — the rats will be up soon.';
+  }
   if (guardState === GUARD_STATE.charge || guardState === GUARD_STATE.spear) return 'He’s seen you — run!';
   if (x < 200) return 'A soldier guards the yard below. Kabir will hide by the barrels — go down alone.';
   if (x < GUARD.stairsBottom + 20) {

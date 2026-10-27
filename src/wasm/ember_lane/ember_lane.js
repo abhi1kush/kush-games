@@ -347,6 +347,22 @@ export class GuardSteps {
         return ret !== 0;
     }
     /**
+     * 0…1: how close the rats are to finishing Mira or Kabir.
+     * @returns {number}
+     */
+    danger() {
+        const ret = wasm.guardsteps_danger(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * Seconds the lamp has been dark.
+     * @returns {number}
+     */
+    dark_time() {
+        const ret = wasm.guardsteps_dark_time(this.__wbg_ptr);
+        return ret;
+    }
+    /**
      * Test hook: put the soldier at x facing the given way, back on patrol.
      * @param {number} x
      * @param {number} facing
@@ -382,6 +398,28 @@ export class GuardSteps {
     ground_at(x) {
         const ret = wasm.guardsteps_ground_at(this.__wbg_ptr, x);
         return ret;
+    }
+    /**
+     * @returns {boolean}
+     */
+    guard_beset() {
+        const ret = wasm.guardsteps_guard_beset(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
+     * 0…1: how close the rats are to finishing the soldier.
+     * @returns {number}
+     */
+    guard_danger() {
+        const ret = wasm.guardsteps_guard_danger(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {boolean}
+     */
+    guard_eaten() {
+        const ret = wasm.guardsteps_guard_eaten(this.__wbg_ptr);
+        return ret !== 0;
     }
     /**
      * @returns {number}
@@ -441,6 +479,14 @@ export class GuardSteps {
     kabir_follows() {
         const ret = wasm.guardsteps_kabir_follows(this.__wbg_ptr);
         return ret !== 0;
+    }
+    /**
+     * What ended the run: 0 the spear, 1 the rats.
+     * @returns {number}
+     */
+    killed_by() {
+        const ret = wasm.guardsteps_killed_by(this.__wbg_ptr);
+        return ret;
     }
     /**
      * @returns {boolean}
@@ -533,6 +579,21 @@ export class GuardSteps {
     prompt() {
         const ret = wasm.guardsteps_prompt(this.__wbg_ptr);
         return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    rat_count() {
+        const ret = wasm.guardsteps_rat_count(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * rat_count × 8 × 4 bytes, the same layout as stage one's rats.
+     * @returns {number}
+     */
+    rats_ptr() {
+        const ret = wasm.guardsteps_rats_ptr(this.__wbg_ptr);
+        return ret >>> 0;
     }
     /**
      * 0…1 while he strikes his tinder at the lamp post.

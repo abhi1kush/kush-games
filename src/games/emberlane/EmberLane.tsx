@@ -10,7 +10,7 @@ import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useRef,
 import { homePath, navigate } from '../../routing';
 import { createSaveSlot, SAVE_VERSIONS } from '../persistence';
 import { MuteButton, unlockAudio, useSharedMute } from '../sharedSound';
-import { BUTTON, CHECKPOINT_X, EmberLane, emptyProgress, EVENT, GUARD_EVENT, GUARD_PROMPT, GUARD_STATE, GuardSteps, guardHint, hintFor, ITEM, KIND, LANTERN_OIL, loadEmberLaneEngine, parseProgress, type Progress, PROMPT, readLights, SECTION_NAMES, STATE } from './engine';
+import { BUTTON, CHECKPOINT_X, EmberLane, emptyProgress, EVENT, GUARD, GUARD_EVENT, GUARD_PROMPT, GUARD_STATE, GuardSteps, guardHint, hintFor, ITEM, KILLED_BY, KIND, LANTERN_OIL, loadEmberLaneEngine, parseProgress, type Progress, PROMPT, readLights, SECTION_NAMES, STATE } from './engine';
 import { GuardRenderer } from './guardRender';
 import { Renderer } from './render';
 import { type EmberSound, playEmberSound } from './sounds';
@@ -114,7 +114,7 @@ function ControlsCard({ touch }: { touch: boolean }) {
         <li><b>Embers</b> light cold braziers and fire pots in the direction you face. You only carry a few.</li>
         <li>Carry the <b>lantern</b> while its oil lasts, push <b>crates</b> out of the light — or climb onto one: rats can’t climb — and pull <b>levers</b> to open shutters.</li>
         <li>Fall, and you wake at the last lit <b>checkpoint</b>.</li>
-        <li><b>Stage 2 · The Guard Steps:</b> a soldier patrols the yard below. In his lamp light the eye over his head fills with suspicion — when it’s full, he comes for you. Throw a <b>stone</b> to put the lamp out, take him down from behind in the dark, then relight it with an <b>ember</b>.</li>
+        <li><b>Stage 2 · The Guard Steps:</b> a soldier patrols the yard below. In his lamp light the eye over his head fills with suspicion — when it’s full, he comes for you. Throw a <b>stone</b> to put the lamp out. The <b>rats</b> under the drain wake in the dark and swarm anyone standing in it — him too: wait on the steps and they’ll take him, or hurry down and take him down from behind before they come up. Then relight the lamp with an <b>ember</b>.</li>
       </ul>
       {touch
         ? <p className="ember-keys">◀ ▶ walk · <b>✋</b> take / pull / climb / strike · the button beside ✋ picks <b>ember or stone</b> · the last button throws it</p>
@@ -143,6 +143,7 @@ function EmberLaneScreens() {
   const guardRef = useRef<GuardSteps | null>(null);
   const guardRendererRef = useRef(new GuardRenderer());
   const caughtAtRef = useRef(0);
+  const [killedBy, setKilledBy] = useState<number>(0);
   const [isPaused, setIsPaused] = useState(false);
   const [hud, setHud] = useState<Hud>({ section: 0, embers: 0, oil: 0, carrying: false, prompt: 0, hint: '', checkpoint: 0, deaths: 0, dead: false, stones: 0, item: ITEM.stone });
   const [toast, setToast] = useState<{ text: string; key: number } | null>(null);
@@ -184,7 +185,7 @@ function EmberLaneScreens() {
     if (stageNumberRef.current === 2 && guard) {
       const next: Hud = {
         section: -1, embers: guard.embers(), oil: 0, carrying: false, prompt: guard.prompt(), checkpoint: 0, deaths: 0, dead: guard.state() === STATE.dead, stones: guard.stones(), item: guard.item(),
-        hint: guardHint({ dead: guard.state() === STATE.dead, x: guard.player_x(), lampLit: guard.lamp_lit(), guardState: guard.guard_state(), kabirFollows: guard.kabir_follows(), stones: guard.stones(), embers: guard.embers(), item: guard.item(), relighting: guard.relight_progress() > 0 }),
+        hint: guardHint({ dead: guard.state() === STATE.dead, x: guard.player_x(), lampLit: guard.lamp_lit(), guardState: guard.guard_state(), kabirFollows: guard.kabir_follows(), stones: guard.stones(), embers: guard.embers(), item: guard.item(), relighting: guard.relight_progress() > 0, ratsOut: guard.dark_time() >= GUARD.drainDelay, guardEaten: guard.guard_eaten(), guardBeset: guard.guard_beset() }),
       };
       const previous = hudRef.current;
       if ((Object.keys(next) as (keyof Hud)[]).some(key => next[key] !== previous[key])) { hudRef.current = next; setHud(next); }
@@ -250,6 +251,9 @@ function EmberLaneScreens() {
     if (events & GUARD_EVENT.kabirComes) { sound('checkpoint'); showToast('Kabir comes down to you'); }
     if (events & GUARD_EVENT.clear) { sound('clear'); clearAtRef.current = performance.now(); }
     if (events & GUARD_EVENT.caught) caughtAtRef.current = performance.now();
+    if (events & GUARD_EVENT.ratsOut) { sound('scurry'); showToast('Rats! Up out of the drain'); }
+    if (events & GUARD_EVENT.guardEaten) { sound('death'); renderer.burst(guard.guard_x(), guard.guard_y() + 6, 12, 2); showToast('The rats took the soldier'); }
+    if (events & GUARD_EVENT.bitten) setKilledBy(KILLED_BY.rats);
   }, [showToast, sound]);
 
   const finishStage = useCallback(() => {
@@ -291,6 +295,8 @@ function EmberLaneScreens() {
         if (events) handleGuardEvents(events);
         const walked = guard.walked();
         if (Math.abs(walked - lastStepRef.current) > 21) { lastStepRef.current = walked; sound('step'); }
+        const danger = Math.max(guard.danger(), guard.guard_danger() * 0.6);
+        if (danger > 0.2 && Math.random() < danger * 0.08) sound(Math.random() < 0.5 ? 'squeak' : 'scurry');
         drawFrame(now);
         syncHud();
         if (clearAtRef.current && now - clearAtRef.current > 1400) { clearAtRef.current = 0; finishStage(); return; }
@@ -393,6 +399,7 @@ function EmberLaneScreens() {
     update(current => ({ ...current, stage: 2, stage2Unlocked: true }));
     clearAtRef.current = 0;
     caughtAtRef.current = 0;
+    setKilledBy(KILLED_BY.spear);
     lastStepRef.current = 0;
     keysRef.current = 0;
     const { width, height } = sizeRef.current;
@@ -467,7 +474,7 @@ function EmberLaneScreens() {
       guard: () => {
         const guard = guardRef.current;
         if (!guard) return null;
-        return { x: guard.player_x(), y: guard.player_y(), guardX: guard.guard_x(), guardState: guard.guard_state(), suspicion: guard.suspicion(), lamp: guard.lamp_lit(), stones: guard.stones(), embers: guard.embers(), item: guard.item(), prompt: guard.prompt(), kabirFollows: guard.kabir_follows(), cleared: guard.cleared(), caught: guard.caught(), state: guard.state(), target: guard.throw_target(), relight: guard.relight_progress() };
+        return { x: guard.player_x(), y: guard.player_y(), guardX: guard.guard_x(), guardState: guard.guard_state(), suspicion: guard.suspicion(), lamp: guard.lamp_lit(), stones: guard.stones(), embers: guard.embers(), item: guard.item(), prompt: guard.prompt(), kabirFollows: guard.kabir_follows(), cleared: guard.cleared(), caught: guard.caught(), state: guard.state(), target: guard.throw_target(), relight: guard.relight_progress(), darkTime: guard.dark_time(), danger: guard.danger(), guardDanger: guard.guard_danger(), guardEaten: guard.guard_eaten(), killedBy: guard.killed_by() };
       },
       /** Stage two: walk Mira to x synchronously. */
       guardWalkTo: (target: number) => {
@@ -610,8 +617,13 @@ function EmberLaneScreens() {
         {screen === 'caught' && (
           <div className="ember-overlay ember-overlay--caught" data-testid="ember-caught">
             <p className="ember-title__kicker">Game over</p>
-            <h2 className="ember-overlay__heading">The guard’s spear</h2>
-            <p className="ember-clear__line">He saw you in the light. Keep to the shadows — or put his lamp out first.</p>
+            {killedBy === KILLED_BY.rats ? (<>
+              <h2 className="ember-overlay__heading">The rats</h2>
+              <p className="ember-clear__line">They came up out of the drain once the lamp had been dark a while. Wait on the steps and let them find him — or be quick, and relight the lamp.</p>
+            </>) : (<>
+              <h2 className="ember-overlay__heading">The guard’s spear</h2>
+              <p className="ember-clear__line">He saw you in the light. Keep to the shadows — or put his lamp out first.</p>
+            </>)}
             <div className="ember-actions">
               <button type="button" className="online-button online-button--primary" onClick={beginGuard} data-testid="ember-retry">Try again</button>
               <button type="button" className="online-button" onClick={() => setScreen('start')} data-testid="ember-caught-title">Title</button>

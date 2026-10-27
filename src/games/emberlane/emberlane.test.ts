@@ -48,5 +48,10 @@ describe('Ember Lane helpers', () => {
     expect(guardHint({ ...scene, x: 700, lampLit: false, guardState: GUARD_STATE.down })).toMatch(/Switch to the ember/);
     expect(guardHint({ ...scene, x: 700, lampLit: false, guardState: GUARD_STATE.down, embers: 0 })).toMatch(/torch on the terrace/);
     expect(guardHint({ ...scene, x: 700, guardState: GUARD_STATE.down, kabirFollows: true })).toMatch(/gate/);
+    // the drain rats: wait on the steps and they take him, or get out of the dark yard
+    expect(guardHint({ ...scene, x: 380, lampLit: false, guardState: GUARD_STATE.relight })).toMatch(/rats/);
+    expect(guardHint({ ...scene, x: 380, lampLit: false, guardState: GUARD_STATE.relight, ratsOut: true, guardBeset: true })).toMatch(/on him/);
+    expect(guardHint({ ...scene, x: 650, lampLit: false, guardState: GUARD_STATE.relight, ratsOut: true })).toMatch(/up the steps/);
+    expect(guardHint({ ...scene, x: 380, lampLit: false, guardState: GUARD_STATE.down, guardEaten: true })).toMatch(/rats took him.*ember/);
   });
 });

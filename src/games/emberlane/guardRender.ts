@@ -2,11 +2,13 @@
  * Stage two frame ("The Guard Steps"): sky and far rooftops, the terrace behind the sanctuary, the stone staircase
  * down into the walled yard, the soldier's hanging lamp, barrels where Kabir hides, the stone pile, the far gate;
  * then Mira, Kabir and the soldier (with his suspicion eye), stones and embers in flight, and the light pass — the
- * same darkness-with-holes as stage one, so putting out the lamp really drops the yard into the dark.
+ * same darkness-with-holes as stage one, so putting out the lamp really drops the yard into the dark — and a while
+ * later the rats boil up out of the drain under it (stage one's swarm, drawn on the yard floor).
  */
 import { drawFlame, drawLantern, drawTorch, hash, LayerCache, paintFar, paintSky, toScreenX, toScreenY, type View } from './art';
 import { drawKabir, drawMira } from './characters';
-import { GUARD, GUARD_PROMPT, GUARD_PROMPT_TEXT, GUARD_STATE, type GuardSteps, ITEM, KIND_HANGING_LAMP, type Light, MIRA_STRIKE, readGuardLights, STATE } from './engine';
+import { GUARD, GUARD_PROMPT, GUARD_PROMPT_TEXT, GUARD_STATE, type GuardSteps, ITEM, KIND_HANGING_LAMP, type Light, MIRA_STRIKE, ratView, readGuardLights, STATE } from './engine';
+import { drawRatEyes, drawRatSwarm } from './render';
 import { drawSoldier, drawSuspicion } from './soldier';
 
 /** World units visible: stage one's 178 plus the drop into the yard. */
@@ -208,6 +210,13 @@ export class GuardRenderer {
     }
     if (visible(GUARD.stonePileX)) this.drawStonePile(context, view, game.stones());
 
+    // --- rats (back half) — they only come out of the drain once the lamp has been dark a while
+    const rats = ratView(game);
+    const ratCount = game.rat_count();
+    const lightAt = (x: number) => game.light_at(x);
+    const floorAt = (x: number) => toScreenY(view, game.ground_at(x));
+    drawRatSwarm(context, view, rats, ratCount, time, false, lightAt, floorAt);
+
     // --- characters
     const state = game.state();
     const isDead = state === STATE.dead;
@@ -219,11 +228,14 @@ export class GuardRenderer {
     this.lastGuard = game.guard_x();
     const playerX = toScreenX(view, game.player_x());
     const kabirX = toScreenX(view, game.sibling_x());
-    const guardX = toScreenX(view, game.guard_x());
+    // rats on him: he stamps and swats
+    const beset = game.guard_beset();
+    const guardX = toScreenX(view, game.guard_x()) + (beset ? Math.sin(time * 38) * 1.4 * s : 0);
     const hiding = !game.kabir_follows();
     context.fillStyle = 'rgba(0, 0, 0, 0.35)';
     for (const [x, w, y] of [[playerX, 8, game.player_y()], [kabirX, 6, game.sibling_y()], [guardX, 10, game.guard_y()]] as const) { context.beginPath(); context.ellipse(x, charY(y), w * s, 1.8 * s, 0, 0, Math.PI * 2); context.fill(); }
-    const fear = Math.min(1, game.suspicion());
+    const danger = game.danger();
+    const fear = Math.min(1, Math.max(game.suspicion(), danger));
     // Kabir crouches behind the barrels until the yard is lit and safe
     drawKabir(context, { x: kabirX, y: charY(game.sibling_y()) - 0.5 * s + (hiding && !kabirMoving ? 3 * s : 0), s, facing: hiding && !kabirMoving ? 1 : game.sibling_facing(), walked: game.sibling_walked(), moving: kabirMoving, time, fear: hiding ? 0.35 : fear * 0.6, dead: 0 }, null);
     if (visible(GUARD.kabirHideX)) this.drawBarrels(context, view);
@@ -233,6 +245,7 @@ export class GuardRenderer {
       x: playerX, y: charY(game.player_y()), s, facing: game.facing(), walked: game.walked(), moving: state === STATE.walk, time, fear,
       throwing: state === STATE.throw ? game.state_time() : state === MIRA_STRIKE ? game.state_time() * 0.75 : undefined, dead: isDead ? deadT : 0,
     });
+    drawRatSwarm(context, view, rats, ratCount, time, true, lightAt, floorAt);
     if (state === MIRA_STRIKE && game.state_time() < 0.35) {
       // the takedown: a hard swing with a stone in her fist
       context.fillStyle = '#8c8a86';
@@ -266,11 +279,15 @@ export class GuardRenderer {
     context.restore();
     this.drawDarkness(context, view, lights, game, ratio, charY);
     context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    drawRatSwarm(context, view, rats, ratCount, time, false, lightAt, floorAt, true);
+    drawRatSwarm(context, view, rats, ratCount, time, true, lightAt, floorAt, true);
     this.drawGlows(context, view, lights, time);
     // a dark lamp still catches the moonlight, so Mira can see her target
     const lamp = lights.find(light => light.kind === KIND_HANGING_LAMP);
     if (lamp && !lamp.lit && visible(lamp.x, 80)) { context.save(); context.globalAlpha = 0.55; this.drawLampPost(context, view, lamp, time); context.restore(); }
     this.stepParticles(context, view, lights, dt, time);
+    drawRatEyes(context, view, rats, ratCount, time, lightAt, floorAt);
+    this.drawDrainEyes(context, view, game, time);
     // the soldier's eye stays readable in the dark; the suspicion meter rides above his cap
     drawSuspicion(context, guardX, charY(game.guard_y()) - 60 * s, s, game.suspicion(), guardState, game.relight_progress(), time);
     if (!isDead && !game.kabir_follows()) this.drawEdgeMarkers(context, view, game, lamp, time);
@@ -289,6 +306,27 @@ export class GuardRenderer {
       context.fillStyle = `rgba(0, 0, 0, ${Math.min(0.85, Math.max(0, deadT - 0.8) * 0.8)})`; context.fillRect(0, 0, width, height);
     }
     if (overlay.prompt && !isDead) this.drawPrompt(context, s, playerX, charY(game.player_y()) - 56 * s, GUARD_PROMPT_TEXT[overlay.prompt], overlay.touch, overlay.prompt === GUARD_PROMPT.strike);
+  }
+
+  /** Eyes stirring under the grate as the dark drags on: the rats are about to come up. */
+  private drawDrainEyes(context: CanvasRenderingContext2D, view: View, game: GuardSteps, time: number) {
+    const dark = game.dark_time();
+    if (game.lamp_lit() || dark < GUARD.drainDelay - 2.5) return;
+    const s = view.scale;
+    const x0 = toScreenX(view, GUARD.drainX - 9);
+    if (x0 < -30 || x0 > view.width + 30) return;
+    const y = toScreenY(view, -D) + 5 * s;
+    const count = dark >= GUARD.drainDelay ? 5 : Math.ceil((dark - (GUARD.drainDelay - 2.5)) * 2);
+    context.save();
+    context.globalCompositeOperation = 'lighter';
+    for (let index = 0; index < count; index++) {
+      if ((time * 0.9 + hash(index * 11)) % 1 < 0.12) continue;
+      const ex = x0 + (2 + hash(index * 5 + 1) * 14) * s;
+      const ey = y + (hash(index * 3 + 2) - 0.5) * 2 * s;
+      context.fillStyle = 'rgba(255, 80, 40, 0.8)';
+      for (const dx of [0, 1.6]) { context.beginPath(); context.arc(ex + dx * s, ey, 0.5 * s, 0, Math.PI * 2); context.fill(); }
+    }
+    context.restore();
   }
 
   /** Off-screen pointers on narrow (portrait) screens: where the lamp hangs, and the soldier's eye when he is wary. */
