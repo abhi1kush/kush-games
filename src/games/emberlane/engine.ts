@@ -26,6 +26,10 @@ export const BUTTON = { left: 1, right: 2 } as const;
 export const CHECKPOINT_X = [120, 990, 1700, 2410, 3000];
 export const SECTION_NAMES = ['The Hearth', 'Torch Lane', 'Brazier Square', 'Lantern Alley', 'Cooper’s Yard', 'Shutter Row'];
 export const CRATE = { half: 15, height: 30 };
+/** The low stone kerb (a speed-breaker hump) across Cooper's Yard: it butts against the crate's far edge once the
+ * crate is slid right to its stop (stage.rs CRATES[0] max_x 2590 + half 15), so pushing it forward is visibly
+ * blocked. Mira steps over it; it is scenery only. */
+export const CURB = { x: 2610.5, half: 5.5, height: 8 };
 /** Seconds of lantern oil (matches the engine). */
 export const LANTERN_OIL = 8;
 export const LEVER_X = [3060, 3262];

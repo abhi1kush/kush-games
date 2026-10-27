@@ -5,7 +5,7 @@
  * same darkness-with-holes as stage one, so putting out the lamp really drops the yard into the dark — and a while
  * later the rats boil up out of the drain under it (stage one's swarm, drawn on the yard floor).
  */
-import { drawFlame, drawLantern, drawTorch, hash, LayerCache, paintFar, paintSky, toScreenX, toScreenY, type View } from './art';
+import { drawEmberFlash, drawFlame, drawLantern, drawThrownEmber, drawTorch, hash, LayerCache, paintFar, paintSky, toScreenX, toScreenY, type View } from './art';
 import { drawKabir, drawMira } from './characters';
 import { GUARD, GUARD_PROMPT, GUARD_PROMPT_TEXT, GUARD_STATE, type GuardSteps, ITEM, KIND_HANGING_LAMP, type Light, MIRA_STRIKE, ratView, readGuardLights, RAT_STRIDE, scorpionView, STATE } from './engine';
 import { drawRatEyes, drawRatSwarm } from './render';
@@ -183,8 +183,23 @@ export class GuardRenderer {
   burst(x: number, y: number, count: number, kind: 0 | 1 | 2 = 0) {
     for (let index = 0; index < count; index++) {
       const angle = -Math.PI / 2 + (Math.random() - 0.5) * 2.4;
-      const speed = 20 + Math.random() * 60;
-      this.particles.push({ x, y, vx: Math.cos(angle) * speed, vy: -Math.sin(angle) * speed, life: 0.6 + Math.random() * 0.8, age: 0, size: 0.6 + Math.random() * 1.2, kind });
+      const speed = kind === 0 ? 30 + Math.random() * 90 : 20 + Math.random() * 60;
+      this.particles.push({ x, y, vx: Math.cos(angle) * speed, vy: -Math.sin(angle) * speed, life: 0.6 + Math.random() * 0.8, age: 0, size: kind === 0 ? 0.9 + Math.random() * 1.8 : 0.6 + Math.random() * 1.2, kind });
+    }
+  }
+
+  /** An ember landed: a bright flash and ring of fire at world (x, y); `strength` 1 when a flame catches, less for a fizzle. */
+  flash(x: number, y: number, strength = 1) {
+    this.flashes.push({ x, y, age: 0, life: 0.55 + 0.25 * strength, strength });
+    if (strength >= 1) this.burst(x, y, 14, 0);
+  }
+  private flashes: { x: number; y: number; age: number; life: number; strength: number }[] = [];
+  private drawFlashes(context: CanvasRenderingContext2D, view: View, dt: number) {
+    for (let index = this.flashes.length - 1; index >= 0; index--) {
+      const flash = this.flashes[index];
+      flash.age += dt;
+      if (flash.age >= flash.life) { this.flashes.splice(index, 1); continue; }
+      drawEmberFlash(context, toScreenX(view, flash.x), toScreenY(view, flash.y) + 7 * view.scale, view.scale, flash.age / flash.life, flash.strength);
     }
   }
 
@@ -276,11 +291,11 @@ export class GuardRenderer {
       this.trail.push([mx + view.camX * s, my]);
       if (this.trail.length > 12) this.trail.shift();
       this.trail.forEach(([tx, ty], index) => {
-        context.fillStyle = stone ? `rgba(200, 200, 210, ${index / this.trail.length * 0.35})` : `rgba(255, ${140 + index * 6}, 60, ${index / this.trail.length * 0.8})`;
+        if (!stone) return; // an ember's tail is drawn over the darkness (see below)
+        context.fillStyle = `rgba(200, 200, 210, ${index / this.trail.length * 0.35})`;
         context.beginPath(); context.arc(tx - view.camX * s, ty, (0.5 + index * 0.1) * s, 0, Math.PI * 2); context.fill();
       });
       if (stone) { context.fillStyle = '#9a9894'; context.beginPath(); context.ellipse(mx, my, 2 * s, 1.6 * s, time * 9, 0, Math.PI * 2); context.fill(); }
-      else drawFlame(context, mx, my + 2 * s, 7 * s, time * 2, 5, 1);
     } else this.trail.length = 0;
 
     // --- light pass
@@ -300,6 +315,9 @@ export class GuardRenderer {
     const lamp = lights.find(light => light.kind === KIND_HANGING_LAMP);
     if (lamp && !lamp.lit && visible(lamp.x, 80)) { context.save(); context.globalAlpha = 0.55; this.drawLampPost(context, view, lamp, time); context.restore(); }
     this.stepParticles(context, view, lights, dt, time);
+    // the thrown ember blazes over the darkness, so it reads as fire at night
+    if (game.missile_active() && game.missile_item() !== ITEM.stone) drawThrownEmber(context, toScreenX(view, game.missile_x()), toScreenY(view, game.missile_y()) + 7 * s, s, time, this.trail.map(([tx, ty]) => [tx - view.camX * s, ty] as [number, number]));
+    this.drawFlashes(context, view, dt);
     drawRatEyes(context, view, rats, ratCount, time, lightAt, floorAt);
     drawScorpionGlints(context, view, scorpions, scorpionCount, time, lightAt, floorAt);
     this.drawDrainEyes(context, view, game, time);

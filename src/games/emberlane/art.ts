@@ -513,6 +513,85 @@ export function drawCrate(context: CanvasRenderingContext2D, view: View, x: numb
   context.fillRect(left + 2 * s, top + 2 * s, 26 * s, 4 * s);
 }
 
+/** The kerb across the yard: a rounded stone hump with painted hazard chevrons. `lit` (0..1) is how much light
+ * reaches it; drawn after the darkness pass, it keeps a faint moonlit edge so it reads even in the dark. */
+export function drawCurb(context: CanvasRenderingContext2D, view: View, curb: { x: number; half: number; height: number }, lit: number) {
+  const s = view.scale;
+  const left = toScreenX(view, curb.x - curb.half);
+  const width = curb.half * 2 * s;
+  const ground = view.ground;
+  const top = ground - curb.height * s;
+  const hump = () => {
+    context.beginPath();
+    context.moveTo(left - 1.5 * s, ground);
+    context.quadraticCurveTo(left - 0.5 * s, top, left + width / 2, top);
+    context.quadraticCurveTo(left + width + 0.5 * s, top, left + width + 1.5 * s, ground);
+    context.closePath();
+  };
+  context.save();
+  const stone = context.createLinearGradient(0, top, 0, ground);
+  stone.addColorStop(0, '#8d8a84'); stone.addColorStop(1, '#4f4c48');
+  context.fillStyle = stone; hump(); context.fill();
+  context.clip();
+  // painted chevron bands (ochre and soot), slanted like road paint on a speed breaker
+  context.fillStyle = '#d9a23a';
+  for (let band = -1; band < 4; band++) {
+    const bx = left + band * 3.4 * s;
+    context.beginPath(); context.moveTo(bx, ground); context.lineTo(bx + 1.7 * s, ground); context.lineTo(bx + 3.9 * s, top); context.lineTo(bx + 2.2 * s, top); context.fill();
+  }
+  context.restore();
+  context.strokeStyle = '#2c2a28'; context.lineWidth = 1 * s; hump(); context.stroke();
+  // darkness over it where no flame reaches, leaving a cool moonlit rim so it stays readable
+  context.save();
+  context.fillStyle = `rgba(6, 6, 16, ${0.8 * (1 - lit)})`; hump(); context.fill();
+  context.strokeStyle = `rgba(190, 205, 235, ${0.35 + 0.25 * (1 - lit)})`; context.lineWidth = 0.9 * s;
+  context.beginPath(); context.moveTo(left - 0.5 * s, ground - 2 * s); context.quadraticCurveTo(left + width / 2, top - 1.6 * s, left + width + 0.5 * s, ground - 2 * s); context.stroke();
+  context.restore();
+}
+
+/** A thrown ember, drawn AFTER the darkness pass with additive light so it blazes in the dark: a wide warm halo, a
+ * glowing comet tail (screen points, oldest first), the flame and a white-hot core. */
+export function drawThrownEmber(context: CanvasRenderingContext2D, x: number, y: number, s: number, time: number, trail: [number, number][]) {
+  context.save();
+  context.globalCompositeOperation = 'lighter';
+  const pulse = 0.85 + 0.15 * Math.sin(time * 37);
+  const halo = context.createRadialGradient(x, y, 0, x, y, 42 * s);
+  halo.addColorStop(0, `rgba(255, 190, 90, ${0.55 * pulse})`); halo.addColorStop(0.35, `rgba(255, 110, 30, ${0.22 * pulse})`); halo.addColorStop(1, 'rgba(255, 60, 10, 0)');
+  context.fillStyle = halo; context.fillRect(x - 42 * s, y - 42 * s, 84 * s, 84 * s);
+  trail.forEach(([tx, ty], index) => {
+    const f = (index + 1) / trail.length;
+    const r = (1.2 + f * 3.2) * s;
+    const glow = context.createRadialGradient(tx, ty, 0, tx, ty, r * 2.6);
+    glow.addColorStop(0, `rgba(255, ${170 + Math.floor(70 * f)}, ${70 + Math.floor(80 * f)}, ${0.9 * f})`); glow.addColorStop(1, 'rgba(255, 80, 20, 0)');
+    context.fillStyle = glow; context.fillRect(tx - r * 2.6, ty - r * 2.6, r * 5.2, r * 5.2);
+  });
+  context.restore();
+  drawFlame(context, x, y + 3 * s, 11 * s, time * 2, 5, 1);
+  context.save();
+  context.globalCompositeOperation = 'lighter';
+  drawFlame(context, x, y + 3 * s, 11 * s, time * 2 + 0.3, 7, 0.8);
+  const core = context.createRadialGradient(x, y, 0, x, y, 4.5 * s);
+  core.addColorStop(0, 'rgba(255, 255, 235, 1)'); core.addColorStop(0.5, 'rgba(255, 220, 120, 0.85)'); core.addColorStop(1, 'rgba(255, 140, 40, 0)');
+  context.fillStyle = core; context.beginPath(); context.arc(x, y, 4.5 * s, 0, Math.PI * 2); context.fill();
+  context.restore();
+}
+
+/** An ember's impact: a flash and a widening ring of fire, `t` from 0 to 1 over its life; `strength` 1 for a flame
+ * catching, less for a fizzle. */
+export function drawEmberFlash(context: CanvasRenderingContext2D, x: number, y: number, s: number, t: number, strength: number) {
+  if (t >= 1) return;
+  context.save();
+  context.globalCompositeOperation = 'lighter';
+  const fade = (1 - t) * (1 - t) * strength;
+  const radius = (18 + 70 * Math.sqrt(t)) * s * (0.5 + 0.5 * strength);
+  const flash = context.createRadialGradient(x, y, 0, x, y, radius);
+  flash.addColorStop(0, `rgba(255, 250, 220, ${0.95 * fade})`); flash.addColorStop(0.25, `rgba(255, 190, 80, ${0.6 * fade})`); flash.addColorStop(1, 'rgba(255, 70, 10, 0)');
+  context.fillStyle = flash; context.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+  context.strokeStyle = `rgba(255, 170, 60, ${0.8 * fade})`; context.lineWidth = (3 - 2 * t) * s;
+  context.beginPath(); context.arc(x, y, radius * 0.55, 0, Math.PI * 2); context.stroke();
+  context.restore();
+}
+
 export function drawLever(context: CanvasRenderingContext2D, view: View, x: number, pulled: boolean, pulledAt: number, time: number) {
   const s = view.scale;
   const px = toScreenX(view, x);

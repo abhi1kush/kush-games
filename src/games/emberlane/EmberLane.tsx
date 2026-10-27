@@ -207,8 +207,8 @@ function EmberLaneScreens() {
     const game = gameRef.current;
     const renderer = rendererRef.current;
     if (events & EVENT.throw) sound('throw');
-    if (events & EVENT.ignite) { sound('ignite'); renderer.burst(lastEmberRef.current[0], lastEmberRef.current[1], 26); }
-    if (events & EVENT.fizzle) { sound('fizzle'); renderer.burst(lastEmberRef.current[0], lastEmberRef.current[1], 8, 2); }
+    if (events & EVENT.ignite) { sound('ignite'); renderer.burst(lastEmberRef.current[0], lastEmberRef.current[1], 26); renderer.flash(lastEmberRef.current[0], lastEmberRef.current[1], 1); }
+    if (events & EVENT.fizzle) { sound('fizzle'); renderer.burst(lastEmberRef.current[0], lastEmberRef.current[1], 8, 2); renderer.burst(lastEmberRef.current[0], lastEmberRef.current[1], 10, 0); renderer.flash(lastEmberRef.current[0], lastEmberRef.current[1], 0.45); }
     if (events & EVENT.take) sound('take');
     if (events & EVENT.drop) sound('drop');
     if (events & EVENT.lever) sound('lever');
@@ -240,8 +240,8 @@ function EmberLaneScreens() {
     if (events & GUARD_EVENT.throw) sound('throw');
     if (events & GUARD_EVENT.snuff) { sound('snuff'); renderer.snuffed(); showToast('The lamp goes out'); }
     if (events & GUARD_EVENT.clatter) { sound('clatter'); renderer.burst(mx, my, 6, 2); }
-    if (events & GUARD_EVENT.ignite) { sound('ignite'); renderer.burst(mx, my, 26); }
-    if (events & GUARD_EVENT.fizzle) { sound('fizzle'); renderer.burst(mx, my, 8, 2); }
+    if (events & GUARD_EVENT.ignite) { sound('ignite'); renderer.burst(mx, my, 26); renderer.flash(mx, my, 1); }
+    if (events & GUARD_EVENT.fizzle) { sound('fizzle'); renderer.burst(mx, my, 8, 2); renderer.burst(mx, my, 10, 0); renderer.flash(mx, my, 0.45); }
     if (events & GUARD_EVENT.take) sound('take');
     if (events & GUARD_EVENT.notice) sound('notice');
     if (events & GUARD_EVENT.alarm) { sound('alarm'); showToast('He’s seen you!'); }

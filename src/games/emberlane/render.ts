@@ -3,9 +3,9 @@
  * layer with soft holes cut by every flame (clipped by crate shadows), warm additive glows and light shafts — then
  * embers, smoke, low mist, rat eyes glinting in the dark, a danger tint and the vignette.
  */
-import { drawBrazier, drawCrate, drawStairs, drawFirePot, drawFlame, drawLantern, drawLever, drawTorch, drawWindow, hash, LayerCache, paintFar, paintMid, paintSky, paintStreet, toScreenX, toScreenY, type View } from './art';
+import { drawBrazier, drawCrate, drawCurb, drawEmberFlash, drawThrownEmber, drawStairs, drawFirePot, drawFlame, drawLantern, drawLever, drawTorch, drawWindow, hash, LayerCache, paintFar, paintMid, paintSky, paintStreet, toScreenX, toScreenY, type View } from './art';
 import { drawKabir, drawMira } from './characters';
-import { CRATE, type EmberLane, LANTERN_OIL, KIND, LEVER_X, type Light, PROMPT, PROMPT_TEXT, STAIRS, RAT_STRIDE, ratView, readLights, STAGE_END, STATE } from './engine';
+import { CRATE, CURB, type EmberLane, LANTERN_OIL, KIND, LEVER_X, type Light, PROMPT, PROMPT_TEXT, STAIRS, RAT_STRIDE, ratView, readLights, STAGE_END, STATE } from './engine';
 
 /** World units visible from the bottom of the street band to the top of the view. */
 export const VIEW_UNITS = 178;
@@ -107,8 +107,23 @@ export class Renderer {
   burst(x: number, y: number, count: number, kind: 0 | 1 | 2 = 0) {
     for (let index = 0; index < count; index++) {
       const angle = -Math.PI / 2 + (Math.random() - 0.5) * 2.4;
-      const speed = 20 + Math.random() * 60;
-      this.particles.push({ x, y, vx: Math.cos(angle) * speed, vy: -Math.sin(angle) * speed, life: 0.6 + Math.random() * 0.8, age: 0, size: 0.6 + Math.random() * 1.2, kind });
+      const speed = kind === 0 ? 30 + Math.random() * 90 : 20 + Math.random() * 60;
+      this.particles.push({ x, y, vx: Math.cos(angle) * speed, vy: -Math.sin(angle) * speed, life: 0.6 + Math.random() * 0.8, age: 0, size: kind === 0 ? 0.9 + Math.random() * 1.8 : 0.6 + Math.random() * 1.2, kind });
+    }
+  }
+
+  /** An ember landed: a bright flash and ring of fire at world (x, y); `strength` 1 when a flame catches, less for a fizzle. */
+  flash(x: number, y: number, strength = 1) {
+    this.flashes.push({ x, y, age: 0, life: 0.55 + 0.25 * strength, strength });
+    if (strength >= 1) this.burst(x, y, 14, 0);
+  }
+  private flashes: { x: number; y: number; age: number; life: number; strength: number }[] = [];
+  private drawFlashes(context: CanvasRenderingContext2D, view: View, dt: number) {
+    for (let index = this.flashes.length - 1; index >= 0; index--) {
+      const flash = this.flashes[index];
+      flash.age += dt;
+      if (flash.age >= flash.life) { this.flashes.splice(index, 1); continue; }
+      drawEmberFlash(context, toScreenX(view, flash.x), toScreenY(view, flash.y) + 7 * view.scale, view.scale, flash.age / flash.life, flash.strength);
     }
   }
 
@@ -203,11 +218,6 @@ export class Renderer {
       const ey = toScreenY(view, game.ember_y()) + 7 * s;
       this.trail.push([ex + view.camX * s, ey]);
       if (this.trail.length > 14) this.trail.shift();
-      this.trail.forEach(([tx, ty], index) => {
-        context.fillStyle = `rgba(255, ${140 + index * 6}, 60, ${index / this.trail.length * 0.8})`;
-        context.beginPath(); context.arc(tx - view.camX * s, ty, (0.6 + index * 0.12) * s, 0, Math.PI * 2); context.fill();
-      });
-      drawFlame(context, ex, ey + 2 * s, 7 * s, time * 2, 5, 1);
     } else this.trail.length = 0;
 
     // --- light pass: warm the whole scene, then lay the darkness over it
@@ -218,11 +228,15 @@ export class Renderer {
     context.restore();
     this.drawDarkness(context, view, lights, game, ratio, charY);
     context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    if (visible(CURB.x)) drawCurb(context, view, CURB, Math.max(game.light_at(CURB.x - CURB.half - 1), game.light_at(CURB.x + CURB.half + 1)));
     if (visible(crateX)) this.drawShadedCrate(context, view, game, crateX);
     drawRatSwarm(context, view, rats, ratCount, time, false, this.lightAt, this.groundAt, true);
     drawRatSwarm(context, view, rats, ratCount, time, true, this.lightAt, this.groundAt, true);
     this.drawGlows(context, view, lights, time, game, miraHands.front);
     this.stepParticles(context, view, lights, dt, time);
+    // the thrown ember blazes over the darkness, so it reads as fire at night
+    if (game.ember_active()) drawThrownEmber(context, toScreenX(view, game.ember_x()), toScreenY(view, game.ember_y()) + 7 * s, s, time, this.trail.map(([tx, ty]) => [tx - view.camX * s, ty] as [number, number]));
+    this.drawFlashes(context, view, dt);
     drawRatEyes(context, view, rats, ratCount, time, this.lightAt, this.groundAt);
     this.drawMist(context, view, time);
     if (game.throw_target() >= 0 && !isDead) this.drawAim(context, view, game, lights[game.throw_target()], time);
