@@ -646,7 +646,7 @@ export function drawWindow(context: CanvasRenderingContext2D, view: View, x: num
   context.fillStyle = '#3d2718'; context.fillRect(cx - w / 2 - 3 * s, cy + h / 2, w + 6 * s, 3 * s);
 }
 
-/** The stone staircase before the guttering torch: a flight of steps up, a flat landing, a flight down. Each tread
+/** The stone staircase before the windmill: a flight of steps up, a flat landing, a flight down. Each tread
  * has a lit nosing and a shadowed riser so it reads as steps to walk up, not a block to push. */
 export function drawStairs(context: CanvasRenderingContext2D, view: View, stairs: { x: number; half: number; height: number; steps: number; landing: number }) {
   const s = view.scale;
@@ -713,4 +713,115 @@ export function drawStairs(context: CanvasRenderingContext2D, view: View, stairs
     const cx = sx(stairs.x + side * (stairs.landing - 1.5));
     context.beginPath(); context.ellipse(cx, sy(stairs.height) + 0.6 * s, 2.4 * s, 1.2 * s, 0, Math.PI, 0); context.fill();
   }
+}
+
+/** The windmill on Torch Lane: a tall timber-and-plaster tower with a pointed cap and four lattice sails. */
+export const WINDMILL = { hub: 105, sail: 74, sailWidth: 13, lamps: [0.42, 0.6, 0.78, 0.96] } as const;
+
+/** Where a sail's spar points on screen (angle from straight down, clockwise). */
+const sailDirection = (angle: number): [number, number] => [-Math.sin(angle), Math.cos(angle)];
+
+function sailQuad(hx: number, hy: number, angle: number, s: number): [number, number][] {
+  const [dx, dy] = sailDirection(angle);
+  const [nx, ny] = [-dy, dx]; // the trailing side, where the canvas hangs
+  const inner = WINDMILL.sail * 0.22 * s;
+  const outer = WINDMILL.sail * s;
+  const w = WINDMILL.sailWidth * s;
+  return [[hx + dx * inner, hy + dy * inner], [hx + dx * outer, hy + dy * outer], [hx + dx * outer + nx * w, hy + dy * outer + ny * w], [hx + dx * inner + nx * w * 0.8, hy + dy * inner + ny * w * 0.8]];
+}
+
+/** Tower, cap and sails (drawn with the props; the darkness falls over it). `angle` is the lit sails' angle. */
+export function drawWindmill(context: CanvasRenderingContext2D, view: View, worldX: number, angle: number) {
+  const s = view.scale;
+  const x = toScreenX(view, worldX);
+  const ground = view.ground;
+  const hy = toScreenY(view, WINDMILL.hub);
+  // tower: tapering, plastered, with timber bands
+  const baseHalf = 21 * s; const topHalf = 13 * s; const top = toScreenY(view, 98);
+  const wall = context.createLinearGradient(x - baseHalf, 0, x + baseHalf, 0);
+  wall.addColorStop(0, '#4c3f36'); wall.addColorStop(0.45, '#8a7766'); wall.addColorStop(1, '#3e332c');
+  context.fillStyle = wall; context.strokeStyle = '#211812'; context.lineWidth = 1.6 * s;
+  context.beginPath(); context.moveTo(x - baseHalf, ground); context.lineTo(x - topHalf, top); context.lineTo(x + topHalf, top); context.lineTo(x + baseHalf, ground); context.closePath(); context.fill(); context.stroke();
+  context.strokeStyle = '#3a2718'; context.lineWidth = 2 * s;
+  for (const band of [0.3, 0.62]) {
+    const by = ground + (top - ground) * band; const half = baseHalf + (topHalf - baseHalf) * band;
+    context.beginPath(); context.moveTo(x - half, by); context.lineTo(x + half, by); context.stroke();
+  }
+  // arched door and a small window
+  context.fillStyle = '#1a120c';
+  context.beginPath(); context.moveTo(x - 5 * s, ground); context.lineTo(x - 5 * s, ground - 11 * s); context.arc(x, ground - 11 * s, 5 * s, Math.PI, 0); context.lineTo(x + 5 * s, ground); context.fill();
+  context.fillRect(x - 2.5 * s, toScreenY(view, 66), 5 * s, 6 * s);
+  // the cap: a pointed timber roof, shingled
+  const capBase = toScreenY(view, 96); const capTop = toScreenY(view, 126);
+  context.fillStyle = '#3b2a1e'; context.strokeStyle = '#1c130d'; context.lineWidth = 1.6 * s;
+  context.beginPath(); context.moveTo(x - topHalf - 4 * s, capBase); context.quadraticCurveTo(x - 6 * s, capTop + 8 * s, x, capTop); context.quadraticCurveTo(x + 6 * s, capTop + 8 * s, x + topHalf + 4 * s, capBase); context.closePath(); context.fill(); context.stroke();
+  context.strokeStyle = 'rgba(0, 0, 0, 0.35)'; context.lineWidth = 0.8 * s;
+  for (let row = 1; row < 4; row++) { const ry = capBase + (capTop - capBase) * row / 4; const half = (topHalf + 4 * s) * (1 - row / 4.4); context.beginPath(); context.moveTo(x - half, ry); context.lineTo(x + half, ry); context.stroke(); }
+  // four sails: the lit pair (0, 2) carries lamps on the spar, the other pair is plain canvas
+  for (let sail = 0; sail < 4; sail++) {
+    const a = angle + sail * Math.PI / 2;
+    const lit = sail % 2 === 0;
+    const quad = sailQuad(x, hy, a, s);
+    context.fillStyle = lit ? 'rgba(196, 150, 96, 0.92)' : 'rgba(150, 140, 128, 0.88)';
+    context.strokeStyle = '#2a1d13'; context.lineWidth = 1.1 * s;
+    context.beginPath(); quad.forEach(([px, py], index) => (index ? context.lineTo(px, py) : context.moveTo(px, py))); context.closePath(); context.fill(); context.stroke();
+    // lattice
+    context.strokeStyle = 'rgba(42, 29, 19, 0.75)'; context.lineWidth = 0.7 * s;
+    context.beginPath();
+    for (let rung = 1; rung < 5; rung++) {
+      const t = rung / 5;
+      const [ax, ay] = [quad[0][0] + (quad[1][0] - quad[0][0]) * t, quad[0][1] + (quad[1][1] - quad[0][1]) * t];
+      const [bx, by] = [quad[3][0] + (quad[2][0] - quad[3][0]) * t, quad[3][1] + (quad[2][1] - quad[3][1]) * t];
+      context.moveTo(ax, ay); context.lineTo(bx, by);
+    }
+    const mid = (p: number, q: number) => [(quad[p][0] + quad[q][0]) / 2, (quad[p][1] + quad[q][1]) / 2];
+    const [m0x, m0y] = mid(0, 3); const [m1x, m1y] = mid(1, 2);
+    context.moveTo(m0x, m0y); context.lineTo(m1x, m1y);
+    context.stroke();
+    // the spar
+    const [dx, dy] = sailDirection(a);
+    context.strokeStyle = '#3a2718'; context.lineWidth = 2.4 * s;
+    context.beginPath(); context.moveTo(x, hy); context.lineTo(x + dx * WINDMILL.sail * s, hy + dy * WINDMILL.sail * s); context.stroke();
+    if (lit) for (const along of WINDMILL.lamps) {
+      const lx = x + dx * WINDMILL.sail * along * s; const ly = hy + dy * WINDMILL.sail * along * s;
+      context.fillStyle = '#2b2b30'; context.fillRect(lx - 2 * s, ly - 2 * s, 4 * s, 4 * s);
+    }
+  }
+  // hub
+  context.fillStyle = '#2b1e14'; context.beginPath(); context.arc(x, hy, 4.5 * s, 0, Math.PI * 2); context.fill();
+  context.fillStyle = '#6a5a4c'; context.beginPath(); context.arc(x, hy, 1.6 * s, 0, Math.PI * 2); context.fill();
+}
+
+/** Over the darkness: a faint moonlit rim on every sail so the mill reads at night, a warm wash on the lit pair, and
+ * their lamps burning bright (the lamps never go out; the street is lit only while a lit sail swings low). */
+export function drawWindmillLights(context: CanvasRenderingContext2D, view: View, worldX: number, angle: number, time: number) {
+  const s = view.scale;
+  const x = toScreenX(view, worldX);
+  const hy = toScreenY(view, WINDMILL.hub);
+  context.save();
+  context.lineWidth = 0.9 * s;
+  context.strokeStyle = 'rgba(170, 190, 235, 0.32)';
+  context.beginPath(); context.moveTo(x - 13 * s, toScreenY(view, 98)); context.lineTo(x - 21 * s, view.ground); context.stroke();
+  for (let sail = 0; sail < 4; sail++) {
+    const quad = sailQuad(x, hy, angle + sail * Math.PI / 2, s);
+    context.beginPath(); quad.forEach(([px, py], index) => (index ? context.lineTo(px, py) : context.moveTo(px, py))); context.closePath(); context.stroke();
+  }
+  context.globalCompositeOperation = 'lighter';
+  for (const sail of [0, 2]) {
+    const a = angle + sail * Math.PI / 2;
+    const quad = sailQuad(x, hy, a, s);
+    context.fillStyle = 'rgba(255, 150, 60, 0.16)';
+    context.beginPath(); quad.forEach(([px, py], index) => (index ? context.lineTo(px, py) : context.moveTo(px, py))); context.closePath(); context.fill();
+    const [dx, dy] = sailDirection(a);
+    WINDMILL.lamps.forEach((along, lamp) => {
+      const lx = x + dx * WINDMILL.sail * along * s; const ly = hy + dy * WINDMILL.sail * along * s;
+      const flick = 0.85 + 0.15 * Math.sin(time * 10 + lamp * 1.9 + sail);
+      const halo = context.createRadialGradient(lx, ly, 0, lx, ly, 11 * s);
+      halo.addColorStop(0, `rgba(255, 190, 90, ${0.55 * flick})`); halo.addColorStop(1, 'rgba(255, 140, 50, 0)');
+      context.fillStyle = halo; context.fillRect(lx - 11 * s, ly - 11 * s, 22 * s, 22 * s);
+      context.fillStyle = `rgba(255, 236, 170, ${0.95 * flick})`;
+      context.beginPath(); context.arc(lx, ly, 1.8 * s, 0, Math.PI * 2); context.fill();
+    });
+  }
+  context.restore();
 }

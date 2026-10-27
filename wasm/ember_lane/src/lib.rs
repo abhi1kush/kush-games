@@ -88,6 +88,8 @@ impl EmberLane {
     pub fn cleared(&self) -> bool { self.world.cleared }
     pub fn time(&self) -> f32 { self.world.time }
     pub fn pot_left(&self) -> f32 { self.world.pot_left }
+    /// Seconds into the windmill's light cycle (see World::windmill_angle for the sails it turns into).
+    pub fn flicker_phase(&self) -> f32 { self.world.flicker_phase() }
 
     pub fn light_count(&self) -> usize { stage::LIGHT_COUNT }
     /// light_count × 8 f32: x, flame height, radius, intensity, kind, lit, left bound, right bound

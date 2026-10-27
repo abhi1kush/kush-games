@@ -3,9 +3,9 @@
  * layer with soft holes cut by every flame (clipped by crate shadows), warm additive glows and light shafts — then
  * embers, smoke, low mist, rat eyes glinting in the dark, a danger tint and the vignette.
  */
-import { drawBrazier, drawCrate, drawCurb, drawEmberFlash, drawThrownEmber, drawStairs, drawFirePot, drawFlame, drawLantern, drawLever, drawTorch, drawWindow, hash, LayerCache, paintFar, paintMid, paintSky, paintStreet, toScreenX, toScreenY, type View } from './art';
+import { drawBrazier, drawCrate, drawCurb, drawEmberFlash, drawThrownEmber, drawStairs, drawWindmill, drawWindmillLights, drawFirePot, drawFlame, drawLantern, drawLever, drawTorch, drawWindow, hash, LayerCache, paintFar, paintMid, paintSky, paintStreet, toScreenX, toScreenY, type View } from './art';
 import { drawKabir, drawMira } from './characters';
-import { CRATE, CURB, type EmberLane, LANTERN_OIL, KIND, LEVER_X, type Light, PROMPT, PROMPT_TEXT, STAIRS, RAT_STRIDE, ratView, readLights, STAGE_END, STATE } from './engine';
+import { CRATE, CURB, type EmberLane, LANTERN_OIL, KIND, LEVER_X, type Light, PROMPT, PROMPT_TEXT, STAIRS, RAT_STRIDE, ratView, readLights, STAGE_END, STATE, windmillAngle } from './engine';
 
 /** World units visible from the bottom of the street band to the top of the view. */
 export const VIEW_UNITS = 178;
@@ -161,7 +161,8 @@ export class Renderer {
     }
     lights.forEach((light, index) => {
       if (!visible(light.x, 80)) return;
-      if (light.kind === KIND.torch || light.kind === KIND.flicker) drawTorch(context, view, light, light.lit ? light.intensity : 0, time, index * 1.7);
+      if (light.kind === KIND.flicker) drawWindmill(context, view, light.x, windmillAngle(game.flicker_phase()));
+      else if (light.kind === KIND.torch) drawTorch(context, view, light, light.lit ? light.intensity : 0, time, index * 1.7);
       else if (light.kind === KIND.brazier) drawBrazier(context, view, light, light.intensity, time, index * 2.3, light.radius > 200);
       else if (light.kind === KIND.firePot) drawFirePot(context, view, light, light.intensity, time, game.pot_left());
       else if (light.kind === KIND.hearth) this.drawHearth(context, view, light, time);
@@ -233,6 +234,8 @@ export class Renderer {
     drawRatSwarm(context, view, rats, ratCount, time, false, this.lightAt, this.groundAt, true);
     drawRatSwarm(context, view, rats, ratCount, time, true, this.lightAt, this.groundAt, true);
     this.drawGlows(context, view, lights, time, game, miraHands.front);
+    const windmill = lights.find(light => light.kind === KIND.flicker);
+    if (windmill && visible(windmill.x, 100)) drawWindmillLights(context, view, windmill.x, windmillAngle(game.flicker_phase()), time);
     this.stepParticles(context, view, lights, dt, time);
     // the thrown ember blazes over the darkness, so it reads as fire at night
     if (game.ember_active()) drawThrownEmber(context, toScreenX(view, game.ember_x()), toScreenY(view, game.ember_y()) + 7 * s, s, time, this.trail.map(([tx, ty]) => [tx - view.camX * s, ty] as [number, number]));

@@ -103,6 +103,14 @@ export class EmberLane {
         const ret = wasm.emberlane_facing(this.__wbg_ptr);
         return ret;
     }
+    /**
+     * Seconds into the windmill's light cycle (see World::windmill_angle for the sails it turns into).
+     * @returns {number}
+     */
+    flicker_phase() {
+        const ret = wasm.emberlane_flicker_phase(this.__wbg_ptr);
+        return ret;
+    }
     interact() {
         wasm.emberlane_interact(this.__wbg_ptr);
     }

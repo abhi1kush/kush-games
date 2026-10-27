@@ -32,8 +32,14 @@ export const CRATE = { half: 15, height: 30 };
 export const CURB = { x: 2610.5, half: 5.5, height: 8 };
 /** Seconds of lantern oil (matches the engine). */
 export const LANTERN_OIL = 8;
+/** The windmill's light cycle (mirrors world.rs FLICKER_*): lit, fading, dark, flaring back — one half turn of the sails. */
+export const WINDMILL_CYCLE = { on: 4.2, fade: 0.3, dark: 1.3, flare: 0.2 } as const;
+const WINDMILL_PERIOD = WINDMILL_CYCLE.on + WINDMILL_CYCLE.fade + WINDMILL_CYCLE.dark + WINDMILL_CYCLE.flare;
+/** Angle of the lit sails from hanging straight down (radians, clockwise on screen) for a phase of the light cycle:
+ * half a turn per cycle at a steady speed, a lit sail straight down mid-way through the lit stretch. */
+export const windmillAngle = (phase: number) => Math.PI * (phase - WINDMILL_CYCLE.on / 2) / WINDMILL_PERIOD;
 export const LEVER_X = [3060, 3262];
-/** The fixed stone staircase before the guttering torch (block index 1 in the engine): steps up, a landing, steps down. */
+/** The fixed stone staircase before the windmill (block index 1 in the engine): steps up, a landing, steps down. */
 export const STAIRS = { index: 1, x: 505, half: 26, height: 26, steps: 3, landing: 8 };
 
 export interface Light { x: number; height: number; radius: number; intensity: number; kind: number; lit: boolean; left: number; right: number }
@@ -184,9 +190,9 @@ export function hintFor(x: number, carrying: boolean, embers: number, yard?: Yar
     if (x > 2450) return 'The crate blocks the brazier’s light. Climb onto it — rats can’t reach you up there.';
   }
   if (x < 300) return 'Rats fear the light. Keep yourself — and Kabir — inside it.';
-  if (x > 380 && x < 640 && yard?.onCrate) return 'From the landing, watch the torch ahead gutter out and flare up. As it flares, walk down the steps and cross while it burns.';
-  if (x > 430 && x < STAIRS.x) return 'Stone steps. Walk up them — once you are on the landing, the torch ahead starts to gutter.';
-  if (x > STAIRS.x && x < 640) return 'Cross while the torch burns. If it gutters out, wait in the light behind you.';
+  if (x > 380 && x < 640 && yard?.onCrate) return 'From the landing, watch the windmill turn: its lamp sails light the street while one swings low. When the light comes back, walk down and cross.';
+  if (x > 430 && x < STAIRS.x) return 'Stone steps. Walk up them — once you are on the landing, the windmill ahead starts to turn.';
+  if (x > STAIRS.x && x < 640) return 'Cross while a lamp sail is low and the street is lit. If the light swings away, wait in the light behind you.';
   if (x > 960 && x < 1120) return embers > 0 ? 'A cold brazier in the dark. Throw an ember at it.' : 'A cold brazier in the dark…';
   if (x > 1240 && x < 1330) return 'Light the next brazier from here.';
   if (x > 1690 && x < 1800 && !carrying) return 'A lantern! Take it — the oil won’t last long.';

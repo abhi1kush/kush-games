@@ -35,6 +35,39 @@ fn wait_for_flare(game: &mut EmberLane) {
     panic!("the torch never flared");
 }
 
+/// The windmill's lit sails turn half a turn per light cycle at a steady speed: a lit sail hangs low while the street
+/// is lit, and the lit pair is level while it is dark.
+#[test]
+fn the_windmill_turns_in_step_with_its_light() {
+    let mut game = EmberLane::new();
+    let rest = game.world.windmill_angle();
+    run(&mut game, 0, 5.0);
+    assert_eq!(game.world.windmill_angle(), rest, "becalmed before Mira is on the landing");
+    run(&mut game, BUTTON_RIGHT, 6.0);
+    assert_eq!(game.standing_on(), STAIRS as i32);
+    game.set_input(0);
+    let half = core::f32::consts::FRAC_PI_2;
+    let mut last = game.world.windmill_angle();
+    let mut turned = 0.0f32;
+    for _ in 0..60 * 13 {
+        game.advance(1000.0 / 60.0);
+        let angle = game.world.windmill_angle();
+        let mut step = angle - last;
+        if step < -half { step += core::f32::consts::PI; } // the lit pair repeats every half turn
+        assert!(step > 0.0 && step < 0.02, "steady clockwise turn");
+        turned += step;
+        last = angle;
+        // fold to the lit sail nearest straight down: 0 down, π/2 level
+        let folded = angle.rem_euclid(core::f32::consts::PI);
+        let from_down = folded.min(core::f32::consts::PI - folded);
+        let level = game.world.flicker_intensity();
+        if level >= 1.0 { assert!(from_down < 1.15, "lit only while a lit sail is low ({from_down})"); }
+        if level <= 0.0 { assert!(from_down > 1.2, "dark only while the lit pair is near level ({from_down})"); }
+    }
+    let expected = core::f32::consts::PI * 13.0 / FLICKER_PERIOD;
+    assert!((turned - expected).abs() < 0.05, "half a turn per cycle ({turned} vs {expected})");
+}
+
 #[test]
 fn light_falls_off_and_crates_cast_shadows() {
     let world = World::new();
@@ -121,7 +154,7 @@ fn the_advance_clock_survives_bad_frame_gaps() {
 #[test]
 fn the_whole_stage_can_be_cleared_without_dying() {
     let mut game = EmberLane::new();
-    // 1. torches and the flickering torch: wait for the flare, then cross
+    // 1. torches and the windmill: wait for a lit sail to swing low, then cross
     run(&mut game, BUTTON_RIGHT, 6.0); // walk up the staircase; she stops on the landing
     assert_eq!(game.standing_on(), STAIRS as i32);
     wait_for_flare(&mut game); // watch it from the landing
@@ -249,10 +282,11 @@ fn a_new_run_starts_with_embers_and_checkpoints_top_them_up() {
     assert_eq!(game.embers(), 3, "Torch Lane tops up to three");
 }
 
-/// The guttering torch burns steadily until Mira is standing on the staircase's landing. Only then does it go out,
-/// stay dark for a beat, flare and run its cycle, so she sees the whole pattern from a safe spot.
+/// The windmill stands still, its lit sail low, until Mira is standing on the staircase's landing. Only then does it
+/// turn: the light fades and stays dark for a beat as the lit sails pass level, then floods back and keeps cycling,
+/// so she sees the whole pattern from a safe spot.
 #[test]
-fn the_guttering_torch_starts_its_cycle_when_mira_is_on_the_landing() {
+fn the_windmill_starts_turning_when_mira_is_on_the_landing() {
     let mut game = EmberLane::new();
     let torch = FLICKER;
     let foot = STAIRS_X - STAIRS_HALF - HALF_BODY - 4.0;
@@ -271,8 +305,10 @@ fn the_guttering_torch_starts_its_cycle_when_mira_is_on_the_landing() {
     game.set_input(0);
     assert_eq!(game.standing_on(), STAIRS as i32);
     assert!(game.world.flicker_start >= 0.0, "on the landing it starts");
-    assert_eq!(game.world.lights[torch].intensity, 0.0, "it goes out first");
-    run(&mut game, 0, FLICKER_FIRST_DARK - 0.1);
+    assert!(game.world.lights[torch].intensity > 0.8, "the lit sail is still low as the wind takes it");
+    run(&mut game, 0, FLICKER_FADE + 0.05);
+    assert_eq!(game.world.lights[torch].intensity, 0.0, "the lit sails swing level: it goes dark first");
+    run(&mut game, 0, FLICKER_DARK - 0.2);
     assert_eq!(game.world.lights[torch].intensity, 0.0, "a dark beat");
     run(&mut game, 0, 0.4);
     assert_eq!(game.world.lights[torch].intensity, 1.0, "then it flares up");
@@ -309,7 +345,7 @@ fn the_guttering_torch_starts_its_cycle_when_mira_is_on_the_landing() {
 /// A fixed stone staircase stands before the guttering torch. Walking into it walks Mira up the steps (Kabir trots up
 /// after her); she stops on the landing until the key is let go, then walks on down the far flight. It never moves.
 #[test]
-fn the_staircase_leads_up_and_over_before_the_guttering_torch() {
+fn the_staircase_leads_up_and_over_before_the_windmill() {
     let mut game = EmberLane::new();
     let (stairs_x, half, height, ..) = CRATES[STAIRS];
     assert!(stairs_x + half < LIGHTS[FLICKER].0 - LIGHTS[FLICKER].2 * 0.85, "the stairs stand before the torch's light");

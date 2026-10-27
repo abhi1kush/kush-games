@@ -1,5 +1,5 @@
 //! The one stage: a night street through a rat-infested village, left to right (world units; the ground is y = 0).
-//! Five sections, each starting at a checkpoint: the flickering torch, the braziers, the lantern alley, the crate
+//! Five sections, each starting at a checkpoint: the lamp-sailed windmill, the braziers, the lantern alley, the crate
 //! and the fire pot, the shutter levers — then the lit sanctuary door.
 
 pub const STAGE_END: f32 = 3760.0;
@@ -8,6 +8,7 @@ pub const START_X: f32 = 120.0;
 
 pub const KIND_HEARTH: u8 = 0;
 pub const KIND_TORCH: u8 = 1;
+/// The windmill's lamp-sailed light (its light comes and goes as the sails turn).
 pub const KIND_FLICKER: u8 = 2;
 pub const KIND_BRAZIER: u8 = 3;
 pub const KIND_FIRE_POT: u8 = 4;
@@ -51,8 +52,8 @@ pub const RAT_COUNT: usize = 218;
 pub const CHECKPOINTS: [(f32, u8); 5] = [(START_X, 3), (990.0, 3), (1700.0, 1), (2410.0, 2), (3000.0, 1)];
 
 /// Blocks: start x (centre), half width, height, how far it may slide. The first is Cooper's Yard's crate; the
-/// second is a fixed stone staircase just before the guttering torch (steps up, a landing, steps down; it can't
-/// slide, and light spills over it): Mira walks up it, and from the landing she watches the torch gutter before she
+/// second is a fixed stone staircase just before the windmill (steps up, a landing, steps down; it can't slide, and
+/// light spills over it): Mira walks up it, and from the landing she watches the lit sails come round before she
 /// crosses.
 pub const CRATES: [(f32, f32, f32, f32, f32); 2] = [(2575.0, 15.0, 30.0, 2440.0, 2590.0), (STAIRS_X, STAIRS_HALF, 26.0, STAIRS_X, STAIRS_X)];
 pub const STAIRS_X: f32 = 505.0;

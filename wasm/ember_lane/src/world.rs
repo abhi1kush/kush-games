@@ -25,11 +25,13 @@ pub const DEATH_SECONDS: f32 = 1.8;
 pub const BITE_SECONDS: f32 = 0.85;
 pub const GRAVITY: f32 = 620.0;
 pub const HALF_BODY: f32 = 8.0;
-/// The guttering torch burns steadily until Mira stands on top of the stone wall in front of it; then it goes out
-/// and starts guttering on and off, so she watches the whole cycle from a safe spot.
-/// How long it stays dark when it first goes out, before its first flare.
-pub const FLICKER_FIRST_DARK: f32 = 1.3;
-/// Its cycle: bright, fading, dark, flaring back up.
+/// The windmill before the staircase: a big four-sailed mill whose two opposite sails carry lamps. It stands still
+/// (lit sails low, light on the street) until Mira is up on the stone landing; then the wind takes it. Each half turn
+/// (the lit pair repeats every 180°) is one light cycle: while a lit sail swings low the street under it is lit; as
+/// the lit pair swings level the light leaves the street (fade), it stays dark while they pass the level, and floods
+/// back (flare) as the next lit sail comes down. It starts turning at the start of the fade, so she watches the whole
+/// cycle — light, dark, light — from a safe spot.
+/// Its cycle: lit, fading, dark, flaring back up (seconds; the sum is one half turn).
 pub const FLICKER_ON: f32 = 4.2;
 pub const FLICKER_FADE: f32 = 0.3;
 pub const FLICKER_DARK: f32 = 1.3;
@@ -104,7 +106,7 @@ pub struct World {
     pub climb_stairs: bool,
     /// Just walked up onto the landing: she stays there until the direction key is let go.
     pub stair_hold: bool,
-    /// When the guttering torch woke up (-1: still asleep and dark).
+    /// When the wind took the windmill (-1: still becalmed and lit).
     pub flicker_start: f32,
     pub walked: f32,
     pub sibling_x: f32,
@@ -165,14 +167,28 @@ impl World {
     pub fn is_lit(&self, x: f32) -> bool { self.light_at(x) >= LIT_LEVEL }
 
     pub fn flicker_intensity(&self) -> f32 {
-        if self.flicker_start < 0.0 { return 1.0; } // steady until Mira is up on the wall
-        // it wakes in the dark part of its cycle: FLICKER_FIRST_DARK of darkness, then the flare
+        if self.flicker_start < 0.0 { return 1.0; } // becalmed, lit sail low, until Mira is up on the landing
         let dark_end = FLICKER_ON + FLICKER_FADE + FLICKER_DARK;
-        let phase = (self.time - self.flicker_start + dark_end - FLICKER_FIRST_DARK) % FLICKER_PERIOD;
+        let phase = self.flicker_phase();
         if phase < FLICKER_ON { 1.0 }
         else if phase < FLICKER_ON + FLICKER_FADE { 1.0 - (phase - FLICKER_ON) / FLICKER_FADE }
         else if phase < dark_end { 0.0 }
         else { (phase - dark_end) / FLICKER_FLARE }
+    }
+
+    /// Seconds into the windmill's light cycle (0 = start of the lit stretch). Becalmed it rests at the end of the lit
+    /// stretch, so when the wind takes it the light starts to fade straight away.
+    pub fn flicker_phase(&self) -> f32 {
+        if self.flicker_start < 0.0 { return FLICKER_ON; }
+        let elapsed = self.time - self.flicker_start + FLICKER_ON; // never negative; floor is one wasm op, fmod a library call
+        elapsed - (elapsed / FLICKER_PERIOD).floor() * FLICKER_PERIOD
+    }
+
+    /// Angle of the lit sails from hanging straight down (radians, clockwise on screen). Half a turn per light cycle,
+    /// at a steady speed; a lit sail hangs straight down in the middle of the lit stretch, and the lit pair is level in
+    /// the middle of the dark stretch.
+    pub fn windmill_angle(&self) -> f32 {
+        core::f32::consts::PI * (self.flicker_phase() - FLICKER_ON * 0.5) / FLICKER_PERIOD
     }
 
     pub fn update_lights(&mut self) {

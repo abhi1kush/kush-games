@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CHECKPOINT_X, emptyProgress, GUARD_STATE, guardHint, hintFor, parseProgress, SECTION_NAMES } from './engine';
+import { CHECKPOINT_X, emptyProgress, GUARD_STATE, guardHint, hintFor, parseProgress, SECTION_NAMES, WINDMILL_CYCLE, windmillAngle } from './engine';
 
 describe('Ember Lane helpers', () => {
   it('saves progress and rejects broken saves', () => {
@@ -17,6 +17,14 @@ describe('Ember Lane helpers', () => {
     expect(parseProgress(null)).toBeNull();
   });
 
+  it('turns the windmill half a turn per light cycle: a lit sail hangs low while lit, the lit pair is level while dark', () => {
+    const { on, fade, dark, flare } = WINDMILL_CYCLE;
+    expect(windmillAngle(on / 2)).toBeCloseTo(0);
+    expect(windmillAngle(on / 2 + on + fade + dark + flare) - windmillAngle(on / 2)).toBeCloseTo(Math.PI);
+    expect(Math.abs(windmillAngle(on + fade + dark / 2) - Math.PI / 2)).toBeLessThan(0.1);
+    expect(Math.abs(windmillAngle(on))).toBeLessThan(Math.abs(windmillAngle(on + fade)));
+  });
+
   it('names a section for every checkpoint and teaches each puzzle where it starts', () => {
     expect(SECTION_NAMES.length).toBe(CHECKPOINT_X.length + 1);
     expect(hintFor(CHECKPOINT_X[0], false, 0)).toMatch(/light/);
@@ -24,8 +32,8 @@ describe('Ember Lane helpers', () => {
     expect(hintFor(1760, false, 0)).toMatch(/lantern/i);
     expect(hintFor(1760, true, 0)).toBe('');
     expect(hintFor(470, false, 3, { onCrate: false, potLit: false, crateX: 2575 })).toMatch(/stone steps/i);
-    expect(hintFor(505, false, 3, { onCrate: true, potLit: false, crateX: 2575 })).toMatch(/gutter out and flare/i);
-    expect(hintFor(540, false, 3, { onCrate: false, potLit: false, crateX: 2575 })).toMatch(/while the torch burns/i);
+    expect(hintFor(505, false, 3, { onCrate: true, potLit: false, crateX: 2575 })).toMatch(/windmill turn/i);
+    expect(hintFor(540, false, 3, { onCrate: false, potLit: false, crateX: 2575 })).toMatch(/street is lit/i);
     const yard = { onCrate: false, potLit: false, crateX: 2575 };
     expect(hintFor(2540, false, 2, yard)).toMatch(/climb onto/i);
     expect(hintFor(2575, false, 2, { ...yard, onCrate: true })).toMatch(/fire pot/i);

@@ -23,6 +23,10 @@ export class EmberLane {
     ember_y(): number;
     embers(): number;
     facing(): number;
+    /**
+     * Seconds into the windmill's light cycle (see World::windmill_angle for the sails it turns into).
+     */
+    flicker_phase(): number;
     interact(): void;
     lever(index: number): boolean;
     light_at(x: number): number;
@@ -197,6 +201,7 @@ export interface InitOutput {
     readonly emberlane_ember_y: (a: number) => number;
     readonly emberlane_embers: (a: number) => number;
     readonly emberlane_facing: (a: number) => number;
+    readonly emberlane_flicker_phase: (a: number) => number;
     readonly emberlane_interact: (a: number) => void;
     readonly emberlane_lever: (a: number, b: number) => number;
     readonly emberlane_light_at: (a: number, b: number) => number;

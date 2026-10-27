@@ -16,6 +16,7 @@ export const emberlane_ember_x: (a: number) => number;
 export const emberlane_ember_y: (a: number) => number;
 export const emberlane_embers: (a: number) => number;
 export const emberlane_facing: (a: number) => number;
+export const emberlane_flicker_phase: (a: number) => number;
 export const emberlane_interact: (a: number) => void;
 export const emberlane_lever: (a: number, b: number) => number;
 export const emberlane_light_at: (a: number, b: number) => number;
