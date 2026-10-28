@@ -5,11 +5,13 @@ import GenreFilter, { type GenreChoice } from './components/GenreFilter';
 import HeroBanner from './components/HeroBanner';
 import NavBar from './components/NavBar';
 import PlayerPage from './components/PlayerPage';
-import { buildHomeSections, featuredGame, findGame } from './games/registry';
+import { buildHomeSections, findGame } from './games/registry';
+import { useFeaturedGame } from './featured';
 import { useHashRoute } from './routing';
 
 export default function App() {
   const route = useHashRoute();
+  const featuredGame = useFeaturedGame();
   const sections = useMemo(() => buildHomeSections(), []);
   const [genre, setGenre] = useState<GenreChoice>('all');
   const shownGames = useMemo(

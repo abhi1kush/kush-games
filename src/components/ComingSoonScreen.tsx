@@ -1,9 +1,10 @@
 import type { GameDefinition } from '../games/types';
-import { featuredGame } from '../games/registry';
+import { useFeaturedGame } from '../featured';
 import { homePath, navigate, playPath } from '../routing';
 
 export default function ComingSoonScreen({ game }: { game: GameDefinition }) {
   const { gradientFrom, gradientTo, accentColor, glyph } = game.artwork;
+  const featuredGame = useFeaturedGame();
   return (
     <div className="coming-soon" data-testid="coming-soon"
       style={{ background: `radial-gradient(circle at 50% 30%, ${gradientFrom}cc, ${gradientTo}66 45%, #0b0b0b 80%)` }}>

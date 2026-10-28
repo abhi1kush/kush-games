@@ -1,8 +1,9 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import { DEFAULT_FEATURED_GAME_ID, featurableGames, setFeaturedGame, useFeaturedGameId } from '../featured';
 import { setTheme, THEMES, useTheme } from '../theme';
 
 /**
- * The ⚙ settings button and its popover with the colour-theme picker. Closes on an outside tap/click or Esc
+ * The ⚙ settings button and its popover with the colour-theme picker and the featured (poster) game picker. Closes on an outside tap/click or Esc
  * (Esc is caught first, so on a game page it closes the panel instead of leaving the game).
  */
 export default function ThemeSettings({ className = '' }: { className?: string }) {
@@ -13,6 +14,8 @@ export default function ThemeSettings({ className = '' }: { className?: string }
   const panelRef = useRef<HTMLDivElement>(null);
   const panelId = useId();
   const headingId = useId();
+  const featuredHeadingId = useId();
+  const featuredId = useFeaturedGameId();
 
   useEffect(() => {
     if (!isOpen) return;
@@ -51,20 +54,32 @@ export default function ThemeSettings({ className = '' }: { className?: string }
         </svg>
       </button>
       {isOpen && (
-        <div className="settings__panel" id={panelId} ref={panelRef} role="dialog" aria-labelledby={headingId} data-testid="settings-panel">
-          <h2 className="settings__heading" id={headingId}>Color theme</h2>
-          <div role="radiogroup" aria-labelledby={headingId} className="settings__options">
-            {THEMES.map((option, index) => (
-              <button key={option.id} type="button" role="radio" aria-checked={theme === option.id} tabIndex={theme === option.id ? 0 : -1}
-                className="settings__option" data-theme-option={option.id} data-testid={`theme-${option.id}`}
-                onClick={() => setTheme(option.id)} onKeyDown={event => handleOptionKey(event, index)}>
-                <span className="settings__swatches" aria-hidden="true">
-                  {option.swatches.map(color => <span key={color} style={{ background: color }} />)}
-                </span>
-                <span className="settings__name">{option.name}{theme === option.id && <span className="settings__check" aria-hidden="true"> ✓</span>}</span>
-                <span className="settings__description">{option.description}</span>
-              </button>
-            ))}
+        <div className="settings__panel" id={panelId} ref={panelRef} role="dialog" aria-label="Settings" data-testid="settings-panel">
+          <div className="settings__section">
+            <h2 className="settings__heading" id={headingId}>Color theme</h2>
+            <div role="radiogroup" aria-labelledby={headingId} className="settings__options">
+              {THEMES.map((option, index) => (
+                <button key={option.id} type="button" role="radio" aria-checked={theme === option.id} tabIndex={theme === option.id ? 0 : -1}
+                  className="settings__option" data-theme-option={option.id} data-testid={`theme-${option.id}`}
+                  onClick={() => setTheme(option.id)} onKeyDown={event => handleOptionKey(event, index)}>
+                  <span className="settings__swatches" aria-hidden="true">
+                    {option.swatches.map(color => <span key={color} style={{ background: color }} />)}
+                  </span>
+                  <span className="settings__name">{option.name}{theme === option.id && <span className="settings__check" aria-hidden="true"> ✓</span>}</span>
+                  <span className="settings__description">{option.description}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="settings__section">
+            <h2 className="settings__heading" id={featuredHeadingId}>Featured game</h2>
+            <select className="settings__select" aria-labelledby={featuredHeadingId} data-testid="featured-game-select"
+              value={featuredId} onChange={event => setFeaturedGame(event.target.value)}>
+              {featurableGames().map(game => (
+                <option key={game.id} value={game.id}>{game.title}{game.id === DEFAULT_FEATURED_GAME_ID ? ' (default)' : ''}</option>
+              ))}
+            </select>
+            <p className="settings__hint">The big poster at the top of the home page.</p>
           </div>
         </div>
       )}

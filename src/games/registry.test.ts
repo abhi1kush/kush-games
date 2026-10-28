@@ -14,8 +14,8 @@ describe('game registry', () => {
     games.filter(game => game.status === 'playable').forEach(game => expect(game.component).toBeDefined());
   });
 
-  it('features 2048 and every game is playable (no Coming Soon placeholders left)', () => {
-    expect(featuredGame.id).toBe('2048');
+  it('features Color Trails by default and every game is playable (no Coming Soon placeholders left)', () => {
+    expect(featuredGame.id).toBe('color-trails');
     expect(featuredGame.status).toBe('playable');
     expect(games.filter(game => game.status === 'coming-soon')).toEqual([]);
     expect(games).toHaveLength(24);

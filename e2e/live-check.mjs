@@ -180,7 +180,7 @@ async function waitForBoardChange(page, before) {
   await page.goto(siteUrl, { waitUntil: 'networkidle' });
   await page.waitForSelector('[data-testid=hero]');
   check(await page.locator('.nav__logo').innerText().then(text => /kush\s*games/i.test(text)), 'desktop: nav shows Kush Games logo');
-  check(await page.locator('.hero__title').innerText() === '2048', 'desktop: hero features 2048');
+  check(await page.locator('.hero__title').innerText() === 'Color Trails', 'desktop: hero features Color Trails by default');
   const sectionTitles = await page.locator('.home-section__title').allInnerTexts();
   check(sectionTitles.length === 2 && /^Most liked/.test(sectionTitles[0]) && /^All games/.test(sectionTitles[1]) && await page.locator('[data-testid=row-coming-soon]').count() === 0
     && !(await page.locator('.nav__links').innerText()).includes('Coming Soon'), `desktop: Most liked then All games; no Coming Soon section or nav link (${sectionTitles.join(' | ')})`);

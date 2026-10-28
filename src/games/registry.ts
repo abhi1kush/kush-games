@@ -335,4 +335,5 @@ export function findGame(gameId: string): GameDefinition | undefined {
   return games.find(game => game.id === gameId);
 }
 
-export const featuredGame: GameDefinition = findGame('2048')!;
+/** The default hero (poster) game; the visitor's own pick lives in src/featured.ts. */
+export const featuredGame: GameDefinition = findGame('color-trails')!;
