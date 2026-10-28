@@ -170,8 +170,6 @@ a { color: inherit; }
   linear-gradient(90deg, rgba(var(--background-rgb),0.92) 0%, rgba(var(--background-rgb),0.55) 40%, transparent 70%),
   linear-gradient(0deg, var(--background) 0%, transparent 30%); }
 .hero__content { position: absolute; left: var(--page-gutter); bottom: 22%; width: min(560px, 46vw); z-index: 2; }
-.hero__label { font-weight: 700; letter-spacing: 0.3em; font-size: 13px; color: #ddd; display: flex; align-items: center; gap: 6px; }
-.hero__label-k { color: var(--brand); font-size: 22px; font-weight: 900; letter-spacing: 0; }
 .hero__title { font-size: clamp(56px, 9vw, 130px); margin: 4px 0 8px; font-weight: 900; letter-spacing: -0.04em; line-height: 0.95;
   color: #fff; text-shadow: 0 4px 30px rgba(0,0,0,0.5); overflow-wrap: anywhere; }
 .hero__rank { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: clamp(14px, 1.6vw, 20px); }
@@ -337,7 +335,7 @@ a { color: inherit; }
   .hero__title { font-size: clamp(40px, 12vw, 72px); }
   .hero__fade { background: linear-gradient(0deg, var(--background) 8%, rgba(var(--background-rgb),0.8) 45%, rgba(var(--background-rgb),0.1) 75%); }
   .hero__content { left: 16px; right: 16px; width: auto; bottom: 5%; text-align: center; }
-  .hero__label, .hero__rank, .hero__actions { justify-content: center; }
+  .hero__rank, .hero__actions { justify-content: center; }
   .hero__description { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   .hero__actions .button { flex: 1; justify-content: center; max-width: 180px; }
   .rows { margin-top: 0; }

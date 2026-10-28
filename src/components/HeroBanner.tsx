@@ -29,7 +29,6 @@ export default function HeroBanner({ game }: { game: GameDefinition }) {
       </div>
       <div className="hero__fade" />
       <div className="hero__content">
-        <div className="hero__label"><span className="hero__label-k">K</span> GAME</div>
         <h1 className="hero__title">{game.title}</h1>
         <div className="hero__rank"><span className="hero__top10">TOP<br />10</span> #1 in {genre} Games Today</div>
         <p className="hero__description">{game.description}</p>
