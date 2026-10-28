@@ -123,6 +123,24 @@ a { color: inherit; }
 .hero__tile--128 { background: #edcf72; color: #fff; } .hero__tile--256 { background: #edcc61; color: #fff; }
 .hero__tile--512 { background: #edc850; color: #fff; } .hero__tile--1024 { background: #edc53f; color: #fff; font-size: clamp(10px, 1.8vw, 28px); }
 .hero__tile--2048 { background: #edc22e; color: #fff; font-size: clamp(10px, 1.8vw, 28px); box-shadow: 0 0 24px #edc22e; }
+/* Color Trails (the default featured game): a custom tilted trail board instead of the thumbnail */
+.hero__trails { position: absolute; right: 6%; top: 52%; width: min(34vw, 500px, 62vh); aspect-ratio: 1;
+  transform: translateY(-50%) rotate(-10deg) perspective(900px) rotateY(-16deg); }
+.hero__trails-board { display: block; width: 100%; height: 100%; padding: clamp(6px, 1vw, 14px); box-sizing: border-box;
+  border-radius: 18px; background: linear-gradient(145deg, rgba(28,18,64,0.92), rgba(10,8,28,0.94));
+  box-shadow: 0 30px 80px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.14), 0 0 60px rgba(155,92,255,0.28); }
+.hero__trails-cell { fill: rgba(255,255,255,0.045); stroke: rgba(255,255,255,0.07); stroke-width: 0.25; }
+.hero__trails-path--drawing { stroke-dasharray: 100; animation: hero-trail-draw 3.2s ease-in-out infinite alternate; }
+.hero__trails-dot--target { animation: hero-trail-pulse 1.6s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.hero__trails-cursor { fill: rgba(255,255,255,0.16); stroke: rgba(255,255,255,0.7); stroke-width: 0.5; }
+.hero__trails-orb { position: absolute; border-radius: 50%; width: clamp(14px, 2.2vw, 30px); aspect-ratio: 1; opacity: 0.85;
+  box-shadow: 0 0 22px currentColor, inset -3px -4px 8px rgba(0,0,0,0.3), inset 3px 3px 6px rgba(255,255,255,0.35); }
+.hero__trails-orb--0 { top: -6%; left: 8%; } .hero__trails-orb--1 { top: 12%; right: -8%; width: clamp(10px, 1.5vw, 20px); }
+.hero__trails-orb--2 { bottom: -7%; right: 18%; } .hero__trails-orb--3 { bottom: 20%; left: -9%; width: clamp(10px, 1.4vw, 18px); }
+.hero__trails-orb--4 { top: 44%; right: -12%; width: clamp(8px, 1.1vw, 14px); } .hero__trails-orb--5 { bottom: -12%; left: 22%; width: clamp(8px, 1.2vw, 16px); }
+@keyframes hero-trail-draw { 0%, 15% { stroke-dashoffset: 100; } 85%, 100% { stroke-dashoffset: 0; } }
+@keyframes hero-trail-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.18); } }
+@media (prefers-reduced-motion: reduce) { .hero__trails-path--drawing, .hero__trails-dot--target { animation: none; } }
 /* any featured game other than 2048: its hand-drawn thumbnail as a tilted poster (or its glyph) */
 .hero__poster { position: absolute; right: 4%; top: 50%; width: min(46vw, 640px); transform: translateY(-50%) rotate(-6deg) perspective(900px) rotateY(-14deg);
   border-radius: 14px; overflow: hidden; box-shadow: 0 30px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.12); }
@@ -294,6 +312,7 @@ a { color: inherit; }
   .nav__profile { display: none; }
   .hero { height: 76svh; min-height: 480px; max-height: 680px; }
   .hero__tiles { left: 50%; right: auto; top: 30%; width: 76vw; transform: translate(-50%, -50%) rotate(-10deg); opacity: 0.85; }
+  .hero__trails { left: 50%; right: auto; top: 30%; width: min(68vw, 360px); transform: translate(-50%, -50%) rotate(-8deg); opacity: 0.9; }
   .hero__poster { left: 50%; right: auto; top: 28%; width: 84vw; transform: translate(-50%, -50%) rotate(-5deg); opacity: 0.9; }
   .hero__title { font-size: clamp(40px, 12vw, 72px); }
   .hero__fade { background: linear-gradient(0deg, var(--background) 8%, rgba(var(--background-rgb),0.8) 45%, rgba(var(--background-rgb),0.1) 75%); }

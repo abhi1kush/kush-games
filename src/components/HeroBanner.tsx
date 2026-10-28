@@ -1,3 +1,4 @@
+import ColorTrailsHeroArt from './ColorTrailsHeroArt';
 import { THUMBNAILS } from '../assets/thumbnails';
 import type { GameDefinition } from '../games/types';
 import { infoPath, navigate, playPath } from '../routing';
@@ -16,6 +17,8 @@ export default function HeroBanner({ game }: { game: GameDefinition }) {
               <span key={tileIndex} className={`hero__tile hero__tile--${tileValue}`}>{tileValue}</span>
             ))}
           </div>
+        ) : game.id === 'color-trails' ? (
+          <ColorTrailsHeroArt />
         ) : thumbnail ? (
           <div className="hero__poster" aria-hidden="true">
             <img src={thumbnail} width={320} height={180} alt="" decoding="async" draggable={false} />
