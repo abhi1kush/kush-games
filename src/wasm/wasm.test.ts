@@ -5,7 +5,6 @@ import * as breakoutModule from './breakout/breakout.js';
 import * as checkersModule from './checkers/checkers.js';
 import * as connectFourModule from './connect_four/connect_four.js';
 import * as kushJumpModule from './kush_jump/kush_jump.js';
-import * as jungleStrikeModule from './jungle_strike/jungle_strike.js';
 import * as antarikshModule from './antariksh_defenders/antariksh_defenders.js';
 import * as mithaiModule from './mithai_match/mithai_match.js';
 import * as ludoModule from './ludo/ludo.js';
@@ -18,8 +17,6 @@ import * as emberLaneModule from './ember_lane/ember_lane.js';
 import { decodeMoves } from '../games/checkers/engine';
 import { RenderSlot } from '../games/breakout/engine';
 import { Buttons, Phase as KushJumpPhase, RenderSlot as KushJumpSlot } from '../games/kushjump/engine';
-import { Buttons as StrikeButtons, PLATFORM_COUNT, RenderSlot as StrikeSlot } from '../games/junglestrike/engine';
-import { parseJungleStrikeSave } from '../games/junglestrike/save';
 import { Buttons as AntarikshButtons, RenderSlot as AntarikshSlot, SHIELD_COUNT, SHIELD_HEIGHT, SHIELD_WIDTH } from '../games/antariksh/engine';
 import { parseAntarikshSave } from '../games/antariksh/save';
 import { LEVEL_COUNT as MITHAI_LEVELS, levelInfo as mithaiLevelInfo, RenderSlot as MithaiSlot } from '../games/mithai/engine';
@@ -36,7 +33,6 @@ import { carromRules } from '../games/carrom/online';
 const wasmBytes = (name: string) => readFileSync(new URL(`./${name}/${name}_bg.wasm`, import.meta.url));
 let breakoutMemory: WebAssembly.Memory;
 let kushJumpMemory: WebAssembly.Memory;
-let jungleStrikeMemory: WebAssembly.Memory;
 let antarikshMemory: WebAssembly.Memory;
 let mithaiMemory: WebAssembly.Memory;
 
@@ -49,7 +45,6 @@ beforeAll(() => {
   checkersModule.initSync({ module: wasmBytes('checkers') });
   connectFourModule.initSync({ module: wasmBytes('connect_four') });
   kushJumpMemory = kushJumpModule.initSync({ module: wasmBytes('kush_jump') }).memory;
-  jungleStrikeMemory = jungleStrikeModule.initSync({ module: wasmBytes('jungle_strike') }).memory;
   antarikshMemory = antarikshModule.initSync({ module: wasmBytes('antariksh_defenders') }).memory;
   mithaiMemory = mithaiModule.initSync({ module: wasmBytes('mithai_match') }).memory;
   ludoModule.initSync({ module: wasmBytes('ludo') });
@@ -63,7 +58,7 @@ beforeAll(() => {
 
 describe('wasm bindings', () => {
   it('every game .wasm stays small (< 40 KB raw)', () => {
-    for (const name of ['breakout', 'checkers', 'connect_four', 'kush_jump', 'jungle_strike', 'antariksh_defenders', 'mithai_match', 'ludo', 'snakes_ladders', 'fleet_clash', 'carrom', 'jal_path', 'paani_pour', 'ember_lane']) expect(wasmBytes(name).length, name).toBeLessThan(40 * 1024);
+    for (const name of ['breakout', 'checkers', 'connect_four', 'kush_jump', 'antariksh_defenders', 'mithai_match', 'ludo', 'snakes_ladders', 'fleet_clash', 'carrom', 'jal_path', 'paani_pour', 'ember_lane']) expect(wasmBytes(name).length, name).toBeLessThan(40 * 1024);
   });
 
   it('Jal Path: tiles read zero-copy (8 bytes each), a solved board waters all three houses, an unsolved one runs dry', () => {
@@ -159,38 +154,6 @@ describe('wasm bindings', () => {
     expect(game.phase()).toBe(KushJumpPhase.Cleared);
     expect(game.score()).toBeGreaterThan(5000);
     game.free();
-  });
-
-  it('Jungle Strike: the render layout matches, it runs and shoots, drops a hitch, and the boss can be beaten', () => {
-    expect(jungleStrikeModule.JungleStrike.render_length()).toBe(StrikeSlot.length);
-    expect(jungleStrikeModule.JungleStrike.platform_count()).toBe(PLATFORM_COUNT);
-    const game = new jungleStrikeModule.JungleStrike();
-    const render = new Float32Array(jungleStrikeMemory.buffer, game.render_pointer(), StrikeSlot.length);
-    game.set_view_width(400);
-    game.start();
-    game.debug_set_invincible(true);
-    const startX = render[StrikeSlot.heroX];
-    game.set_input(StrikeButtons.right | StrikeButtons.fire);
-    for (let frame = 0; frame < 30; frame++) game.advance(1 / 60);
-    expect(render[StrikeSlot.heroX]).toBeGreaterThan(startX + 30);
-    expect(render[StrikeSlot.bulletCount]).toBeGreaterThan(0);
-    const beforeHitch = render[StrikeSlot.heroX];
-    game.advance(3);
-    expect(render[StrikeSlot.heroX] - beforeHitch).toBeLessThan(3);
-    game.debug_teleport(3700);
-    game.debug_set_weapon(3);
-    game.set_input(StrikeButtons.fire);
-    for (let frame = 0; frame < 1800 && game.phase() !== 5; frame++) game.advance(1 / 60);
-    expect(game.phase()).toBe(5);
-    expect(game.score()).toBeGreaterThan(15000);
-    game.free();
-  });
-
-  it('Jungle Strike saves are validated', () => {
-    expect(parseJungleStrikeSave({ checkpoint: true, lives: 2, score: 1200, weapon: 2, continues: 1 })).toEqual({ checkpoint: true, lives: 2, score: 1200, weapon: 2, continues: 1 });
-    expect(parseJungleStrikeSave({ checkpoint: true, lives: 0, score: 0, weapon: 0, continues: 0 })).toBeNull();
-    expect(parseJungleStrikeSave({ checkpoint: true, lives: 2, score: 0, weapon: 7, continues: 0 })).toBeNull();
-    expect(parseJungleStrikeSave(null)).toBeNull();
   });
 
   it('Antariksh Defenders: the render layout matches, it counts down, moves, fires, kills and drops a hitch', () => {

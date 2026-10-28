@@ -1,4 +1,4 @@
-/* Compact controls card for the Jungle Strike / Kush Jump start and pause screens (theme colours). */
+/* Compact controls card for the Kush Jump start and pause screens (theme colours). */
 .controls-panel { width: min(100%, 480px); display: flex; flex-direction: column; gap: 5px; padding: 7px 9px; border-radius: 10px; text-align: left;
   background: color-mix(in srgb, var(--surface) 88%, transparent); border: 1px solid var(--surface-2); color: var(--text); font-size: 12.5px; line-height: 1.25;
   box-shadow: 0 4px 14px rgba(0,0,0,0.35); cursor: default; }

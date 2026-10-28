@@ -35,6 +35,8 @@ export default function App() {
         <NavBar onShowGenre={showGenre} hasComingSoon={sections.comingSoonGames.length > 0} />
         <HeroBanner game={featuredGame} />
         <main className="rows">
+          {sections.mostLikedGames.length > 0 && <GameGrid sectionId="most-liked" games={sections.mostLikedGames}
+            title={<>Most liked <span className="home-section__count">{sections.mostLikedGames.length}</span></>} />}
           <GameGrid sectionId="play-now" games={shownGames}
             title={<>{genre === 'all' ? 'All games' : `${genre} games`} <span className="home-section__count">{shownGames.length}</span></>}>
             <GenreFilter genres={sections.genres} totalCount={sections.playableGames.length} selected={genre} onSelect={setGenre} />

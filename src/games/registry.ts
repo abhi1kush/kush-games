@@ -189,18 +189,6 @@ export const games: GameDefinition[] = [
     component: lazy(() => import('./kushjump/KushJump')),
   },
   {
-    id: 'jungle-strike',
-    title: 'Jungle Strike',
-    tagline: 'Run, gun and blast through the jungle to the fortress gate.',
-    description: 'A side-scrolling run-and-gun stage: fight across Green Hell Ridge, aiming in 8 directions while you run, jump or lie flat. Foot soldiers pour in from the edges, turrets and wall cannons track you, snipers pop out of the bushes, and bridges blow up under your boots. Shoot flying capsules for Rapid, Spread or Laser guns, swim the river, reach the checkpoint and destroy the core of the fortified gate. One hit costs a life; 3 lives and 3 continues. The game logic runs in Rust compiled to WebAssembly.',
-    categories: ['Arcade'],
-    status: 'playable',
-    artwork: { gradientFrom: '#0b1a33', gradientTo: '#c8734a', accentColor: '#ffd23f', glyph: '🎯' },
-    controls: 'Arrows/WASD move and aim; Z/J jump; X/K fire (hold); P pause; M mute; on-screen stick and buttons on phones',
-    releaseYear: 2026,
-    component: lazy(() => import('./junglestrike/JungleStrike')),
-  },
-  {
     id: 'antariksh-defenders',
     title: 'Antariksh Defenders',
     tagline: 'Guard the launch pad from Earth orbit to Mars.',
@@ -315,7 +303,12 @@ export const GENRE_FILTERS: GameCategory[] = ['Puzzle', 'Arcade', 'Strategy', 'C
 
 export const genreSlug = (genre: GameCategory) => genre.toLowerCase().replace(/\s+/g, '-');
 
+/** The "Most liked" rail at the top of the home page, in this order (these games stay in All games too). */
+export const MOST_LIKED_IDS = ['2048', 'color-trails', 'flappy-wings', 'paani-pour', 'connect-four', 'memory-match', 'jal-path'];
+
 export interface HomeSections {
+  /** The hand-picked "Most liked" games, shown first. */
+  mostLikedGames: GameDefinition[];
   /** Every playable game, shown once in the "All games" grid. */
   playableGames: GameDefinition[];
   comingSoonGames: GameDefinition[];
@@ -323,10 +316,13 @@ export interface HomeSections {
   genres: { genre: GameCategory; count: number }[];
 }
 
-/** What the home page shows: one grid of all playable games (filterable by genre) and a Coming Soon grid. */
+/** What the home page shows: a Most liked grid, then one grid of all playable games (filterable by genre) and a Coming Soon grid. */
 export function buildHomeSections(allGames: GameDefinition[] = games): HomeSections {
   const playableGames = allGames.filter(game => game.status === 'playable');
   return {
+    mostLikedGames: MOST_LIKED_IDS
+      .map(id => playableGames.find(game => game.id === id))
+      .filter((game): game is GameDefinition => game !== undefined),
     playableGames,
     comingSoonGames: allGames.filter(game => game.status === 'coming-soon'),
     genres: GENRE_FILTERS

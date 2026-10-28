@@ -182,10 +182,10 @@ async function waitForBoardChange(page, before) {
   check(await page.locator('.nav__logo').innerText().then(text => /kush\s*games/i.test(text)), 'desktop: nav shows Kush Games logo');
   check(await page.locator('.hero__title').innerText() === '2048', 'desktop: hero features 2048');
   const sectionTitles = await page.locator('.home-section__title').allInnerTexts();
-  check(sectionTitles.length === 1 && /^All games/.test(sectionTitles[0]) && await page.locator('[data-testid=row-coming-soon]').count() === 0
-    && !(await page.locator('.nav__links').innerText()).includes('Coming Soon'), `desktop: one All games grid; no Coming Soon section or nav link (${sectionTitles.join(' | ')})`);
+  check(sectionTitles.length === 2 && /^Most liked/.test(sectionTitles[0]) && /^All games/.test(sectionTitles[1]) && await page.locator('[data-testid=row-coming-soon]').count() === 0
+    && !(await page.locator('.nav__links').innerText()).includes('Coming Soon'), `desktop: Most liked then All games; no Coming Soon section or nav link (${sectionTitles.join(' | ')})`);
   const playableCount = await page.locator('[data-testid=row-play-now] .card').count();
-  check(playableCount === 15 && await page.locator('.home .card').count() === playableCount && await page.locator('.game-art__soon, .game-art--soon').count() === 0,
+  check(playableCount === 15 && await page.locator('.home .card').count() === playableCount + 7 && await page.locator('.game-art__soon, .game-art--soon').count() === 0,
     `desktop: all ${playableCount} games appear once, none dimmed as Coming Soon`);
   const desktopLayout = await hubLayout(page);
   check(!desktopLayout.hasRowArrows && desktopLayout.scrollers.length === 0 && desktopLayout.pageFits,
