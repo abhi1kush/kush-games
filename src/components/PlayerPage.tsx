@@ -1,4 +1,5 @@
 import { Suspense, useEffect } from 'react';
+import { trackGamePlay } from '../analytics';
 import { findGame } from '../games/registry';
 import { homePath, navigate } from '../routing';
 import ComingSoonScreen from './ComingSoonScreen';
@@ -20,6 +21,9 @@ export default function PlayerPage({ gameId }: { gameId: string }) {
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [game]);
+
+  // Umami: one 'game-play' event per open of a game (keyed on the registry id, not per render/frame).
+  useEffect(() => (game ? trackGamePlay(game.id) : undefined), [game?.id]);
 
   return (
     <div className="player" data-testid="player">
