@@ -6,15 +6,20 @@ type Cell = [number, number];
  * The hub's custom hero art for Color Trails: a tilted 6×6 trail board whose one job is to show the game's
  * core move — a trail being drawn from one dot to its matching partner. A fingertip drags a purple trail
  * from the first dot, around one corner, into the second dot, which pops when the pair connects; then the
- * loop resets. A couple of dim, unconnected pairs hint at the rest of the puzzle without competing for the eye.
+ * loop resets. A few already-finished trails (static) and one dim waiting pair show a puzzle in progress
+ * without competing for the eye.
  * With prefers-reduced-motion the board shows the finished connection, still.
  */
 const HERO_COLOR = 5; // purple
 const HERO_CELLS: Cell[] = [[1, 1], [2, 1], [3, 1], [4, 1], [4, 2], [4, 3], [4, 4]];
+/** Pairs already joined (static, finished trails) and one pair still waiting, so the board reads as a puzzle in progress. */
+const CONNECTED_TRAILS: { color: number; cells: Cell[] }[] = [
+  { color: 1, cells: [[0, 2], [0, 3], [0, 4], [0, 5], [1, 5]] },
+  { color: 4, cells: [[5, 0], [5, 1], [5, 2], [5, 3], [5, 4], [5, 5]] },
+  { color: 3, cells: [[1, 3], [1, 4], [2, 4], [3, 4], [3, 5]] },
+];
 const WAITING_PAIRS: { color: number; ends: [Cell, Cell] }[] = [
-  { color: 1, ends: [[0, 2], [0, 5]] },
-  { color: 4, ends: [[5, 0], [5, 5]] },
-  { color: 2, ends: [[1, 3], [3, 5]] },
+  { color: 0, ends: [[0, 0], [3, 3]] },
 ];
 
 const SIZE = 6;
@@ -60,6 +65,21 @@ export default function ColorTrailsHeroArt() {
           {HERO_CELLS.map(([x, y]) => (
             <rect key={`${x}-${y}`} x={x * 10 + 0.6} y={y * 10 + 0.6} width={8.8} height={8.8} rx={1.6} fill={heroFill} />
           ))}
+        </g>
+        {/* pairs already connected: static, finished trails */}
+        <g className="hero__trails-done">
+          {CONNECTED_TRAILS.map((trail) => trail.cells.map(([x, y]) => (
+            <rect key={`wash-${trail.color}-${x}-${y}`} x={x * 10 + 0.6} y={y * 10 + 0.6} width={8.8} height={8.8} rx={1.6}
+              fill={colorOf(trail.color).fill} opacity={0.16} />
+          )))}
+          <g filter="url(#hero-trail-glow)" fill="none" strokeLinecap="round" strokeLinejoin="round">
+            {CONNECTED_TRAILS.map((trail) => (
+              <path key={trail.color} d={pathOf(trail.cells)} stroke={colorOf(trail.color).fill} strokeWidth={3.4} />
+            ))}
+          </g>
+          {CONNECTED_TRAILS.map((trail) => [trail.cells[0], trail.cells[trail.cells.length - 1]].map((cell, endIndex) => (
+            <Dot key={`${trail.color}-${endIndex}`} color={trail.color} cell={cell} r={3.3} />
+          )))}
         </g>
         {/* dim pairs still waiting to be joined: context, not the focus */}
         <g className="hero__trails-waiting">

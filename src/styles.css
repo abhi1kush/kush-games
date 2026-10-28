@@ -134,6 +134,7 @@ a { color: inherit; }
    so it stays on the trail tip), the target pops and the cells light up (60–86%), then everything fades and resets */
 .hero__trails-path { stroke-dasharray: 100; stroke-dashoffset: 0; animation: hero-trail-draw 4.8s linear infinite; }
 .hero__trails-wash { opacity: 0.2; animation: hero-trail-wash 4.8s ease-out infinite; }
+.hero__trails-done { opacity: 0.78; }
 .hero__trails-waiting { opacity: 0.4; }
 .hero__trails-dot { transform-box: fill-box; transform-origin: center; }
 .hero__trails-dot--start { animation: hero-trail-start 4.8s ease-out infinite; }
