@@ -11,7 +11,7 @@ export default function HeroBanner({ game }: { game: GameDefinition }) {
   return (
     <header className="hero" data-testid="hero" data-featured-game={game.id}>
       <div className="hero__backdrop" style={{ background: `linear-gradient(120deg, #141414 0%, ${gradientFrom} 55%, ${gradientTo} 100%)` }}>
-        {game.id === '2048' ? (
+        {game.id === 'power-of-2' ? (
           <div className="hero__tiles" aria-hidden="true">
             {[2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4, 2, 8, 16, 2048].map((tileValue, tileIndex) => (
               <span key={tileIndex} className={`hero__tile hero__tile--${tileValue}`}>{tileValue}</span>

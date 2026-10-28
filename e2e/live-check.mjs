@@ -195,7 +195,7 @@ async function waitForBoardChange(page, before) {
   check(await hasNoHorizontalOverflow(page), 'desktop: no horizontal page overflow');
   const brokenThumbnails = await loadThumbnails(page);
   check(brokenThumbnails.length === 0, `desktop: every card shows its lazy-loaded SVG thumbnail (${brokenThumbnails.join(', ') || 'all loaded'})`);
-  check(await page.locator('[data-testid=row-play-now] .card .game-art__title').first().innerText() === '2048', 'desktop: card titles are set over the thumbnails');
+  check(await page.locator('[data-testid=row-play-now] .card .game-art__title').first().textContent() === 'Power of 2', 'desktop: card titles are set over the thumbnails');
 
   // genre chips filter the grid
   await page.getByTestId('filter-arcade').click();
@@ -231,27 +231,30 @@ async function waitForBoardChange(page, before) {
 
   await page.getByRole('button', { name: /More Info/ }).click();
   await page.waitForSelector('[data-testid=modal]');
-  check(await page.locator('[data-testid=modal] h2').innerText() === '2048', 'desktop: More Info opens detail modal');
+  check(await page.locator('[data-testid=modal] h2').innerText() === 'Color Trails', 'desktop: More Info opens detail modal');
   await page.keyboard.press('Escape');
   await page.waitForTimeout(200);
   check(await page.locator('[data-testid=modal]').count() === 0, 'desktop: Escape closes modal');
 
-  await page.locator('.hero').getByRole('button', { name: /^▶?\s*Play$/ }).click();
+  // Power of 2 (renamed from 2048): an old #/play/2048 bookmark opens it and the URL becomes #/play/power-of-2
+  await page.goto(`${siteUrl}#/play/2048`);
   await page.waitForSelector('[data-testid=board] .game-2048__tile');
-  check(page.url().endsWith('#/play/2048'), `desktop: Play opens #/play/2048 (${page.url()})`);
+  check(page.url().endsWith('#/play/power-of-2'), `desktop: old #/play/2048 link opens Power of 2 at #/play/power-of-2 (${page.url()})`);
+  check(await page.locator('.player__title').innerText() === 'Power of 2' && await page.locator('.game-2048 h1').innerText() === 'Power of 2',
+    'desktop: player bar and game header say Power of 2');
   let boardChanged = false;
   for (const key of ['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown']) {
     const before = await boardSnapshot(page);
     await page.keyboard.press(key);
     if (await waitForBoardChange(page, before)) { boardChanged = true; break; }
   }
-  check(boardChanged, 'desktop: 2048 responds to arrow keys');
+  check(boardChanged, 'desktop: Power of 2 responds to arrow keys');
   for (const key of ['ArrowLeft', 'ArrowDown', 'ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowDown']) {
     await page.keyboard.press(key); await page.waitForTimeout(120);
   }
   await page.waitForTimeout(400);
-  await page.screenshot({ path: `${screenshotDirectory}/kush-games-2048.png` });
-  check(await hasNoHorizontalOverflow(page), 'desktop: no horizontal overflow on 2048 page');
+  await page.screenshot({ path: `${screenshotDirectory}/kush-games-power-of-2.png` });
+  check(await hasNoHorizontalOverflow(page), 'desktop: no horizontal overflow on Power of 2 page');
   await page.getByTestId('back').click();
   await page.waitForSelector('[data-testid=player]', { state: 'detached' });
   check(true, 'desktop: Back returns to home');
@@ -429,7 +432,7 @@ async function waitForBoardChange(page, before) {
   await page.screenshot({ path: `${screenshotDirectory}/kush-games-thumbs-mobile.png`, fullPage: true });
   await page.getByTestId('filter-puzzle').tap();
   const puzzleIds = await page.locator('[data-testid=row-play-now] .card').evaluateAll(cards => cards.map(card => card.dataset.testid));
-  check(puzzleIds.includes('card-2048') && !puzzleIds.includes('card-snake') && (await hubLayout(page)).outside.length === 0,
+  check(puzzleIds.includes('card-power-of-2') && !puzzleIds.includes('card-snake') && (await hubLayout(page)).outside.length === 0,
     `mobile: Puzzle chip filters the grid (${puzzleIds.length} games)`);
   await page.getByTestId('filter-all').tap();
 
@@ -440,10 +443,10 @@ async function waitForBoardChange(page, before) {
   check(await hasNoHorizontalOverflow(page), 'mobile: no overflow with modal open');
   await page.locator('.modal__close').tap();
 
-  await page.goto(`${siteUrl}#/play/2048`);
+  await page.goto(`${siteUrl}#/play/power-of-2`);
   await page.waitForSelector('[data-testid=board] .game-2048__tile');
   const boardBox = await page.getByTestId('board').boundingBox();
-  check(boardBox.x >= 0 && boardBox.x + boardBox.width <= 375, `mobile: 2048 board fits screen (width=${Math.round(boardBox.width)})`);
+  check(boardBox.x >= 0 && boardBox.x + boardBox.width <= 375, `mobile: Power of 2 board fits screen (width=${Math.round(boardBox.width)})`);
   const centerX = boardBox.x + boardBox.width / 2;
   const centerY = boardBox.y + boardBox.height / 2;
   const swipes = [[-1, 0], [0, -1], [1, 0], [0, 1]];
@@ -458,9 +461,9 @@ async function waitForBoardChange(page, before) {
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
     if (await waitForBoardChange(page, before)) { swipeWorked = true; break; }
   }
-  check(swipeWorked, 'mobile: 2048 responds to swipe');
-  check(await hasNoHorizontalOverflow(page), 'mobile: no horizontal overflow on 2048 page');
-  await page.screenshot({ path: `${screenshotDirectory}/kush-games-2048-mobile.png` });
+  check(swipeWorked, 'mobile: Power of 2 responds to swipe');
+  check(await hasNoHorizontalOverflow(page), 'mobile: no horizontal overflow on Power of 2 page');
+  await page.screenshot({ path: `${screenshotDirectory}/kush-games-power-of-2-mobile.png` });
 
   // Snake on mobile
   await page.goto(`${siteUrl}#/play/snake`);
@@ -748,10 +751,10 @@ const sameValues = (first, second, keys) => keys.every(key => first[key] === sec
   const pageErrors = [];
   page.on('pageerror', error => pageErrors.push(String(error)));
 
-  // 2048: restored directly after a reload
-  await page.goto(`${siteUrl}#/play/2048`, { waitUntil: 'networkidle' });
+  // Power of 2 (was 2048): restored directly after a reload
+  await page.goto(`${siteUrl}#/play/power-of-2`, { waitUntil: 'networkidle' });
   await page.waitForSelector('[data-testid=board] .game-2048__tile');
-  check(await savedGame(page, '2048') === null, 'save 2048: an untouched new game is not saved');
+  check(await savedGame(page, 'power-of-2') === null, 'save Power of 2: an untouched new game is not saved');
   for (const key of ['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'ArrowLeft', 'ArrowDown']) {
     await page.keyboard.press(key);
     await page.waitForTimeout(90);
@@ -759,24 +762,40 @@ const sameValues = (first, second, keys) => keys.every(key => first[key] === sec
   await page.waitForTimeout(250);
   const board2048 = await boardSnapshot(page);
   const score2048 = await page.getByTestId('game-2048').getAttribute('data-score');
-  const saved2048 = await savedGame(page, '2048');
+  const saved2048 = await savedGame(page, 'power-of-2');
   check(saved2048?.version === 1 && saved2048.data.tiles.length >= 3 && String(saved2048.data.score) === score2048,
-    `save 2048: moves are saved under kush-games:2048:save:v1 (score ${score2048}, ${saved2048?.data.tiles.length} tiles)`);
+    `save Power of 2: moves are saved under kush-games:power-of-2:save:v1 (score ${score2048}, ${saved2048?.data.tiles.length} tiles)`);
   await page.reload({ waitUntil: 'networkidle' });
   await page.waitForSelector('[data-testid=board] .game-2048__tile');
   await page.waitForTimeout(250);
   check(await boardSnapshot(page) === board2048 && await page.getByTestId('game-2048').getAttribute('data-score') === score2048,
-    `save 2048: board and score are the same after reload (score ${score2048})`);
+    `save Power of 2: board and score are the same after reload (score ${score2048})`);
   await page.getByTestId('back').click();
   await page.waitForSelector('[data-testid=hero]');
-  check(await page.locator('[data-testid=row-play-now] [data-testid=continue-2048]').isVisible(), 'save home: 2048 card shows a Continue badge');
+  check(await page.locator('[data-testid=row-play-now] [data-testid=continue-power-of-2]').isVisible(), 'save home: Power of 2 card shows a Continue badge');
   check(await page.locator('[data-testid=row-play-now] [data-testid=continue-blocks]').count() === 0, 'save home: no badge for a game without a save');
-  await page.goto(`${siteUrl}#/play/2048`, { waitUntil: 'networkidle' });
+  await page.goto(`${siteUrl}#/play/power-of-2`, { waitUntil: 'networkidle' });
   await page.waitForSelector('[data-testid=board] .game-2048__tile');
-  check(await boardSnapshot(page) === board2048, 'save 2048: board is restored after Back and reopening');
+  check(await boardSnapshot(page) === board2048, 'save Power of 2: board is restored after Back and reopening');
   await page.getByRole('button', { name: 'New Game' }).click();
-  check(await savedGame(page, '2048') === null && await page.locator('.game-2048__tile').count() === 2
-    && await page.getByTestId('game-2048').getAttribute('data-score') === '0', 'save 2048: New Game clears the save and starts fresh');
+  check(await savedGame(page, 'power-of-2') === null && await page.locator('.game-2048__tile').count() === 2
+    && await page.getByTestId('game-2048').getAttribute('data-score') === '0', 'save Power of 2: New Game clears the save and starts fresh');
+
+  // a save and best score left under the old 2048 keys are moved to the power-of-2 keys on startup
+  await page.getByTestId('back').click();
+  await page.waitForSelector('[data-testid=hero]');
+  await page.evaluate(([save]) => {
+    for (const key of ['kush-games:power-of-2:save:v1', 'kush-games-power-of-2-best']) localStorage.removeItem(key);
+    localStorage.setItem('kush-games:2048:save:v1', save); localStorage.setItem('2048-best', '4321');
+    window.location.hash = '#/play/2048';
+    window.location.reload();
+  }, [JSON.stringify({ version: 1, savedAt: Date.now(), data: { tiles: [{ value: 64, row: 0, col: 0 }, { value: 8, row: 3, col: 3 }], score: 300, won: false, over: false, keepPlaying: false } })]);
+  await page.waitForLoadState('networkidle');
+  await page.waitForSelector('[data-testid=board] .game-2048__tile');
+  check(page.url().endsWith('#/play/power-of-2') && await page.getByTestId('game-2048').getAttribute('data-score') === '300'
+    && await page.evaluate(() => localStorage.getItem('kush-games:2048:save:v1') === null && localStorage.getItem('kush-games-power-of-2-best') === '4321'),
+    'save Power of 2: an old 2048 save and best score are migrated (old link → new id)');
+  await page.getByRole('button', { name: 'New Game' }).click();
 
   // Snake: a running game comes back paused with a "Saved game restored" overlay
   await page.goto(`${siteUrl}#/play/snake`, { waitUntil: 'networkidle' });

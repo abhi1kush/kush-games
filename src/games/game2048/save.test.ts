@@ -7,7 +7,7 @@ const roundTrip = (state: GameState) => {
   return saved ? restore2048(saved) : null;
 };
 
-describe('2048 save', () => {
+describe('Power of 2 save', () => {
   const state: GameState = { tiles: fromGrid([[2, 0, 0, 4], [0, 8, 0, 0], [0, 0, 16, 0], [2048, 0, 0, 2]]), score: 2500, won: true, over: false, keepPlaying: true };
 
   it('round-trips the board, score and win / keep-playing state', () => {

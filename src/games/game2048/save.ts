@@ -1,4 +1,4 @@
-/** Saving and restoring an in-progress 2048 game (see ../persistence.ts). */
+/** Saving and restoring an in-progress Power of 2 game (see ../persistence.ts). */
 import { createSaveSlot, isInteger, isRecord } from '../persistence';
 import { GameState, newId, SIZE } from './game';
 
@@ -49,4 +49,4 @@ export function restore2048(saved: Saved2048): GameState {
   };
 }
 
-export const create2048SaveSlot = () => createSaveSlot({ gameId: '2048', version: GAME_2048_SAVE_VERSION, parse: parse2048Save });
+export const create2048SaveSlot = () => createSaveSlot({ gameId: 'power-of-2', version: GAME_2048_SAVE_VERSION, parse: parse2048Save });

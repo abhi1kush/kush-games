@@ -18,11 +18,11 @@ describe('analytics', () => {
     vi.useFakeTimers();
     g.window = {};
     const track = vi.fn();
-    trackEvent('game-play', { game: '2048' }, 1000, 100);
+    trackEvent('game-play', { game: 'power-of-2' }, 1000, 100);
     vi.advanceTimersByTime(300);
     g.window.umami = { track };
     vi.advanceTimersByTime(100);
-    expect(track).toHaveBeenCalledWith('game-play', { game: '2048' });
+    expect(track).toHaveBeenCalledWith('game-play', { game: 'power-of-2' });
 
     g.window = {};
     expect(() => { trackEvent('x', {}, 500, 100); vi.advanceTimersByTime(2000); }).not.toThrow();

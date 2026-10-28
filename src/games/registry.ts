@@ -8,14 +8,14 @@ import type { GameCategory, GameDefinition } from './types';
 
 export const games: GameDefinition[] = [
   {
-    id: '2048',
-    title: '2048',
-    tagline: 'Slide. Merge. Reach 2048.',
+    id: 'power-of-2',
+    title: 'Power of 2',
+    tagline: 'Slide. Merge. Double up to 2048.',
     description:
-      'Slide numbered tiles on a 4×4 grid. When two tiles with the same number touch, they merge into one. Keep merging until you build the legendary 2048 tile — or keep going for a high score.',
+      'Slide numbered tiles on a 4×4 grid. When two tiles with the same number touch, they merge into one, doubling its power of 2. Keep merging until you build the 2048 tile — or keep going for a high score.',
     categories: ['Puzzle'],
     status: 'playable',
-    artwork: { gradientFrom: '#f59563', gradientTo: '#edc22e', accentColor: '#776e65', glyph: '2048' },
+    artwork: { gradientFrom: '#f59563', gradientTo: '#edc22e', accentColor: '#776e65', glyph: '2ⁿ' },
     controls: 'Arrow keys / WASD, or swipe on mobile',
     releaseYear: 2026,
     component: lazy(() => import('./game2048/Game2048')),
@@ -304,7 +304,7 @@ export const GENRE_FILTERS: GameCategory[] = ['Puzzle', 'Arcade', 'Strategy', 'C
 export const genreSlug = (genre: GameCategory) => genre.toLowerCase().replace(/\s+/g, '-');
 
 /** The "Most liked" rail at the top of the home page, in this order (these games stay in All games too). */
-export const MOST_LIKED_IDS = ['2048', 'color-trails', 'flappy-wings', 'paani-pour', 'connect-four', 'memory-match', 'jal-path'];
+export const MOST_LIKED_IDS = ['power-of-2', 'color-trails', 'flappy-wings', 'paani-pour', 'connect-four', 'memory-match', 'jal-path'];
 
 export interface HomeSections {
   /** The hand-picked "Most liked" games, shown first. */
@@ -331,8 +331,15 @@ export function buildHomeSections(allGames: GameDefinition[] = games): HomeSecti
   };
 }
 
+/** Old game ids that were renamed: old id → current id. Old links, saves and featured picks keep working through these. */
+export const RENAMED_GAME_IDS: Readonly<Record<string, string>> = { '2048': 'power-of-2' };
+
+/** The current id for a game id (an old, renamed id maps to its new one). */
+export const currentGameId = (gameId: string) => (Object.prototype.hasOwnProperty.call(RENAMED_GAME_IDS, gameId) ? RENAMED_GAME_IDS[gameId] : gameId);
+
 export function findGame(gameId: string): GameDefinition | undefined {
-  return games.find(game => game.id === gameId);
+  const id = currentGameId(gameId);
+  return games.find(game => game.id === id);
 }
 
 /** The default hero (poster) game; the visitor's own pick lives in src/featured.ts. */

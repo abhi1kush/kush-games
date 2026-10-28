@@ -27,7 +27,7 @@ export const isFeaturableId = (value: unknown): value is string =>
   typeof value === 'string' && findGame(value)?.status === 'playable';
 
 export function parseFeaturedSave(data: unknown): { gameId: string } | null {
-  return isRecord(data) && isFeaturableId(data.gameId) ? { gameId: data.gameId } : null;
+  return isRecord(data) && isFeaturableId(data.gameId) ? { gameId: findGame(data.gameId)!.id } : null; // an old, renamed id becomes the new one
 }
 
 export const createFeaturedSlot = (storage?: KeyValueStorage | null) =>
@@ -41,8 +41,10 @@ export const loadFeaturedGameId = (slot = featuredSlot) => slot.load()?.gameId ?
 let currentId = loadFeaturedGameId();
 const listeners = new Set<() => void>();
 
-export function setFeaturedGame(gameId: string) {
-  if (!isFeaturableId(gameId) || gameId === currentId) return;
+export function setFeaturedGame(requestedId: string) {
+  if (!isFeaturableId(requestedId)) return;
+  const gameId = findGame(requestedId)!.id;
+  if (gameId === currentId) return;
   currentId = gameId;
   featuredSlot.save({ gameId }); // saved even when it's the default, so an explicit choice survives a future default change
   listeners.forEach(listener => listener());

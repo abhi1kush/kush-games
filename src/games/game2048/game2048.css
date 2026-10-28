@@ -4,7 +4,7 @@
 .game-2048__container { --size: max(240px, min(92vw, 480px, calc(100svh - 250px))); --gap: calc(var(--size) * 0.03);
   --cell: calc((var(--size) - var(--gap) * 5) / 4); width: var(--size); padding: 16px 0 24px; }
 .game-2048__header { display: flex; justify-content: space-between; align-items: center; }
-.game-2048 h1 { font-size: clamp(44px, 12vw, 72px); margin: 0; color: #776e65; line-height: 1.1; }
+.game-2048 h1 { font-size: clamp(28px, 8.5vw, 50px); white-space: nowrap; margin: 0; color: #776e65; line-height: 1.1; }
 .game-2048__scores { display: flex; gap: 6px; }
 .game-2048__score { background: #bbada0; color: #fff; border-radius: 6px; padding: 6px 12px; text-align: center; font-weight: 700; font-size: 20px; min-width: 64px; }
 .game-2048__score span { display: block; font-size: 12px; text-transform: uppercase; color: #eee4da; }

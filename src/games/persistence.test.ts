@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { clearRemovedGameData, createSaveSlot, hasSavedGame, KeyValueStorage, parseEnvelope, saveKey } from './persistence';
+import { clearRemovedGameData, migrateRenamedGameData, createSaveSlot, hasSavedGame, KeyValueStorage, parseEnvelope, saveKey } from './persistence';
 
 function memoryStorage(): KeyValueStorage & { items: Map<string, string> } {
   const items = new Map<string, string>();
@@ -128,5 +128,27 @@ describe('save slots', () => {
     storage.setItem('kush-games:snake:save:v1', '{}');
     clearRemovedGameData(storage);
     expect([...storage.items.keys()]).toEqual(['kush-games:snake:save:v1']);
+  });
+
+  it('moves a renamed game\'s save and best score to its new keys (2048 → power-of-2)', () => {
+    const storage = memoryStorage();
+    storage.setItem('kush-games:2048:save:v1', '{"version":1}');
+    storage.setItem('2048-best', '5000');
+    storage.setItem('kush-games:snake:save:v1', '{}');
+    migrateRenamedGameData(storage);
+    expect(storage.getItem('kush-games:power-of-2:save:v1')).toBe('{"version":1}');
+    expect(storage.getItem('kush-games-power-of-2-best')).toBe('5000');
+    expect(storage.getItem('kush-games:2048:save:v1')).toBeNull();
+    expect(storage.getItem('2048-best')).toBeNull();
+    expect(storage.getItem('kush-games:snake:save:v1')).toBe('{}');
+  });
+
+  it('never overwrites newer data already under the new key', () => {
+    const storage = memoryStorage();
+    storage.setItem('kush-games:2048:save:v1', 'old');
+    storage.setItem('kush-games:power-of-2:save:v1', 'new');
+    migrateRenamedGameData(storage);
+    expect(storage.getItem('kush-games:power-of-2:save:v1')).toBe('new');
+    expect(storage.getItem('kush-games:2048:save:v1')).toBeNull();
   });
 });

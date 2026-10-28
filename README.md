@@ -9,7 +9,7 @@ Built with **React + TypeScript + Vite**; Breakout, Connect Four, Checkers, Kush
 ## Features
 
 - Top nav with the **Kush Games** logo and quick links (genre links filter the grid; the links wrap instead of scrolling)
-- Hero banner featuring **2048** with *Play* and *More Info*
+- Hero banner featuring a poster game (Color Trails by default; pick another in ⚙ settings) with *Play* and *More Info*
 - **All games**: every playable game once, in a responsive CSS grid (`auto-fill`, min card width 190px; 140px on phones) — about 2 columns at 375px, 3–4 on tablets, 5–6 on desktop. Genre chips (All / Puzzle / Arcade / Strategy / Classic Board, with counts) filter it. A **Coming Soon** grid (and nav link) appears below only while some game is still a placeholder — right now there are none.
 - Cards scale up on hover and show the title, tagline and genres
 - Game detail modal (`#/title/<id>`) with "More Like This"
@@ -24,7 +24,7 @@ Built with **React + TypeScript + Vite**; Breakout, Connect Four, Checkers, Kush
 
 | Game | Status |
 | --- | --- |
-| 2048 | ✅ Playable |
+| Power of 2 (slide and merge tiles to reach 2048) | ✅ Playable |
 | Snake | ✅ Playable |
 | Blocks | ✅ Playable |
 | Chess (online with a friend, or pass and play) | ✅ Playable |

@@ -37,7 +37,7 @@ export interface SaveSlot<Data> {
 
 /** Saves for the current versions; the home page uses this to show "Continue" badges. */
 export const SAVE_VERSIONS: Record<string, number> = {
-  '2048': 1, snake: 1, blocks: 1, chess: 1, minesweeper: 1, sudoku: 1, 'tic-tac-toe': 1, 'memory-match': 1, 'flappy-wings': 1,
+  'power-of-2': 1, snake: 1, blocks: 1, chess: 1, minesweeper: 1, sudoku: 1, 'tic-tac-toe': 1, 'memory-match': 1, 'flappy-wings': 1,
   'arrow-out': 3, 'color-trails': 1, breakout: 1, 'connect-four': 1, checkers: 1, 'kush-jump': 1, 'antariksh-defenders': 1, 'mithai-match': 1, ludo: 1, 'snakes-ladders': 1, 'fleet-clash': 1, carrom: 1, 'jal-path': 1, 'paani-pour': 1, 'ember-lane': 1,
 };
 
@@ -46,6 +46,24 @@ export const REMOVED_GAME_STORAGE_KEYS: readonly string[] = ['kush-games:solitai
 
 export function clearRemovedGameData(storage: KeyValueStorage | null = browserStorage()) {
   for (const key of REMOVED_GAME_STORAGE_KEYS) { try { storage?.removeItem(key); } catch { /* storage unavailable */ } }
+}
+
+/** Storage keys of renamed games (2048 → Power of 2, id `power-of-2`): old key → new key, moved once on startup. */
+export const RENAMED_GAME_STORAGE_KEYS: readonly (readonly [string, string])[] = [
+  ['kush-games:2048:save:v1', 'kush-games:power-of-2:save:v1'],
+  ['2048-best', 'kush-games-power-of-2-best'],
+];
+
+/** Move a renamed game's saves to its new keys so progress isn't lost. A value already under the new key wins. */
+export function migrateRenamedGameData(storage: KeyValueStorage | null = browserStorage()) {
+  for (const [oldKey, newKey] of RENAMED_GAME_STORAGE_KEYS) {
+    try {
+      const value = storage?.getItem(oldKey);
+      if (value === null || value === undefined) continue;
+      if (storage!.getItem(newKey) === null) storage!.setItem(newKey, value);
+      storage!.removeItem(oldKey);
+    } catch { /* storage unavailable */ }
+  }
 }
 
 /** Games whose online room is saved in a second slot (so it doesn't replace the local game's save). */

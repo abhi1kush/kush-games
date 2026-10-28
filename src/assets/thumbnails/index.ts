@@ -1,5 +1,5 @@
 /** Hand-authored SVG card thumbnails (320×180 scenes; the title is drawn over them in HTML). */
-import thumb2048 from './2048.svg';
+import thumbPowerOf2 from './power-of-2.svg';
 import thumbSnake from './snake.svg';
 import thumbBlocks from './blocks.svg';
 import thumbMinesweeper from './minesweeper.svg';
@@ -25,7 +25,7 @@ import thumbAntarikshDefenders from './antariksh-defenders.svg';
 import thumbMithaiMatch from './mithai-match.svg';
 
 export const THUMBNAILS: Record<string, string> = {
-  '2048': thumb2048,
+  'power-of-2': thumbPowerOf2,
   'snake': thumbSnake,
   'blocks': thumbBlocks,
   'minesweeper': thumbMinesweeper,

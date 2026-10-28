@@ -5,7 +5,7 @@ import { Direction, GameState, move, newGame } from './game';
 import { create2048SaveSlot, restore2048, serialize2048 } from './save';
 import './game2048.css';
 
-const BEST_SCORE_STORAGE_KEY = '2048-best';
+const BEST_SCORE_STORAGE_KEY = 'kush-games-power-of-2-best'; // was '2048-best'; moved on startup by migrateRenamedGameData
 const MINIMUM_SWIPE_DISTANCE = 24;
 const KEY_TO_DIRECTION: Record<string, Direction> = {
   ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
@@ -103,7 +103,7 @@ export default function Game2048() {
     <div className="game-2048" data-testid="game-2048" data-score={gameState.score}>
       <div className="game-2048__container">
         <header className="game-2048__header">
-          <h1>2048</h1>
+          <h1>Power of 2</h1>
           <div className="game-2048__scores">
             <div className="game-2048__score" data-testid="score"><span>Score</span>{gameState.score}</div>
             <div className="game-2048__score"><span>Best</span>{bestScore}</div>
