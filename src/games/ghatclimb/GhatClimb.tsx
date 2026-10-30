@@ -5,9 +5,9 @@
 import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { createSaveSlot, SAVE_VERSIONS } from '../persistence';
 import { MuteButton, unlockAudio, useSharedMute } from '../sharedSound';
-import { BUTTON, EVENT, engineMood, FUEL_MAX, GhatClimb, loadGhatEngine, parseRun, PHASE, type RunSave } from './engine';
+import { BUTTON, EVENT, engineMood, FUEL_MAX, GhatClimb, loadGhatEngine, parseRun, PHASE, type RunSave, TOP_SPEED } from './engine';
 import { Renderer } from './render';
-import { playGhatSound, type GhatSound } from './sounds';
+import { EngineSound, playGhatSound, type GhatSound } from './sounds';
 import '../shared.css';
 import '../online/online.css';
 import './ghat.css';
@@ -52,7 +52,7 @@ function GhatClimbScreens() {
   const hudRef = useRef(hud);
   const frameRef = useRef(0);
   const lastRef = useRef(0);
-  const engineAtRef = useRef(0);
+  const engineSoundRef = useRef(new EngineSound());
   const saveAtRef = useRef(0);
   const gaugeRef = useRef<HTMLSpanElement>(null);
   const debugRef = useRef<HTMLPreElement>(null);
@@ -132,10 +132,6 @@ function GhatClimbScreens() {
           if (events & EVENT.crash) sound('crash');
           if (events & EVENT.finish) sound('finish');
           if (events & EVENT.stranded) sound('crash');
-          if ((keysRef.current | touchRef.current) & BUTTON.gas && now - engineAtRef.current > 140) {
-            engineAtRef.current = now;
-            sound('engine');
-          }
           if (game.phase() !== PHASE.driving) {
             slot.clear();
             rememberBest(game.score());
@@ -146,6 +142,15 @@ function GhatClimbScreens() {
             slot.save({ x: game.x(), fuel: game.fuel(), coins: game.coins() });
           }
         }
+        const buttons = keysRef.current | touchRef.current;
+        engineSoundRef.current.update({
+          running: !pausedRef.current && game.phase() === PHASE.driving && game.fuel() > 0,
+          gas: (buttons & BUTTON.gas) !== 0 && game.fuel() > 0,
+          speed: Math.min(1, Math.abs(game.speed()) / TOP_SPEED),
+          strain: game.strain(),
+          freeRevving: (game.contact() & 1) === 0,
+          muted: isMutedRef.current,
+        }, elapsed / 1000);
         draw(now);
         readout();
         publish();
@@ -155,8 +160,12 @@ function GhatClimbScreens() {
       frameRef.current = requestAnimationFrame(tick);
     };
     frameRef.current = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frameRef.current);
-  }, [draw, publish, readout, rememberBest, slot, sound]);
+    const engine = engineSoundRef.current;
+    return () => {
+      cancelAnimationFrame(frameRef.current);
+      engine.dispose();
+    };
+  }, [draw, isMutedRef, publish, readout, rememberBest, slot, sound]);
 
   useEffect(() => {
     const stage = stageRef.current;

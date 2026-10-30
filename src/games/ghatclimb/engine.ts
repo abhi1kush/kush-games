@@ -16,6 +16,10 @@ export const WHEEL_R = 6.5;
 export const REAR = -16;
 export const FRONT = 15.5;
 export const AXLE = -5;
+/** Must match TOP_SPEED in world.rs: the engine note reaches its highest revs here. */
+export const TOP_SPEED = 110;
+/** Must match ROOF in world.rs: the roof is where a flip is detected. */
+export const ROOF = 11.5;
 export const PICKUP_STRIDE = 4;
 
 export const PHASE = { ready: 0, driving: 1, crashed: 2, stranded: 3, finished: 4 } as const;
