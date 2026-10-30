@@ -66,7 +66,7 @@ export const games: GameDefinition[] = [
     artwork: { gradientFrom: '#1e3c72', gradientTo: '#2a5298', accentColor: '#9fd3ff', glyph: '9' },
     controls: 'Tap a cell, then a number; keys 1–9, arrows, Backspace, N for notes, Ctrl+Z undo',
     releaseYear: 2026,
-    component: lazy(() => import('./sudoku/Sudoku')),
+    component: lazy(() => import('./sudoku/Sudoku.tsx')),
   },
   {
     id: 'chess',
