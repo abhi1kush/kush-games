@@ -18,14 +18,14 @@ describe('game registry', () => {
     expect(featuredGame.id).toBe('color-trails');
     expect(featuredGame.status).toBe('playable');
     expect(games.filter(game => game.status === 'coming-soon')).toEqual([]);
-    expect(games).toHaveLength(24);
+    expect(games).toHaveLength(25);
   });
 
   it('builds one All games grid with genre filters and an empty Coming Soon list (each game shown once)', () => {
     const { mostLikedGames, playableGames, comingSoonGames, genres } = buildHomeSections();
     expect(mostLikedGames.map(game => game.title)).toEqual(['Power of 2', 'Color Trails', 'Flappy Wings', 'Paani Pour', 'Connect Four', 'Memory Match', 'Jal Path']);
     expect(findGame('jungle-strike')).toBeUndefined();
-    expect(playableGames.map(game => game.id)).toEqual(['power-of-2', 'snake', 'blocks', 'minesweeper', 'sudoku', 'chess', 'tic-tac-toe', 'memory-match', 'flappy-wings', 'breakout', 'arrow-out', 'color-trails', 'connect-four', 'checkers', 'kush-jump', 'antariksh-defenders', 'mithai-match', 'ludo', 'snakes-ladders', 'fleet-clash', 'carrom', 'jal-path', 'paani-pour', 'ember-lane']);
+    expect(playableGames.map(game => game.id)).toEqual(['power-of-2', 'snake', 'blocks', 'minesweeper', 'sudoku', 'chess', 'tic-tac-toe', 'memory-match', 'flappy-wings', 'breakout', 'arrow-out', 'color-trails', 'connect-four', 'checkers', 'kush-jump', 'antariksh-defenders', 'mithai-match', 'ludo', 'snakes-ladders', 'fleet-clash', 'carrom', 'jal-path', 'paani-pour', 'ember-lane', 'pralay-run']);
     expect(comingSoonGames).toEqual([]);
     expect(genres.map(entry => entry.genre)).toEqual(['Puzzle', 'Arcade', 'Strategy', 'Classic Board']);
     expect(genres.find(entry => entry.genre === 'Puzzle')!.count).toBe(playableGames.filter(game => game.categories.includes('Puzzle')).length);

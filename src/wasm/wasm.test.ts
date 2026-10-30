@@ -14,6 +14,8 @@ import * as carromModule from './carrom/carrom.js';
 import * as jalPathModule from './jal_path/jal_path.js';
 import * as paaniPourModule from './paani_pour/paani_pour.js';
 import * as emberLaneModule from './ember_lane/ember_lane.js';
+import * as pralayModule from './pralay_run/pralay_run.js';
+import { Buttons as PralayButtons, createRenderView as createPralayView, Phase as PralayPhase, RenderSlot as PralaySlot } from '../games/pralayrun/engine';
 import { decodeMoves } from '../games/checkers/engine';
 import { RenderSlot } from '../games/breakout/engine';
 import { Buttons, Phase as KushJumpPhase, RenderSlot as KushJumpSlot } from '../games/kushjump/engine';
@@ -39,6 +41,7 @@ let mithaiMemory: WebAssembly.Memory;
 let jalPathMemory: WebAssembly.Memory;
 let paaniPourMemory: WebAssembly.Memory;
 let emberLaneMemory: WebAssembly.Memory;
+let pralayMemory: WebAssembly.Memory;
 
 beforeAll(() => {
   breakoutMemory = breakoutModule.initSync({ module: wasmBytes('breakout') }).memory;
@@ -54,11 +57,12 @@ beforeAll(() => {
   jalPathMemory = jalPathModule.initSync({ module: wasmBytes('jal_path') }).memory;
   paaniPourMemory = paaniPourModule.initSync({ module: wasmBytes('paani_pour') }).memory;
   emberLaneMemory = emberLaneModule.initSync({ module: wasmBytes('ember_lane') }).memory;
+  pralayMemory = pralayModule.initSync({ module: wasmBytes('pralay_run') }).memory;
 });
 
 describe('wasm bindings', () => {
   it('every game .wasm stays small (< 40 KB raw)', () => {
-    for (const name of ['breakout', 'checkers', 'connect_four', 'kush_jump', 'antariksh_defenders', 'mithai_match', 'ludo', 'snakes_ladders', 'fleet_clash', 'carrom', 'jal_path', 'paani_pour', 'ember_lane']) expect(wasmBytes(name).length, name).toBeLessThan(40 * 1024);
+    for (const name of ['breakout', 'checkers', 'connect_four', 'kush_jump', 'antariksh_defenders', 'mithai_match', 'ludo', 'snakes_ladders', 'fleet_clash', 'carrom', 'jal_path', 'paani_pour', 'ember_lane', 'pralay_run']) expect(wasmBytes(name).length, name).toBeLessThan(40 * 1024);
   });
 
   it('Jal Path: tiles read zero-copy (8 bytes each), a solved board waters all three houses, an unsolved one runs dry', () => {
@@ -377,3 +381,29 @@ describe('wasm bindings', () => {
     again.free(); board.free();
   });
 });
+
+describe('Pralay Run wasm', () => {
+  it('runs through the render buffer, the Pralay closes in and ends an idle run', () => {
+    const game = new pralayModule.PralayRun(1234);
+    game.set_view_width(480);
+    const view = createPralayView(pralayMemory, game);
+    expect(view()[PralaySlot.phase]).toBe(PralayPhase.Ready);
+    expect(view()[PralaySlot.platformCount]).toBeGreaterThan(10);
+    game.start();
+    game.set_input(PralayButtons.right);
+    for (let frame = 0; frame < 60; frame++) game.advance(1 / 60);
+    expect(view()[PralaySlot.heroX]).toBeGreaterThan(150);
+    expect(view()[PralaySlot.distance]).toBe(game.distance());
+    expect(game.distance()).toBeGreaterThan(8);
+    game.set_input(0);
+    let events = 0;
+    for (let frame = 0; frame < 60 * 30 && game.phase() !== PralayPhase.GameOver; frame++) events |= game.advance(1 / 60);
+    expect(game.phase()).toBe(PralayPhase.GameOver);
+    expect(events & 512).toBeTruthy();
+    game.restart(99);
+    expect(game.phase()).toBe(PralayPhase.Ready);
+    expect(view()[PralaySlot.heroX]).toBe(40);
+    game.free();
+  });
+});
+

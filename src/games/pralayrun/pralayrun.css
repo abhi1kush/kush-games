@@ -1,0 +1,121 @@
+/* Pralay Run — dusk-lit sky-temple chrome over the canvas. */
+.pralay { gap: 8px; padding-top: 8px; user-select: none; -webkit-user-select: none; }
+.pralay__play { position: relative; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+/* the view is 270 world units tall and 360–540 wide (4:3 up to 2:1) */
+.pralay__stage { --stage-height: min(calc(100svh - 150px), calc((100vw - 20px) * 0.75), 600px); position: relative; height: var(--stage-height);
+  width: min(100%, calc(var(--stage-height) * 2)); min-height: 200px; border-radius: 16px; overflow: hidden; background: #12081e; contain: layout paint;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,170,120,0.14), 0 0 60px rgba(200,60,160,0.12); }
+.pralay__canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; touch-action: none; }
+
+/* HUD */
+.pralay-hud { position: absolute; top: 0; left: 0; right: 0; display: grid; grid-template-columns: 1fr auto 1fr; align-items: start; gap: 8px; padding: 10px 12px; pointer-events: none;
+  transition: opacity 0.3s; }
+.pralay-hud.is-dim { opacity: 0.35; }
+.pralay-hud > * { pointer-events: auto; }
+.pralay-hud__left { display: flex; align-items: center; gap: 8px; }
+.pralay-hud__right { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+.pralay-hud__hearts { display: flex; gap: 5px; }
+.pralay-hud__hearts i { width: 15px; height: 15px; transform: rotate(45deg); border-radius: 3px 50% 50% 50%; background: radial-gradient(circle at 35% 35%, #ffe0ef, #ff5fa8 55%, #c21e6a);
+  box-shadow: 0 0 10px rgba(255,90,170,0.8); transition: opacity 0.25s, transform 0.25s, filter 0.25s; }
+.pralay-hud__hearts i.is-lost { opacity: 0.28; filter: grayscale(1); box-shadow: none; transform: rotate(45deg) scale(0.8); }
+.pralay-hud__dash { font: 800 10px/1 system-ui, sans-serif; letter-spacing: 0.14em; padding: 4px 7px; border-radius: 999px; color: rgba(190,250,245,0.5);
+  border: 1px solid rgba(120,240,230,0.25); background: rgba(6,10,20,0.4); transition: all 0.15s; }
+.pralay-hud__dash.is-ready { color: #062a2a; background: linear-gradient(180deg, #a8fff4, #3fd6c8); border-color: transparent; box-shadow: 0 0 10px rgba(80,240,220,0.7); }
+.pralay-hud__center { display: flex; align-items: baseline; gap: 3px; color: #fff3dc; text-shadow: 0 0 18px rgba(255,150,80,0.7), 0 2px 3px rgba(0,0,0,0.7); }
+.pralay-hud__center b { font: 800 clamp(22px, 4vw, 34px)/1 system-ui, sans-serif; font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
+.pralay-hud__center small { font: 700 13px/1 system-ui, sans-serif; color: #ffcf9a; }
+.pralay-hud__score, .pralay-hud__pace { display: flex; flex-direction: column; align-items: flex-end; line-height: 1; padding: 4px 8px; border-radius: 10px; background: rgba(10,4,20,0.42);
+  border: 1px solid rgba(255,190,140,0.18); }
+.pralay-hud__score small, .pralay-hud__pace small { font: 700 9px/1 system-ui, sans-serif; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(255,214,170,0.7); }
+.pralay-hud__score b { font: 800 16px/1.1 system-ui, sans-serif; color: #ffe3a6; font-variant-numeric: tabular-nums; }
+.pralay-hud__pace b { font: 800 14px/1.1 system-ui, sans-serif; color: #ff8fd0; font-variant-numeric: tabular-nums; }
+.pralay-icon, .pralay .shared-mute { width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(255,200,150,0.3); background: rgba(10,4,20,0.5); color: #ffe6c8;
+  font: 700 12px/1 system-ui, sans-serif; cursor: pointer; display: grid; place-items: center; padding: 0; }
+.pralay-icon:disabled { opacity: 0.4; cursor: default; }
+.pralay-icon:hover:not(:disabled), .pralay .shared-mute:hover { background: rgba(70,20,60,0.7); }
+
+/* overlays */
+.pralay-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: safe center; gap: 12px; padding: 56px 16px 16px; overflow-y: auto;
+  background: radial-gradient(ellipse at 50% 42%, rgba(30,8,40,0.35), rgba(8,2,16,0.86) 78%); color: #f6e6d4; cursor: pointer; text-align: center; animation: pralay-fade 0.35s ease both; }
+.pralay-overlay--start { background: linear-gradient(180deg, rgba(8,2,16,0.1), rgba(8,2,16,0.5) 40%, rgba(8,2,16,0.86)); }
+@keyframes pralay-fade { from { opacity: 0; } to { opacity: 1; } }
+.pralay-title h1 { margin: 2px 0 4px; font: 900 clamp(38px, 8vw, 80px)/0.95 Georgia, 'Times New Roman', serif; letter-spacing: 0.03em;
+  background: linear-gradient(180deg, #fff6e0 8%, #ffc07a 48%, #ff5fa8 92%); -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 0 24px rgba(255,110,150,0.5)) drop-shadow(0 3px 2px rgba(0,0,0,0.75)); }
+.pralay-title__kicker { margin: 0; font: 700 12px/1.2 system-ui, sans-serif; letter-spacing: 0.28em; text-transform: uppercase; color: rgba(255,210,170,0.85); }
+.pralay-title__tag { margin: 6px auto 0; max-width: 520px; font: italic clamp(14px, 2vw, 18px)/1.35 Georgia, serif; color: #f3dcc4; text-shadow: 0 1px 3px #000; }
+.pralay-overlay__heading { margin: 0; font: 800 clamp(26px, 5vw, 44px)/1.05 Georgia, 'Times New Roman', serif; color: #ffe6c4; text-shadow: 0 0 26px rgba(255,90,170,0.65), 0 2px 3px #000; }
+.pralay-cta { min-width: 150px; padding: 11px 28px; border-radius: 999px; border: 0; cursor: pointer; font: 900 17px/1 system-ui, sans-serif; letter-spacing: 0.1em; text-transform: uppercase;
+  color: #2a0a18; background: linear-gradient(180deg, #ffe4a8, #ff9a4a 55%, #ff5f8f); box-shadow: 0 8px 24px rgba(255,90,120,0.45), inset 0 1px 0 rgba(255,255,255,0.6); }
+.pralay-cta:hover { filter: brightness(1.08); }
+.pralay-ghost { padding: 10px 20px; border-radius: 999px; cursor: pointer; font: 800 14px/1 system-ui, sans-serif; color: #ffe2c8; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,200,160,0.35); }
+.pralay-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.pralay-record { margin: 0; font: 600 13px/1.2 system-ui, sans-serif; color: rgba(255,220,180,0.85); }
+.pralay-hint { padding: 5px 12px; border-radius: 999px; background: rgba(0,0,0,0.45); font: 700 12.5px/1.2 system-ui, sans-serif; color: #f2dcc8; }
+.pralay-stats { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.pralay-stats div { min-width: 74px; padding: 8px 12px; border-radius: 12px; background: rgba(0,0,0,0.38); border: 1px solid rgba(255,190,140,0.22); display: flex; flex-direction: column; gap: 3px; }
+.pralay-stats b { font: 800 22px/1 system-ui, sans-serif; color: #fff0d8; font-variant-numeric: tabular-nums; }
+.pralay-stats small { font: 700 10px/1 system-ui, sans-serif; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(255,210,170,0.7); }
+.pralay-stats .is-score { border-color: rgba(255,120,180,0.5); box-shadow: 0 0 18px rgba(255,90,170,0.25); }
+.pralay-stats .is-score b { color: #ffd77a; }
+.pralay-overlay .controls-panel { width: min(100%, 460px); cursor: default; }
+
+/* touch controls: only on touch screens */
+.pralay-touch { display: none; width: 100%; max-width: 620px; justify-content: space-between; align-items: center; gap: 10px; padding: 0 6px; touch-action: none; }
+.pralay-touch__pad { display: flex; gap: 8px; touch-action: none; }
+.pralay-touch__actions { display: flex; gap: 10px; align-items: center; }
+.pralay-key { width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid rgba(255,220,190,0.4); padding: 0;
+  background: rgba(20,8,30,0.55); color: #fff2e0; font: 900 13px/1 system-ui, sans-serif; letter-spacing: 0.05em; touch-action: none; -webkit-tap-highlight-color: transparent; user-select: none; }
+.pralay-touch__pad .pralay-key { font-size: 22px; width: 70px; height: 70px; }
+.pralay-key--jump { width: 78px; height: 78px; background: rgba(255,150,60,0.6); }
+.pralay-key--fire { background: rgba(255,80,180,0.5); }
+.pralay-key--dash { background: rgba(60,220,210,0.45); }
+.pralay-key:active { filter: brightness(1.4); }
+.pralay-hint .for-touch { display: none; }
+@media (pointer: coarse) {
+  .pralay-touch { display: flex; }
+  .pralay .game-help { display: none; }
+  .pralay__stage { --stage-height: min(calc(100svh - 260px), calc((100vw - 16px) * 0.75), 600px); }
+  .pralay-hint .for-touch { display: inline; }
+  .pralay-hint .for-keys { display: none; }
+}
+/* phones held upright: the buttons sit low, under the thumbs */
+@media (pointer: coarse) and (orientation: portrait) {
+  .pralay { padding-left: 6px; padding-right: 6px; }
+  .pralay__play { flex: 1 0 auto; }
+  .pralay-touch { margin-top: auto; padding: 0 2px 18px; gap: 6px; }
+  .pralay-touch__pad { gap: 6px; }
+  .pralay-touch__actions { gap: 7px; }
+  .pralay-key { width: 58px; height: 58px; font-size: 12px; }
+  .pralay-touch__pad .pralay-key { width: 62px; height: 62px; }
+  .pralay-key--jump { width: 72px; height: 72px; }
+}
+@media (pointer: coarse) and (orientation: portrait) and (max-width: 360px) {
+  .pralay-key { width: 52px; height: 52px; }
+  .pralay-touch__pad .pralay-key { width: 54px; height: 54px; }
+  .pralay-key--jump { width: 64px; height: 64px; }
+}
+/* phones held sideways: the stage fills the height and the buttons sit on its lower corners */
+@media (pointer: coarse) and (orientation: landscape) {
+  .pralay { padding-top: 4px; gap: 4px; padding-bottom: 6px; }
+  .pralay__stage { --stage-height: max(200px, calc(100svh - 72px)); border-radius: 12px; }
+  .pralay-touch { position: absolute; left: 0; right: 0; bottom: 10px; max-width: none; padding: 0 max(14px, env(safe-area-inset-right)) 0 max(14px, env(safe-area-inset-left)); pointer-events: none; }
+  .pralay-touch > * { pointer-events: auto; }
+  .pralay-key { width: 56px; height: 56px; background-color: rgba(20,8,30,0.35); }
+  .pralay-touch__pad .pralay-key { width: 62px; height: 62px; }
+  .pralay-key--jump { width: 70px; height: 70px; background: rgba(255,150,60,0.45); }
+  .pralay-key--fire { background: rgba(255,80,180,0.38); }
+  .pralay-key--dash { background: rgba(60,220,210,0.33); }
+  .pralay-hud { padding: 6px 10px; }
+}
+/* short or narrow stages: tighter overlays so the controls card fits */
+@media (max-height: 560px), (max-width: 480px) {
+  .pralay-overlay { gap: 7px; padding: 48px 10px 10px; }
+  .pralay-title h1 { font-size: 36px; }
+  .pralay-title__tag { font-size: 13px; }
+  .pralay-hint { font-size: 11px; padding: 3px 10px; }
+  .pralay-cta { padding: 9px 22px; font-size: 15px; }
+  .pralay-hud__pace { display: none; }
+  .pralay-hud__center b { font-size: 22px; }
+}
+@media (prefers-reduced-motion: reduce) { .pralay-overlay { animation: none; } }

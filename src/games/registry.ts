@@ -296,6 +296,18 @@ export const games: GameDefinition[] = [
     releaseYear: 2026,
     component: lazy(() => import('./emberlane/EmberLane')),
   },
+  {
+    id: 'pralay-run',
+    title: 'Pralay Run',
+    tagline: 'The sky-temple is falling. Outrun the collapse.',
+    description: 'An endless chase platformer through a sky-temple at dusk. The Pralay — a violet-black collapse with a burning edge — swallows the world from behind and keeps speeding up, so Aru, the last lamp-bearer, must keep moving. Run, jump and double jump across sandstone ruins, floating ledges (some crumble under your feet) and stone pillars; dash through danger and fire light bolts at shades, swooping wisps and orb-spitting stone idols (stomp them too). Dodge spike rows and flame vents, grab tejas shards and the rare lotus to heal. Score comes from distance, foes and shards; your best run is saved. Every run is a new layout. The physics, the collapse, enemies and level generation run in Rust compiled to WebAssembly.',
+    categories: ['Arcade'],
+    status: 'playable',
+    artwork: { gradientFrom: '#ff7a59', gradientTo: '#2a0b3d', accentColor: '#ffd27a', glyph: '🏃' },
+    controls: '← → / A D run; Space / ↑ / Z jump (twice for a double jump); Shift / X dash; J / F shoot; P pause; M mute; on-screen buttons on phones',
+    releaseYear: 2026,
+    component: lazy(() => import('./pralayrun/PralayRun')),
+  },
 ];
 
 /** Genre filter chips on the home page, in this order (only genres that have a playable game are shown). */
