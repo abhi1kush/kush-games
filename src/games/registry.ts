@@ -308,6 +308,18 @@ export const games: GameDefinition[] = [
     releaseYear: 2026,
     component: lazy(() => import('./pralayrun/PralayRun')),
   },
+  {
+    id: 'ghat-climb',
+    title: 'Ghat Climb',
+    tagline: 'Gas the jeep up the mountain. Don’t flip it.',
+    description: 'A hill-climb drive up one mountain road. Hold the gas and the jeep’s nose lifts; tap the brake to bring it back down before you flip past vertical. Coins and jerry cans sit on the dirt, and the tank runs dry if you hold the gas the whole way — roll to a stop empty and the climb is over. Reach the flag at the pass for a bonus. The road, the two-wheel jeep, fuel and coins run in Rust compiled to WebAssembly; a climb in progress and your best score are saved.',
+    categories: ['Arcade'],
+    status: 'playable',
+    artwork: { gradientFrom: '#1d4e89', gradientTo: '#e07a3d', accentColor: '#ffd36a', glyph: '🚙' },
+    controls: '→ / D / W / Space gas; ← / A / S brake; P pause; M mute; GAS and BRAKE buttons on phones',
+    releaseYear: 2026,
+    component: lazy(() => import('./ghatclimb/GhatClimb')),
+  },
 ];
 
 /** Genre filter chips on the home page, in this order (only genres that have a playable game are shown). */

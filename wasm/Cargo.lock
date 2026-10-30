@@ -64,6 +64,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "ghat_climb"
+version = "0.1.0"
+dependencies = [
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "jal_path"
 version = "0.1.0"
 dependencies = [

@@ -16,6 +16,7 @@ import * as paaniPourModule from './paani_pour/paani_pour.js';
 import * as emberLaneModule from './ember_lane/ember_lane.js';
 import * as pralayModule from './pralay_run/pralay_run.js';
 import { Buttons as PralayButtons, createRenderView as createPralayView, Phase as PralayPhase, RenderSlot as PralaySlot } from '../games/pralayrun/engine';
+import * as ghatClimbModule from './ghat_climb/ghat_climb.js';
 import { decodeMoves } from '../games/checkers/engine';
 import { RenderSlot } from '../games/breakout/engine';
 import { Buttons, Phase as KushJumpPhase, RenderSlot as KushJumpSlot } from '../games/kushjump/engine';
@@ -58,11 +59,25 @@ beforeAll(() => {
   paaniPourMemory = paaniPourModule.initSync({ module: wasmBytes('paani_pour') }).memory;
   emberLaneMemory = emberLaneModule.initSync({ module: wasmBytes('ember_lane') }).memory;
   pralayMemory = pralayModule.initSync({ module: wasmBytes('pralay_run') }).memory;
+  ghatClimbModule.initSync({ module: wasmBytes('ghat_climb') });
 });
 
 describe('wasm bindings', () => {
   it('every game .wasm stays small (< 40 KB raw)', () => {
-    for (const name of ['breakout', 'checkers', 'connect_four', 'kush_jump', 'antariksh_defenders', 'mithai_match', 'ludo', 'snakes_ladders', 'fleet_clash', 'carrom', 'jal_path', 'paani_pour', 'ember_lane', 'pralay_run']) expect(wasmBytes(name).length, name).toBeLessThan(40 * 1024);
+    for (const name of ['breakout', 'checkers', 'connect_four', 'kush_jump', 'antariksh_defenders', 'mithai_match', 'ludo', 'snakes_ladders', 'fleet_clash', 'carrom', 'jal_path', 'paani_pour', 'ember_lane', 'pralay_run', 'ghat_climb']) expect(wasmBytes(name).length, name).toBeLessThan(40 * 1024);
+  });
+
+  it('Ghat Climb: gas rolls the jeep and burns fuel', () => {
+    const game = new ghatClimbModule.GhatClimb();
+    game.start();
+    const start = game.x();
+    game.set_input(1);
+    for (let step = 0; step < 180; step++) game.advance(1000 / 120);
+    expect(game.x()).toBeGreaterThan(start + 30);
+    expect(game.fuel()).toBeLessThan(100);
+    expect(game.phase()).toBe(1);
+    expect(game.height_at(0)).toBeGreaterThan(20);
+    game.free();
   });
 
   it('Jal Path: tiles read zero-copy (8 bytes each), a solved board waters all three houses, an unsolved one runs dry', () => {

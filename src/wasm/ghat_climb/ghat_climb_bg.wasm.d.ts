@@ -1,0 +1,31 @@
+/* tslint:disable */
+/* eslint-disable */
+export const memory: WebAssembly.Memory;
+export const __wbg_ghatclimb_free: (a: number, b: number) => void;
+export const ghatclimb_advance: (a: number, b: number) => void;
+export const ghatclimb_angle: (a: number) => number;
+export const ghatclimb_coins: (a: number) => number;
+export const ghatclimb_contact: (a: number) => number;
+export const ghatclimb_course_end: (a: number) => number;
+export const ghatclimb_distance: (a: number) => number;
+export const ghatclimb_drive: (a: number) => number;
+export const ghatclimb_finish_x: (a: number) => number;
+export const ghatclimb_fuel: (a: number) => number;
+export const ghatclimb_grade_at: (a: number, b: number) => number;
+export const ghatclimb_height_at: (a: number, b: number) => number;
+export const ghatclimb_new: () => number;
+export const ghatclimb_phase: (a: number) => number;
+export const ghatclimb_pickup_count: (a: number) => number;
+export const ghatclimb_pickups_ptr: (a: number) => number;
+export const ghatclimb_restore: (a: number, b: number, c: number, d: number) => void;
+export const ghatclimb_score: (a: number) => number;
+export const ghatclimb_set_input: (a: number, b: number) => void;
+export const ghatclimb_speed: (a: number) => number;
+export const ghatclimb_spin: (a: number) => number;
+export const ghatclimb_start: (a: number) => void;
+export const ghatclimb_strain: (a: number) => number;
+export const ghatclimb_take_events: (a: number) => number;
+export const ghatclimb_time: (a: number) => number;
+export const ghatclimb_touch: (a: number) => number;
+export const ghatclimb_x: (a: number) => number;
+export const ghatclimb_y: (a: number) => number;
