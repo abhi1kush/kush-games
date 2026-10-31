@@ -3,6 +3,7 @@
  * sit on the dirt; the tank runs dry if you hold the gas the whole way. Rust/wasm owns the road and the jeep.
  */
 import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { homePath, navigate } from '../../routing';
 import { createSaveSlot, SAVE_VERSIONS } from '../persistence';
 import { MuteButton, unlockAudio, useSharedMute } from '../sharedSound';
 import { BUTTON, EVENT, engineMood, FUEL_MAX, GhatClimb, loadGhatEngine, parseRun, PHASE, type RunSave, TOP_SPEED } from './engine';
@@ -17,6 +18,46 @@ const createRunSlot = () => createSaveSlot<RunSave>({ gameId: 'ghat-climb', vers
 const readBest = () => { try { return Number(localStorage.getItem(BEST_KEY)) || 0; } catch { return 0; } };
 const writeBest = (score: number) => { try { localStorage.setItem(BEST_KEY, String(score)); } catch { /* storage unavailable */ } };
 const isTouchDevice = () => typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
+/** Phones held upright: the road is a wide stage, so the climb is played sideways. */
+const PORTRAIT_PHONE = '(pointer: coarse) and (orientation: portrait) and (max-width: 700px)';
+const isPortraitPhone = () => typeof window !== 'undefined' && !!window.matchMedia?.(PORTRAIT_PHONE).matches;
+function usePortraitPhone() {
+  const [portrait, setPortrait] = useState(isPortraitPhone);
+  useEffect(() => {
+    const query = window.matchMedia?.(PORTRAIT_PHONE);
+    if (!query) return;
+    const onChange = () => setPortrait(query.matches);
+    onChange();
+    query.addEventListener?.('change', onChange);
+    window.addEventListener('resize', onChange);
+    return () => { query.removeEventListener?.('change', onChange); window.removeEventListener('resize', onChange); };
+  }, []);
+  return portrait;
+}
+type LockableOrientation = ScreenOrientation & { lock?: (orientation: string) => Promise<void> };
+const canForceLandscape = () => typeof document !== 'undefined' && !!document.documentElement.requestFullscreen && !!(window.screen.orientation as LockableOrientation | undefined)?.lock;
+/** Android can go full screen and lock sideways; iOS can't, so the prompt just asks to turn the phone. */
+async function forceLandscape() {
+  try {
+    if (!document.fullscreenElement) await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+    await (window.screen.orientation as LockableOrientation).lock?.('landscape');
+  } catch { /* not allowed here: the rotate prompt stays up */ }
+}
+
+function RotatePrompt({ onBack }: { onBack: () => void }) {
+  const [canForce] = useState(canForceLandscape);
+  return (
+    <div className="ghat-rotate" role="dialog" aria-modal="true" aria-labelledby="ghat-rotate-title" data-testid="ghat-rotate">
+      <div className="ghat-rotate__phone" aria-hidden="true"><span /></div>
+      <h2 id="ghat-rotate-title">Turn your phone sideways</h2>
+      <p>Ghat Climb is played in landscape, with the brake under your left thumb and the accelerator under your right.</p>
+      <div className="ghat-actions">
+        {canForce && <button type="button" className="online-button online-button--primary" onClick={() => { unlockAudio(); void forceLandscape(); }} data-testid="ghat-rotate-fullscreen">Play full screen</button>}
+        <button type="button" className="online-button" onClick={onBack} data-testid="ghat-rotate-back">← Back to games</button>
+      </div>
+    </div>
+  );
+}
 
 interface Hud { meters: number; fuel: number; coins: number; score: number; phase: number }
 
@@ -37,6 +78,7 @@ function GhatClimbScreens() {
   const { isMuted, isMutedRef, toggleMute } = useSharedMute();
   const sound = useCallback((kind: GhatSound) => playGhatSound(kind, isMutedRef.current), [isMutedRef]);
   const [touch] = useState(isTouchDevice);
+  const portrait = usePortraitPhone();
   const [paused, setPaused] = useState(false);
   const [best, setBest] = useState(readBest);
   const [hud, setHud] = useState<Hud>({ meters: 0, fuel: FUEL_MAX, coins: 0, score: 0, phase: PHASE.ready });
@@ -185,6 +227,17 @@ function GhatClimbScreens() {
     return () => observer.disconnect();
   }, [draw]);
 
+  // a phone turned upright mid-climb pauses; turning it back shows the pause menu
+  useEffect(() => {
+    if (portrait && gameRef.current.phase() === PHASE.driving) { keysRef.current = 0; touchRef.current = 0; setPaused(true); }
+  }, [portrait]);
+
+  useEffect(() => () => {
+    if (!document.fullscreenElement) return;
+    try { (window.screen.orientation as LockableOrientation & { unlock?: () => void }).unlock?.(); } catch { /* nothing locked */ }
+    void document.exitFullscreen?.().catch(() => {});
+  }, []);
+
   useEffect(() => {
     const onHidden = () => { if (document.hidden && gameRef.current.phase() === PHASE.driving) setPaused(true); };
     document.addEventListener('visibilitychange', onHidden);
@@ -246,7 +299,8 @@ function GhatClimbScreens() {
   const mute = <MuteButton isMuted={isMuted} onToggle={toggleMute} className="ghat-icon" />;
 
   return (
-    <div className="game-shell ghat" data-testid="ghat-climb" data-phase={phase}>
+    <div className={`game-shell ghat${touch ? ' is-touch' : ''}`} data-testid="ghat-climb" data-phase={phase}>
+      {portrait && <RotatePrompt onBack={() => navigate(homePath)} />}
       <div className="ghat-frame">
       <div className="ghat-stage" ref={stageRef} data-testid="ghat-stage">
         <canvas ref={canvasRef} className="ghat-canvas" data-testid="ghat-canvas" aria-label="Ghat Climb mountain road" />
@@ -270,7 +324,7 @@ function GhatClimbScreens() {
             <p>One road to the pass. Gas lifts the nose. Brake brings it down.</p>
             <div className="ghat-card" data-testid="ghat-controls">
               Hold the gas on the flat, ease off on the steep faces, and grab the jerry cans. Flip past vertical, or roll to a stop on an empty tank, and the climb is over.
-              <p style={{ marginTop: 8 }}>{touch ? 'GAS and BRAKE sit under the road.' : '→ or Space gas · ← brake · P pause · M mute · G engine debug'}</p>
+              <p style={{ marginTop: 8 }}>{touch ? 'Brake is the bottom-left corner, gas the bottom-right. Turn the phone sideways.' : '→ or Space gas · ← brake · P pause · M mute · G engine debug'}</p>
             </div>
             <div className="ghat-actions">
               {savedRun.current && <button type="button" className="online-button online-button--primary" onClick={() => { const run = savedRun.current; savedRun.current = null; begin(run); }} data-testid="ghat-continue">Continue climb</button>}
@@ -301,8 +355,8 @@ function GhatClimbScreens() {
             </div>
           </div>
         )}
+        {driving && !paused && touch && !portrait && <TouchPads buttonsRef={touchRef} />}
       </div>
-      {driving && !paused && touch && <TouchPads buttonsRef={touchRef} />}
       </div>
     </div>
   );
@@ -318,12 +372,13 @@ function TouchPads({ buttonsRef }: { buttonsRef: React.MutableRefObject<number> 
     },
     onPointerUp: () => { buttonsRef.current &= ~bit; },
     onPointerCancel: () => { buttonsRef.current &= ~bit; },
+    onContextMenu: (event: ReactPointerEvent<HTMLButtonElement>) => event.preventDefault(),
   });
   useEffect(() => () => { buttonsRef.current = 0; }, [buttonsRef]);
   return (
     <div className="ghat-touch" data-testid="ghat-touch">
-      <button type="button" data-testid="ghat-brake" aria-label="Brake" {...hold(BUTTON.brake)}>BRAKE</button>
-      <button type="button" data-testid="ghat-gas" aria-label="Gas" {...hold(BUTTON.gas)}>GAS</button>
+      <button type="button" className="ghat-pad ghat-pad--brake" data-testid="ghat-brake" aria-label="Brake" {...hold(BUTTON.brake)}>BRAKE</button>
+      <button type="button" className="ghat-pad ghat-pad--gas" data-testid="ghat-gas" aria-label="Gas" {...hold(BUTTON.gas)}>GAS</button>
     </div>
   );
 }

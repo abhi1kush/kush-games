@@ -316,7 +316,7 @@ export const games: GameDefinition[] = [
     categories: ['Arcade'],
     status: 'playable',
     artwork: { gradientFrom: '#1d4e89', gradientTo: '#e07a3d', accentColor: '#ffd36a', glyph: '🚙' },
-    controls: '→ / D / W / Space gas; ← / A / S brake; P pause; M mute; GAS and BRAKE buttons on phones',
+    controls: '→ / D / W / Space gas; ← / A / S brake; P pause; M mute; on a phone, turn sideways — brake bottom-left, gas bottom-right',
     releaseYear: 2026,
     component: lazy(() => import('./ghatclimb/GhatClimb')),
   },
