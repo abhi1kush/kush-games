@@ -98,7 +98,7 @@ fn shots_fly_up_at_the_allowed_rate_and_kill_enemies() {
     let mut world = playing_world();
     silence_enemies(&mut world);
     world.march_timer = -1.0e9; // freeze the formation
-    // under a column, between shields
+    // under a column
     let target = world.enemies.iter().filter(|enemy| enemy.alive && enemy.row == 4).map(|enemy| enemy.x).find(|x| (x - 64.0).abs() < 9.0).unwrap();
     world.player_x = target;
     world.input = buttons::FIRE;
@@ -143,40 +143,19 @@ fn enemy_shots_cost_a_life_then_respawn_with_grace() {
 }
 
 #[test]
-fn shields_erode_cell_by_cell_from_both_sides() {
+fn no_barriers_in_front_of_the_ship() {
     let mut world = playing_world();
     silence_enemies(&mut world);
     world.march_timer = -1.0e9;
-    let full = world.shield_cells_left();
-    assert!(full > 4 * 200, "{full}");
-    // an enemy shot from above into the middle of shield 0
-    let x = SHIELD_CENTERS[0] - 9.0;
-    world.enemy_bullets[0] = Bullet { active: true, x, y: SHIELD_TOP - 20.0, velocity_x: 0.0, velocity_y: 80.0, kind: 0, age: 0.0 };
-    let events = run(&mut world, 0.4);
-    assert!(events & events::SHIELD_HIT != 0);
-    let after_one = world.shield_cells_left();
-    assert!(after_one < full && after_one > full - 25, "a small crater, not the whole shield: {}", full - after_one);
-    assert!(!world.enemy_bullets[0].active, "the shot stopped");
-    // keep shooting the same spot until a hole opens all the way through
-    let mut hits = 1;
-    while hits < 40 {
-        world.enemy_bullets[0] = Bullet { active: true, x, y: SHIELD_TOP - 20.0, velocity_x: 0.0, velocity_y: 80.0, kind: 0, age: 0.0 };
-        world.player_x = 200.0;
-        run(&mut world, 0.5);
-        hits += 1;
-        if world.enemy_bullets[0].active || World::shield_cell_at(x, SHIELD_TOP + 15.0).map(|cell| world.shields[cell]) == Some(0) && world.enemy_bullets.iter().all(|bullet| !bullet.active) && hits > 6 { break; }
-    }
-    assert!(world.shield_cells_left() < after_one);
-    // the player's own shots chip it from below too
-    let before = world.shield_cells_left();
-    world.player_x = SHIELD_CENTERS[2] + 9.0;
-    world.input = buttons::FIRE;
-    run(&mut world, 0.2);
-    world.input = 0;
-    assert!(world.shield_cells_left() < before);
-    // the next wave rebuilds them
+    assert_eq!(world.shield_cells_left(), 0, "no satellite barriers");
+    // an enemy shot falling through the old barrier line keeps going and reaches the ship
+    world.player_x = 36.0;
+    world.enemy_bullets[0] = Bullet { active: true, x: 36.0, y: 200.0, velocity_x: 0.0, velocity_y: 80.0, kind: 0, age: 0.0 };
+    let events = run(&mut world, 1.0);
+    assert!(events & events::SHIELD_HIT == 0);
+    assert_eq!(world.lives, STARTING_LIVES - 1, "nothing blocked the shot");
     world.setup_wave(2);
-    assert_eq!(world.shield_cells_left(), full);
+    assert_eq!(world.shield_cells_left(), 0, "the next wave doesn't rebuild them");
 }
 
 #[test]
@@ -324,7 +303,7 @@ fn extra_life_at_the_milestone() {
 }
 
 #[test]
-fn game_over_when_the_formation_reaches_the_shields() {
+fn game_over_when_the_formation_reaches_the_invasion_line() {
     let mut world = playing_world();
     world.debug_invincible = true;
     world.formation_y = INVASION_LINE - (ROWS as f32 - 1.0) * CELL_HEIGHT - ENEMY_HALF_HEIGHT - DESCENT_STEP + 1.0;

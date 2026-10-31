@@ -46,17 +46,16 @@ const readPerf = page => page.evaluate(() => {
   const length = Math.min(perf.count, perf.workMilliseconds.length);
   return { work: Array.from(perf.workMilliseconds.slice(0, length)), frame: Array.from(perf.frameMilliseconds.slice(0, length)) };
 });
-// fly under the nearest enemy that has a clear shot (not above a shield) for `milliseconds`
+// fly under the nearest enemy (no barriers in the way any more) for `milliseconds`
 const hunt = (page, milliseconds) => page.evaluate(milliseconds => new Promise(resolve => {
   const { game, views } = window.__antarikshTest;
-  const overShield = x => [36, 92, 148, 204].some(center => Math.abs(x - center) < 14);
   const end = performance.now() + milliseconds;
   const step = () => {
     const render = views().render;
     let best = -1;
     for (let index = 0; index < 55; index++) {
       const offset = 32 + index * 4;
-      if (render[offset] === 0 || overShield(render[offset + 2])) continue;
+      if (render[offset] === 0) continue;
       if (best < 0 || Math.abs(render[offset + 2] - game.player_x()) < Math.abs(best - game.player_x())) best = render[offset + 2];
     }
     game.set_target_x(best >= 0 ? best : game.debug_nearest_enemy_x());

@@ -4,12 +4,12 @@ import { readStoredJson, saveStoredJson } from '../random';
 import { MuteButton, useSharedMute } from '../sharedSound';
 import { type ControlsGuide, ControlsPanel, ControlsToggle } from '../ControlsPanel';
 import {
-  createBackdrop, createSprites, drawEnemyBullet, drawFlame, drawParticle, drawPlayerBullet, ENEMY_SPRITE_HEIGHT, ENEMY_SPRITE_WIDTH, MYSTERY_SPRITE_HEIGHT,
-  MYSTERY_SPRITE_WIDTH, paintShields, PLAYER_SPRITE_SIZE, SAFFRON, type Sprites,
+  type BackdropLayers, createBackdrop, createSprites, drawEnemyBullet, drawFlame, drawParticle, drawPlayerBullet, ENEMY_SPRITE_HEIGHT, ENEMY_SPRITE_WIDTH,
+  GROUND_STRIP_HEIGHT, LAYER_SPEEDS, MYSTERY_SPRITE_HEIGHT, MYSTERY_SPRITE_WIDTH, PLAYER_SPRITE_SIZE, SAFFRON, type Sprites,
 } from './art';
 import {
-  AntarikshDefenders, Backdrop, Buttons, createMemoryViews, Events, loadAntarikshEngine, MAX_ENEMIES, type MemoryViews, MYSTERY_Y, Phase, PLAYER_Y, Power,
-  RenderSlot, SHIELD_HEIGHT, SHIELD_TOP, stageName, WORLD_HEIGHT, WORLD_WIDTH,
+  AntarikshDefenders, Backdrop, Buttons, createMemoryViews, Events, GROUND_Y, loadAntarikshEngine, MAX_ENEMIES, type MemoryViews, MYSTERY_Y, Phase, PLAYER_Y, Power,
+  RenderSlot, stageName, WORLD_HEIGHT, WORLD_WIDTH,
 } from './engine';
 import { createAntarikshSaveSlot } from './save';
 import { playLimited, playMarch, primeAudio, type SoundKind } from './sounds';
@@ -48,10 +48,14 @@ const EVENT_SOUNDS: [number, SoundKind][] = [
 interface Renderer {
   context: CanvasRenderingContext2D;
   scale: number;
-  backdrops: (HTMLCanvasElement | undefined)[];
+  backdrops: (BackdropLayers | undefined)[];
   sprites: Sprites;
-  shieldCanvas: HTMLCanvasElement;
-  shieldVersion: number;
+  /** Parallax state: distance flown (in "cruise seconds") since this stage's backdrop appeared, and the current speed factor. */
+  travel: number;
+  sceneryTravel: number;
+  speed: number;
+  lastClock: number;
+  shownBackdrop: number;
   shownScore: number;
   scoreText: string;
   shownBest: number;
@@ -63,7 +67,25 @@ interface Renderer {
 }
 
 const COUNTDOWN_TEXT = ['T-3', 'T-2', 'T-1'] as const;
-const DRIFTING_STARS = 28;
+const STREAKS = 26;
+
+/** How fast the scenery rushes past in each phase: cruising while playing, a warp burst between stages. */
+function targetSpeed(phase: Phase) {
+  switch (phase) {
+    case Phase.Playing: return 1;
+    case Phase.Countdown: return 0.7;
+    case Phase.WaveClear: case Phase.WaveIntro: return 4.5;
+    case Phase.Dying: return 0.5;
+    default: return 0.35;
+  }
+}
+
+/** Draw a vertically seamless tile scrolled down by `offset` world units. */
+function drawScrolling(context: CanvasRenderingContext2D, layer: HTMLCanvasElement, offset: number) {
+  const y = offset % WORLD_HEIGHT;
+  context.drawImage(layer, -2, y, WORLD_WIDTH + 4, WORLD_HEIGHT);
+  context.drawImage(layer, -2, y - WORLD_HEIGHT, WORLD_WIDTH + 4, WORLD_HEIGHT);
+}
 
 function drawText(context: CanvasRenderingContext2D, text: string, x: number, y: number, color: string) {
   context.fillStyle = 'rgba(0,0,0,0.6)';
@@ -72,7 +94,7 @@ function drawText(context: CanvasRenderingContext2D, text: string, x: number, y:
   context.fillText(text, x, y);
 }
 
-/** Draw one frame from the wasm render buffer. Scenery and sprites are pre-rendered; shields repaint only when hit. */
+/** Draw one frame from the wasm render buffer. Backdrop layers and sprites are pre-rendered; the layers scroll down for a forward-flight feel. */
 function drawFrame(renderer: Renderer, views: MemoryViews, clock: number, bestScore: number) {
   const { context, scale, sprites } = renderer;
   const { render } = views;
@@ -84,20 +106,36 @@ function drawFrame(renderer: Renderer, views: MemoryViews, clock: number, bestSc
   const shakeX = shake > 0 ? (Math.random() - 0.5) * shake * 3 : 0;
   const shakeY = shake > 0 ? (Math.random() - 0.5) * shake * 3 : 0;
   context.setTransform(scale, 0, 0, scale, shakeX * scale, shakeY * scale);
-  context.drawImage(backdrop, -2, -2, WORLD_WIDTH + 4, WORLD_HEIGHT + 4);
 
-  // a faint layer of drifting stars: the journey keeps moving
-  context.fillStyle = 'rgba(255,255,255,0.55)';
-  for (let star = 0; star < DRIFTING_STARS; star++) {
-    const speed = 6 + (star % 4) * 5;
-    const x = (star * 97.31) % WORLD_WIDTH;
-    const y = (star * 53.7 + clock * speed) % 266;
-    context.fillRect(x, y, star % 4 === 3 ? 1 : 0.6, star % 4 === 3 ? 1.6 : 0.6);
+  // parallax: everything behind the ship scrolls down (the ship flies "up" into space); far layers slower than near ones
+  const delta = Math.min(0.1, Math.max(0, clock - renderer.lastClock));
+  renderer.lastClock = clock;
+  if (renderer.shownBackdrop !== backdropKind) { renderer.shownBackdrop = backdropKind; renderer.sceneryTravel = 0; }
+  renderer.speed += (targetSpeed(phase) - renderer.speed) * Math.min(1, delta * 2.5);
+  renderer.travel += delta * renderer.speed;
+  renderer.sceneryTravel += delta * renderer.speed;
+  const travel = renderer.travel;
+  context.drawImage(backdrop.sky, -2, -2, WORLD_WIDTH + 4, WORLD_HEIGHT + 4);
+  drawScrolling(context, backdrop.farStars, travel * LAYER_SPEEDS.farStars);
+  drawScrolling(context, backdrop.nebula, travel * LAYER_SPEEDS.nebula);
+  // the stage's planet drifts past and comes round again; Earth just falls away below as the ship climbs
+  const sceneryDistance = renderer.sceneryTravel * LAYER_SPEEDS.scenery;
+  const sceneryY = backdropKind === Backdrop.Earth ? Math.min(sceneryDistance, WORLD_HEIGHT)
+    : ((sceneryDistance + WORLD_HEIGHT) % (WORLD_HEIGHT * 2)) - WORLD_HEIGHT;
+  if (sceneryY < WORLD_HEIGHT) context.drawImage(backdrop.scenery, -2, sceneryY, WORLD_WIDTH + 4, WORLD_HEIGHT);
+  drawScrolling(context, backdrop.midStars, travel * LAYER_SPEEDS.midStars);
+
+  // near streaks: fast star trails that stretch out during the warp between stages
+  const stretch = 1 + Math.max(0, renderer.speed - 1) * 2.2;
+  for (let streak = 0; streak < STREAKS; streak++) {
+    const speed = 55 + (streak % 5) * 22;
+    const x = (streak * 97.31 + 13) % WORLD_WIDTH;
+    const length = (1.2 + (streak % 5) * 0.7) * stretch;
+    const y = ((streak * 53.7 + travel * speed) % (WORLD_HEIGHT + 30)) - 15;
+    context.fillStyle = streak % 7 === 0 ? 'rgba(255,200,140,0.6)' : 'rgba(210,230,255,0.55)';
+    context.fillRect(x, y, streak % 3 === 0 ? 0.8 : 0.5, length);
   }
-
-  const shieldVersion = render[RenderSlot.shieldVersion];
-  if (shieldVersion !== renderer.shieldVersion) { renderer.shieldVersion = shieldVersion; paintShields(renderer.shieldCanvas, scale, views.shields); }
-  context.drawImage(renderer.shieldCanvas, 0, SHIELD_TOP, WORLD_WIDTH, SHIELD_HEIGHT);
+  context.drawImage(backdrop.pad, -2, GROUND_Y, WORLD_WIDTH + 4, GROUND_STRIP_HEIGHT);
 
   // the formation (warping in from above at the start of a wave)
   const entering = phase === Phase.WaveIntro || phase === Phase.Countdown || phase === Phase.Ready;
@@ -332,7 +370,7 @@ function AntarikshGame({ memory }: { memory: WebAssembly.Memory }) {
       const scale = canvas.height / WORLD_HEIGHT;
       if (!renderer || Math.abs(renderer.scale - scale) > 0.01) {
         renderer = {
-          context, scale, backdrops: [], sprites: createSprites(scale), shieldCanvas: document.createElement('canvas'), shieldVersion: -1,
+          context, scale, backdrops: [], sprites: createSprites(scale), travel: 0, sceneryTravel: 0, speed: 1, lastClock: performance.now() / 1000, shownBackdrop: -1,
           shownScore: -1, scoreText: '', shownBest: -1, bestText: '', shownWave: -1, waveText: '', waveTitle: '', stageTitle: '',
         };
       }
@@ -367,8 +405,8 @@ function AntarikshGame({ memory }: { memory: WebAssembly.Memory }) {
         if (events) handleEvents(events, views);
         const currentPhase = views.render[RenderSlot.phase];
         if (currentPhase !== lastPhase) { lastPhase = currentPhase; setPhase(currentPhase as Phase); needsDrawRef.current = true; }
-        // nothing moves on the start / game-over screens once the sparks settle: draw once, then idle
-        const isStill = (currentPhase === Phase.Ready || currentPhase === Phase.GameOver) && views.render[RenderSlot.particleCount] === 0;
+        // the game-over screen stops once the sparks settle: draw once, then idle (the start screen keeps the stars drifting)
+        const isStill = currentPhase === Phase.GameOver && views.render[RenderSlot.particleCount] === 0;
         if (renderer && (!isStill || needsDrawRef.current)) { needsDrawRef.current = false; drawFrame(renderer, views, now / 1000, bestScoreRef.current); }
         const perf = perfRef.current;
         if (perf) {

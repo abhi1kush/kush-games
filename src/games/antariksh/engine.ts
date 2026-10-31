@@ -11,11 +11,10 @@ export const WORLD_HEIGHT = 280;
 export const PLAYER_Y = 257;
 export const MYSTERY_Y = 30;
 export const GROUND_Y = 268;
-export const SHIELD_TOP = 220;
+/** Legacy shield strip layout (the barriers were removed; the wasm keeps an always-empty byte array). */
 export const SHIELD_WIDTH = 24;
 export const SHIELD_HEIGHT = 16;
 export const SHIELD_COUNT = 4;
-export const SHIELD_CENTERS = [36, 92, 148, 204] as const;
 
 /** Held-button bits for set_input. */
 export const Buttons = { left: 1, right: 2, fire: 4 } as const;

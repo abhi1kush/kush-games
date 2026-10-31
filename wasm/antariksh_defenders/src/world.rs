@@ -40,15 +40,14 @@ pub const MARCH_STEP: f32 = 2.0;
 pub const DESCENT_STEP: f32 = 7.0;
 pub const MARCH_EDGE: f32 = 4.0;
 
-/// Shields: four satellites with solar-panel wings, each a 24 × 16 grid of 1-unit cells that erode one by one.
+/// Legacy shield strip: the satellite barriers in front of the ship were removed, so these cells stay empty forever.
+/// The byte array and its layout are kept so the JS memory view and `shields_pointer()` stay stable.
 pub const SHIELD_COUNT: usize = 4;
 pub const SHIELD_WIDTH: usize = 24;
 pub const SHIELD_HEIGHT: usize = 16;
 pub const SHIELD_CELLS: usize = SHIELD_WIDTH * SHIELD_HEIGHT;
-pub const SHIELD_TOP: f32 = 220.0;
-pub const SHIELD_CENTERS: [f32; SHIELD_COUNT] = [36.0, 92.0, 148.0, 204.0];
-/// The formation has landed when an enemy's bottom reaches this line.
-pub const INVASION_LINE: f32 = SHIELD_TOP;
+/// The formation has landed when an enemy's bottom reaches this line (just above the ship).
+pub const INVASION_LINE: f32 = 220.0;
 
 pub const MYSTERY_Y: f32 = 30.0;
 pub const MYSTERY_HALF_WIDTH: f32 = 11.0;
@@ -215,7 +214,7 @@ impl World {
 
     // ---------------------------------------------------------------- game flow
 
-    /// Load wave `wave`: a fresh formation, rebuilt shields, cleared bullets.
+    /// Load wave `wave`: a fresh formation, cleared bullets. No barriers in front of the ship.
     pub fn setup_wave(&mut self, wave: u32) {
         self.wave = wave.max(1);
         self.difficulty = waves::difficulty_for_wave(self.wave);
@@ -242,7 +241,7 @@ impl World {
         self.mystery = Mystery::default();
         self.mystery_timer = 14.0 + self.random() * 8.0;
         self.place_enemies();
-        self.build_shields();
+        self.clear_shields();
         self.clear_shots();
         for capsule in self.capsules.iter_mut() { capsule.active = false; }
     }
@@ -252,14 +251,9 @@ impl World {
         for bullet in self.enemy_bullets.iter_mut() { bullet.active = false; }
     }
 
-    fn build_shields(&mut self) {
-        for shield in 0..SHIELD_COUNT {
-            for row in 0..SHIELD_HEIGHT {
-                for column in 0..SHIELD_WIDTH {
-                    self.shields[shield * SHIELD_CELLS + row * SHIELD_WIDTH + column] = shield_cell_template(column, row);
-                }
-            }
-        }
+    /// No barriers: every cell stays empty, so nothing is drawn and nothing blocks a shot.
+    fn clear_shields(&mut self) {
+        self.shields = [0; SHIELD_COUNT * SHIELD_CELLS];
         self.shield_version = self.shield_version.wrapping_add(1);
     }
 
@@ -434,7 +428,6 @@ impl World {
             bullet.age += dt;
             let (x, y) = (bullet.x, bullet.y);
             if y < 14.0 || x < 0.0 || x > WORLD_WIDTH { bullet.active = false; continue; }
-            if self.hit_shield(x, y, 1.6) { self.player_bullets[index].active = false; continue; }
             if self.mystery.active && (x - self.mystery.x).abs() < MYSTERY_HALF_WIDTH && (y - MYSTERY_Y).abs() < 6.0 {
                 self.player_bullets[index].active = false;
                 self.destroy_mystery();
@@ -646,7 +639,6 @@ impl World {
             bullet.x += bullet.velocity_x * dt;
             let (x, y) = (bullet.x, bullet.y + 3.0);
             if y > WORLD_HEIGHT - 8.0 { bullet.active = false; self.add_sparks(x, WORLD_HEIGHT - 9.0, 3, 0.0); continue; }
-            if self.hit_shield(x, y, 2.2) { self.enemy_bullets[index].active = false; continue; }
             if !dying && self.invulnerable_seconds <= 0.0 && self.hitch_grace_seconds <= 0.0
                 && (x - self.player_x).abs() <= PLAYER_HALF_WIDTH && y >= PLAYER_Y - 6.0 && y <= PLAYER_Y + 7.0 {
                 self.enemy_bullets[index].active = false;
@@ -656,40 +648,7 @@ impl World {
         }
     }
 
-    // ---------------------------------------------------------------- shields
-
-    /// The shield cell under (x, y), as an index into `shields`.
-    pub fn shield_cell_at(x: f32, y: f32) -> Option<usize> {
-        if y < SHIELD_TOP || y >= SHIELD_TOP + SHIELD_HEIGHT as f32 { return None; }
-        let row = (y - SHIELD_TOP) as usize;
-        for (shield, center) in SHIELD_CENTERS.iter().enumerate() {
-            let left = center - SHIELD_WIDTH as f32 / 2.0;
-            if x >= left && x < left + SHIELD_WIDTH as f32 {
-                return Some(shield * SHIELD_CELLS + row * SHIELD_WIDTH + (x - left) as usize);
-            }
-        }
-        None
-    }
-
-    /// If (x, y) is inside an intact shield cell, blast a ragged crater of `radius` around it and return true.
-    pub fn hit_shield(&mut self, x: f32, y: f32, radius: f32) -> bool {
-        let Some(cell) = World::shield_cell_at(x, y) else { return false };
-        if self.shields[cell] == 0 { return false; }
-        let reach = radius.ceil() as i32;
-        for offset_y in -reach..=reach {
-            for offset_x in -reach..=reach {
-                let distance = ((offset_x * offset_x + offset_y * offset_y) as f32).sqrt();
-                if distance > radius { continue; }
-                // Ragged edges: the centre always goes, the rim only sometimes.
-                if distance > radius * 0.5 && self.random() < 0.45 { continue; }
-                if let Some(other) = World::shield_cell_at(x + offset_x as f32, y + offset_y as f32) { self.shields[other] = 0; }
-            }
-        }
-        self.shield_version = self.shield_version.wrapping_add(1);
-        self.events |= events::SHIELD_HIT;
-        self.add_sparks(x, y, 3, 5.0);
-        true
-    }
+    // ---------------------------------------------------------------- shields (removed; always empty)
 
     pub fn shield_cells_left(&self) -> usize { self.shields.iter().filter(|cell| **cell != 0).count() }
 
@@ -798,19 +757,4 @@ impl World {
         }
         self.enemies_alive = kept;
     }
-}
-
-/// The satellite shape: a gold-foil body with a dish on top, two solar-panel wings, and an arch underneath.
-/// 0 empty, 1 solar panel, 2 body, 3 dish/antenna.
-pub fn shield_cell_template(column: usize, row: usize) -> u8 {
-    let body = (8..16).contains(&column);
-    if row < 3 { return if (9..15).contains(&column) && !(row == 0 && (column == 9 || column == 14)) { 3 } else { 0 }; }
-    if body {
-        if row >= 12 && (10..14).contains(&column) { return 0; } // the arch the ship hides under
-        return 2;
-    }
-    // Wings: panels from row 4 to 12, slightly tapered, with the strut row at 8.
-    let wing_column = if column < 8 { column } else { 23 - column };
-    if (4..13).contains(&row) && !(wing_column == 0 && (row == 4 || row == 12)) { return 1; }
-    0
 }

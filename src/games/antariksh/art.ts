@@ -1,9 +1,9 @@
 /**
  * Antariksh Defenders' art: original vector-ish drawings in saffron, white, green and deep-space navy.
- * Everything static (backdrops, enemy/player/mothership sprites, the shields) is pre-rendered into offscreen canvases at the
+ * Everything static (backdrop layers, enemy/player/mothership sprites) is pre-rendered into offscreen canvases at the
  * current scale, so a frame is mostly drawImage calls plus a few fillRects. No strings or objects are created per frame.
  */
-import { Backdrop, EnemyKind, GROUND_Y, ParticleKind, Power, SHIELD_COUNT, SHIELD_HEIGHT, SHIELD_TOP, SHIELD_WIDTH, SHIELD_CENTERS, WORLD_HEIGHT, WORLD_WIDTH } from './engine';
+import { Backdrop, EnemyKind, GROUND_Y, ParticleKind, Power, WORLD_HEIGHT, WORLD_WIDTH } from './engine';
 
 export const SAFFRON = '#ff9933';
 export const INDIA_GREEN = '#138808';
@@ -37,33 +37,114 @@ function polygon(context: CanvasRenderingContext2D, points: number[]) {
 
 // ------------------------------------------------------------------ backdrops
 
-/** The whole static scene behind the action for one stage: sky, stars, the planet for that leg of the journey, the launch pad. */
-export function createBackdrop(scale: number, backdrop: Backdrop): HTMLCanvasElement {
+/**
+ * The scene behind the action for one stage, split into layers that scroll downward at different speeds (parallax) so the
+ * ship and the formation feel like they are flying forward through space. Each star/nebula layer is a vertically seamless
+ * WORLD_WIDTH × WORLD_HEIGHT tile; `scenery` holds the stage's planet and drifts past slowly; `pad` is the fixed ground strip.
+ */
+export interface BackdropLayers {
+  sky: HTMLCanvasElement;
+  farStars: HTMLCanvasElement;
+  nebula: HTMLCanvasElement;
+  midStars: HTMLCanvasElement;
+  scenery: HTMLCanvasElement;
+  pad: HTMLCanvasElement;
+}
+
+/** The fixed ground strip under the ship (drawn at GROUND_Y), with 2 spare units below to cover screen shake. */
+export const GROUND_STRIP_HEIGHT = WORLD_HEIGHT - GROUND_Y + 2;
+
+/** World units per second each layer scrolls at cruising speed. */
+export const LAYER_SPEEDS = { farStars: 8, nebula: 14, midStars: 28, scenery: 4 } as const;
+
+const NEBULA_TINTS = [
+  ['rgba(80,140,255,0.13)', 'rgba(19,136,8,0.08)', 'rgba(255,153,51,0.07)'],
+  ['rgba(180,180,210,0.10)', 'rgba(90,110,255,0.10)', 'rgba(255,153,51,0.06)'],
+  ['rgba(255,110,60,0.12)', 'rgba(160,50,40,0.10)', 'rgba(255,190,120,0.06)'],
+  ['rgba(255,153,51,0.12)', 'rgba(19,136,8,0.11)', 'rgba(120,80,255,0.13)'],
+] as const;
+
+/** Draw `paint` three times (shifted by ±WORLD_HEIGHT) so whatever crosses the tile's top/bottom edge wraps seamlessly. */
+function paintWrapped(context: CanvasRenderingContext2D, paint: (offsetY: number) => void) {
+  for (const offsetY of [-WORLD_HEIGHT, 0, WORLD_HEIGHT]) paint(offsetY);
+}
+
+function starTile(scale: number, seed: number, count: number, sizes: [number, number], alpha: [number, number], bigChance: number) {
   return makeSprite(WORLD_WIDTH, WORLD_HEIGHT, scale, context => {
-    const sky = context.createLinearGradient(0, 0, 0, WORLD_HEIGHT);
-    const tints = [['#030818', '#0a1f45'], ['#04060f', '#161b2e'], ['#07040d', '#2a0f12'], ['#05030f', '#1a0b2e']][backdrop];
-    sky.addColorStop(0, tints[0]);
-    sky.addColorStop(1, tints[1]);
-    context.fillStyle = sky;
-    context.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
-    const random = seededRandom(17 + backdrop * 31);
-    for (let star = 0; star < 120; star++) {
-      const size = random() < 0.12 ? 1 : 0.5;
-      context.globalAlpha = 0.25 + random() * 0.6;
-      context.fillStyle = random() < 0.15 ? '#ffd9a8' : '#ffffff';
-      context.fillRect(random() * WORLD_WIDTH, random() * WORLD_HEIGHT, size, size);
+    const random = seededRandom(seed);
+    for (let star = 0; star < count; star++) {
+      const x = random() * WORLD_WIDTH, y = random() * WORLD_HEIGHT;
+      const isBig = random() < bigChance;
+      const size = isBig ? sizes[1] : sizes[0];
+      context.globalAlpha = alpha[0] + random() * (alpha[1] - alpha[0]);
+      context.fillStyle = random() < 0.15 ? '#ffd9a8' : random() < 0.2 ? '#bfe3ff' : '#ffffff';
+      paintWrapped(context, offsetY => {
+        context.fillRect(x, y + offsetY, size, size);
+        if (isBig) { // a little twinkle cross on the bright ones
+          context.globalAlpha *= 0.45;
+          context.fillRect(x - size, y + offsetY + size / 2 - 0.15, size * 3, 0.3);
+          context.fillRect(x + size / 2 - 0.15, y + offsetY - size, 0.3, size * 3);
+          context.globalAlpha /= 0.45;
+        }
+      });
     }
     context.globalAlpha = 1;
-    if (backdrop === Backdrop.Earth) drawEarthLimb(context);
-    else if (backdrop === Backdrop.Moon) { drawSmallEarth(context, 26, 60, 6); drawMoon(context, 214, 170, 44); }
-    else if (backdrop === Backdrop.Mars) { drawMars(context, 30, 168, 38); drawMoonlet(context, 200, 70, 3.5); }
-    else drawDeepSpace(context, random);
-    drawLaunchPad(context);
   });
 }
 
+export function createBackdrop(scale: number, backdrop: Backdrop): BackdropLayers {
+  const sky = makeSprite(WORLD_WIDTH, WORLD_HEIGHT, scale, context => {
+    const gradient = context.createLinearGradient(0, 0, 0, WORLD_HEIGHT);
+    const tints = [['#030818', '#0a1f45'], ['#04060f', '#161b2e'], ['#07040d', '#2a0f12'], ['#05030f', '#1a0b2e']][backdrop];
+    gradient.addColorStop(0, tints[0]);
+    gradient.addColorStop(1, tints[1]);
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+  });
+  const farStars = starTile(scale, 17 + backdrop * 31, 150, [0.45, 0.8], [0.15, 0.55], 0.06);
+  const midStars = starTile(scale, 101 + backdrop * 13, 42, [0.7, 1.1], [0.45, 0.95], 0.25);
+  const nebula = makeSprite(WORLD_WIDTH, WORLD_HEIGHT, scale, context => {
+    const random = seededRandom(7 + backdrop * 19);
+    const tints = NEBULA_TINTS[backdrop];
+    const clouds = backdrop === Backdrop.DeepSpace ? 7 : 5;
+    for (let index = 0; index < clouds; index++) {
+      const x = random() * WORLD_WIDTH, y = random() * WORLD_HEIGHT, radius = 35 + random() * 55;
+      const stretch = 0.5 + random() * 0.6;
+      const color = tints[index % tints.length];
+      paintWrapped(context, offsetY => {
+        context.save();
+        context.translate(x, y + offsetY);
+        context.scale(1, stretch);
+        const cloud = context.createRadialGradient(0, 0, 0, 0, 0, radius);
+        cloud.addColorStop(0, color);
+        cloud.addColorStop(1, 'rgba(0,0,0,0)');
+        context.fillStyle = cloud;
+        context.fillRect(-radius, -radius, radius * 2, radius * 2);
+        context.restore();
+      });
+    }
+    // faint dust lanes
+    context.fillStyle = 'rgba(255,255,255,0.05)';
+    for (let lane = 0; lane < 40; lane++) {
+      const x = random() * WORLD_WIDTH, y = random() * WORLD_HEIGHT, length = 2 + random() * 4;
+      paintWrapped(context, offsetY => context.fillRect(x, y + offsetY, 0.4, length));
+    }
+  });
+  const scenery = makeSprite(WORLD_WIDTH, WORLD_HEIGHT, scale, context => {
+    if (backdrop === Backdrop.Earth) drawEarthLimb(context);
+    else if (backdrop === Backdrop.Moon) { drawSmallEarth(context, 26, 60, 6); drawMoon(context, 214, 170, 44); }
+    else if (backdrop === Backdrop.Mars) { drawMars(context, 30, 168, 38); drawMoonlet(context, 200, 70, 3.5); }
+    else drawMars(context, 205, 60, 10);
+  });
+  const pad = makeSprite(WORLD_WIDTH, GROUND_STRIP_HEIGHT, scale, context => {
+    context.translate(0, -GROUND_Y);
+    drawLaunchPad(context);
+  });
+  return { sky, farStars, nebula, midStars, scenery, pad };
+}
+
 function drawEarthLimb(context: CanvasRenderingContext2D) {
-  // the curve of the Earth low on the screen, behind the shields
+  // the curve of the Earth low on the screen, falling away as the ship climbs
   const glow = context.createRadialGradient(120, 560, 300, 120, 560, 345);
   glow.addColorStop(0, 'rgba(80,170,255,0.45)');
   glow.addColorStop(1, 'rgba(80,170,255,0)');
@@ -163,25 +244,10 @@ function drawMars(context: CanvasRenderingContext2D, x: number, y: number, radiu
   context.globalAlpha = 1;
 }
 
-function drawDeepSpace(context: CanvasRenderingContext2D, random: () => number) {
-  for (const [x, y, radius, color] of [[60, 80, 70, 'rgba(255,153,51,0.10)'], [190, 150, 80, 'rgba(19,136,8,0.10)'], [120, 40, 50, 'rgba(120,80,255,0.10)']] as const) {
-    const cloud = context.createRadialGradient(x, y, 0, x, y, radius);
-    cloud.addColorStop(0, color);
-    cloud.addColorStop(1, 'rgba(0,0,0,0)');
-    context.fillStyle = cloud;
-    context.fillRect(x - radius, y - radius, radius * 2, radius * 2);
-  }
-  drawMars(context, 205, 60, 10);
-  for (let star = 0; star < 30; star++) {
-    context.fillStyle = 'rgba(255,255,255,0.7)';
-    context.fillRect(random() * WORLD_WIDTH, random() * 200, 0.6, 0.6);
-  }
-}
-
 function drawLaunchPad(context: CanvasRenderingContext2D) {
   // the ground station line under the ship, with a tricolour accent strip
   context.fillStyle = 'rgba(5,11,31,0.85)';
-  context.fillRect(0, GROUND_Y, WORLD_WIDTH, WORLD_HEIGHT - GROUND_Y);
+  context.fillRect(0, GROUND_Y, WORLD_WIDTH, GROUND_STRIP_HEIGHT);
   context.fillStyle = SAFFRON;
   context.fillRect(0, GROUND_Y, WORLD_WIDTH, 0.8);
   context.fillStyle = '#ffffff';
@@ -359,35 +425,6 @@ function paintMothership(context: CanvasRenderingContext2D) {
   context.fillStyle = '#69f0ae';
   for (let light = -9; light <= 9; light += 4.5) { context.beginPath(); context.arc(light, 2, 0.9, 0, Math.PI * 2); context.fill(); }
 }
-
-// ------------------------------------------------------------------ shields
-
-const SHIELD_COLORS = ['', '#2e5cb8', '#e0b13a', '#e8ecf2'];
-const SHIELD_SHADE = ['', '#1f3f86', '#b8891e', '#b8c0cc'];
-
-/** Repaint the shield strip (240 × 16 units) from the cell bytes; called only when a shield changes. */
-export function paintShields(canvas: HTMLCanvasElement, scale: number, cells: Uint8Array) {
-  const width = Math.ceil(WORLD_WIDTH * scale), height = Math.ceil(SHIELD_HEIGHT * scale);
-  if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
-  const context = canvas.getContext('2d')!;
-  context.setTransform(1, 0, 0, 1, 0, 0);
-  context.clearRect(0, 0, width, height);
-  context.setTransform(scale, 0, 0, scale, 0, 0);
-  for (let shield = 0; shield < SHIELD_COUNT; shield++) {
-    const left = SHIELD_CENTERS[shield] - SHIELD_WIDTH / 2;
-    for (let row = 0; row < SHIELD_HEIGHT; row++) {
-      for (let column = 0; column < SHIELD_WIDTH; column++) {
-        const cell = cells[shield * SHIELD_WIDTH * SHIELD_HEIGHT + row * SHIELD_WIDTH + column];
-        if (cell === 0) continue;
-        // panel grid lines and foil wrinkles: alternate shade on a pattern
-        const isShade = cell === 1 ? (column % 3 === 0 || row === 8) : cell === 2 ? ((column + row) % 4 === 0) : row === 2;
-        context.fillStyle = isShade ? SHIELD_SHADE[cell] : SHIELD_COLORS[cell];
-        context.fillRect(left + column, row, 1.02, 1.02);
-      }
-    }
-  }
-}
-export const SHIELD_STRIP_TOP = SHIELD_TOP;
 
 // ------------------------------------------------------------------ dynamic bits
 
