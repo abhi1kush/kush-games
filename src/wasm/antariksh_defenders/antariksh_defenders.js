@@ -213,7 +213,7 @@ export class AntarikshDefenders {
         return ret >>> 0;
     }
     /**
-     * The stage name for a wave ("Mars · Departure", "Jupiter · Transit", … "Aranya · Rescue").
+     * The stage name for a wave ("Leaving for Mars", "Approaching Jupiter", … "Reached Aranya").
      * @param {number} wave
      * @returns {string}
      */

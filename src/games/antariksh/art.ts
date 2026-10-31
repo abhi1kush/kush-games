@@ -416,6 +416,8 @@ export interface Sprites {
   /** triple-shot and bubble capsules, 9 × 9 units. */
   capsules: HTMLCanvasElement[];
   life: HTMLCanvasElement;
+  /** each leg's rocks (the Asteroid kind in that world's colours): [leg * 2 + frame]. */
+  rocks: HTMLCanvasElement[];
   /** soft additive glows, GLOW_SIZE units across, one per GlowColor. */
   glows: HTMLCanvasElement[];
   /** player bolts: standard, machine gun, triple stream; 4 × 11 units. */
@@ -466,6 +468,13 @@ export function createSprites(scale: number): Sprites {
     context.translate(QUEEN_SPRITE_WIDTH / 2, QUEEN_SPRITE_HEIGHT / 2);
     paintOverseer(context, frame);
   }));
+  const rocks: HTMLCanvasElement[] = [];
+  for (let palette = 0; palette < ROCK_COLORS.length; palette++) {
+    for (const frame of [0, 1]) rocks.push(makeGlowingSprite(ENEMY_SPRITE_WIDTH, ENEMY_SPRITE_HEIGHT, scale, 'rgba(255,220,180,0.3)', 1.6, context => {
+      context.translate(ENEMY_SPRITE_WIDTH / 2, ENEMY_SPRITE_HEIGHT / 2);
+      paintAsteroid(context, frame, palette);
+    }));
+  }
   const player = makeGlowingSprite(PLAYER_SPRITE_SIZE, PLAYER_SPRITE_SIZE, scale, 'rgba(255,200,140,0.45)', 1.5, context => { context.translate(PLAYER_SPRITE_SIZE / 2, PLAYER_SPRITE_SIZE / 2); paintLauncher(context, 1); });
   const life = makeSprite(8, 10, scale, context => { context.translate(4, 5.5); context.scale(0.5, 0.5); paintLauncher(context, 1); });
   const mystery = [1, -1].map(direction => makeSprite(MYSTERY_SPRITE_WIDTH, MYSTERY_SPRITE_HEIGHT, scale, context => {
@@ -516,7 +525,7 @@ export function createSprites(scale: number): Sprites {
     context.ellipse(BOLT_WIDTH / 2, 3.6, 0.7, 2.8, 0, 0, Math.PI * 2);
     context.fill();
   }));
-  return { enemies, player, mystery, capsules, life, glows, bolts };
+  return { enemies, rocks, player, mystery, capsules, life, glows, bolts };
 }
 
 type EnemyPaint = (context: CanvasRenderingContext2D, frame: number) => void;
@@ -794,12 +803,26 @@ function paintOverseer(context: CanvasRenderingContext2D, frame: number) {
   context.fillRect(4.5, -10, 1, 1);
 }
 
-function paintAsteroid(context: CanvasRenderingContext2D, frame: number) {
+/** Each leg's rocks in that world's colours: light, mid, dark, crater (Mars … Aranya), then the classic grey-brown. */
+const ROCK_COLORS: [string, string, string, string][] = [
+  ['#ffb08a', '#b8492a', '#4a160c', '#5a1c10'],
+  ['#f6dfba', '#b9824c', '#4a2c14', '#5a3a1e'],
+  ['#ffffff', '#e6d6a8', '#7a6838', '#8a7a50'],
+  ['#e6ffff', '#7fd8dc', '#1f5a68', '#2f6a78'],
+  ['#c9dcff', '#4a74e0', '#0b1a66', '#14226a'],
+  ['#f6eaff', '#b8a8d0', '#4e4466', '#5e5476'],
+  ['#a9ffe0', '#2f8a6a', '#0a2b24', '#123a30'],
+  ['#c9b29a', '#8a7765', '#3f3329', '#4a3c30'],
+];
+export const ROCK_SPRITE_COUNT = ROCK_COLORS.length;
+
+function paintAsteroid(context: CanvasRenderingContext2D, frame: number, palette = ROCK_COLORS.length - 1) {
   context.rotate(frame ? 0.35 : 0);
+  const [light, mid, dark, crater] = ROCK_COLORS[palette];
   const rock = context.createRadialGradient(-2, -2.5, 0.5, 0, 0, 6.5);
-  rock.addColorStop(0, '#c9b29a');
-  rock.addColorStop(0.55, '#8a7765');
-  rock.addColorStop(1, '#3f3329');
+  rock.addColorStop(0, light);
+  rock.addColorStop(0.55, mid);
+  rock.addColorStop(1, dark);
   context.fillStyle = rock;
   polygon(context, [-6, -1, -4, -4.5, 0, -5.2, 4, -4, 6, -0.5, 5, 3.5, 1, 5, -3.5, 4.4]);
   context.fill();
@@ -808,7 +831,7 @@ function paintAsteroid(context: CanvasRenderingContext2D, frame: number) {
   context.lineWidth = 0.4;
   context.beginPath(); context.moveTo(-5.6, -1.2); context.lineTo(-3.8, -4.3); context.lineTo(0, -5); context.lineTo(3.8, -3.9); context.stroke();
   for (const [x, y, radius] of [[-1.8, 1.2, 1.4], [2.8, 0.2, 0.9], [0.8, 3.2, 0.7]]) {
-    context.fillStyle = '#4a3c30';
+    context.fillStyle = crater;
     context.beginPath(); context.arc(x, y, radius, 0, Math.PI * 2); context.fill();
     context.fillStyle = 'rgba(255,230,200,0.25)';
     context.beginPath(); context.arc(x + radius * 0.25, y + radius * 0.3, radius * 0.55, 0, Math.PI); context.fill();

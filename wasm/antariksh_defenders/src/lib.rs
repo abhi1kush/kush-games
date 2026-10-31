@@ -194,7 +194,7 @@ impl AntarikshDefenders {
     pub fn rescued(&self) -> u32 { self.world.rescued }
     pub fn march_interval(&self) -> f32 { self.world.march_interval() }
     pub fn shield_cells_left(&self) -> u32 { self.world.shield_cells_left() as u32 }
-    /// The stage name for a wave ("Mars · Departure", "Jupiter · Transit", … "Aranya · Rescue").
+    /// The stage name for a wave ("Leaving for Mars", "Approaching Jupiter", … "Reached Aranya").
     pub fn stage_name(wave: u32) -> String { waves::STAGE_NAMES[waves::stage_index(wave)].to_string() }
 
     // ---- test hooks (used by e2e/antariksh-defenders.mjs through ?antarikshTest; harmless in normal play) ----

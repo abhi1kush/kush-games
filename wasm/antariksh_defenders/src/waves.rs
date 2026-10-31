@@ -3,7 +3,7 @@
 pub const ROWS: usize = 5;
 pub const COLUMNS: usize = 11;
 
-/// The journey outward from the Sun: seven legs (Earth → Mars → Jupiter → Saturn → Uranus → Neptune → Pluto → Aranya, an
+/// The journey outward from the Sun: seven legs, each named for its destination (Earth → Mars → Jupiter → Saturn → Uranus → Neptune → Pluto → Aranya, an
 /// alien jungle world beyond Pluto), each in three sub-stages: departure (leaving the last world), transit (deep space
 /// between) and arrival (in the destination's own sky). One wave per sub-stage; after the last one the rescue on Aranya
 /// repeats (still harder).
@@ -11,14 +11,15 @@ pub const LEGS: usize = 7;
 pub const LEG_NAMES: [&str; LEGS] = ["Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto", "Aranya"];
 pub const STAGES_PER_LEG: usize = 3;
 pub const STAGE_COUNT: usize = LEGS * STAGES_PER_LEG;
+/// Named for the destination: "Leaving for Jupiter", "Approaching Jupiter", "Reached Jupiter".
 pub const STAGE_NAMES: [&str; STAGE_COUNT] = [
-    "Mars · Departure", "Mars · Transit", "Mars · Arrival",
-    "Jupiter · Departure", "Jupiter · Transit", "Jupiter · Arrival",
-    "Saturn · Departure", "Saturn · Transit", "Saturn · Arrival",
-    "Uranus · Departure", "Uranus · Transit", "Uranus · Arrival",
-    "Neptune · Departure", "Neptune · Transit", "Neptune · Arrival",
-    "Pluto · Departure", "Pluto · Transit", "Pluto · Arrival",
-    "Aranya · Departure", "Aranya · Interstellar", "Aranya · Rescue",
+    "Leaving for Mars", "Approaching Mars", "Reached Mars",
+    "Leaving for Jupiter", "Approaching Jupiter", "Reached Jupiter",
+    "Leaving for Saturn", "Approaching Saturn", "Reached Saturn",
+    "Leaving for Uranus", "Approaching Uranus", "Reached Uranus",
+    "Leaving for Neptune", "Approaching Neptune", "Reached Neptune",
+    "Leaving for Pluto", "Approaching Pluto", "Reached Pluto",
+    "Leaving for Aranya", "Approaching Aranya", "Reached Aranya",
 ];
 /// The final leg: the jungle world where the natives are rescued from the extraction corporation.
 pub const FINAL_LEG: usize = LEGS - 1;

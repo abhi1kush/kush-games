@@ -82,7 +82,7 @@ try {
   check(await page.evaluate(() => performance.getEntriesByType('resource').some(entry => entry.name.includes('antariksh_defenders'))), 'the wasm loads when the game opens');
   check(await phaseOf(page) === '0', 'loads on the Ready screen');
   const overlayText = await page.getByTestId('antariksh-overlay').textContent();
-  check(overlayText.includes('ANTARIKSH') && overlayText.includes('Mars · Departure'), 'title overlay with the first stage name');
+  check(overlayText.includes('ANTARIKSH') && overlayText.includes('Leaving for Mars'), 'title overlay with the first stage name');
   const startControls = page.getByTestId('antariksh-controls');
   const startControlsText = await startControls.textContent();
   check(await startControls.isVisible() && ['Move', 'Fire', 'hold', 'Pause', 'Mute', 'Back to the hub', 'Triple shot', 'Shield'].every(text => startControlsText.includes(text)),
@@ -157,7 +157,7 @@ try {
   const restored = await state(page);
   check(restored.wave === 3 && restored.score === beforeReload.score && restored.lives === beforeReload.lives && restored.phase === 0,
     `reload restores wave ${restored.wave}, score ${restored.score}, lives ${restored.lives}`);
-  check(await page.getByTestId('restored').isVisible() && (await page.getByTestId('antariksh-overlay').textContent()).includes('Mars · Arrival'), 'restored banner + "Mars · Arrival" stage name');
+  check(await page.getByTestId('restored').isVisible() && (await page.getByTestId('antariksh-overlay').textContent()).includes('Reached Mars'), 'restored banner + "Reached Mars" stage name');
   check(Number(await page.getByTestId('antariksh-best').textContent()) >= beforeReload.score && beforeReload.score > 0, 'high score kept through the reload');
 
   // perf: a busy late wave (wave 7, lots of enemy fire), hunting and firing, the mothership crossing; normal then 4× CPU slowdown

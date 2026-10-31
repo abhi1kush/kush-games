@@ -29,39 +29,44 @@ export const Weapons = { triple: 1, rapid: 2, both: 3 } as const;
 export const enum Power { None = 0, TripleShot = 1, Bubble = 2, MachineGun = 3 }
 export const enum ParticleKind { Spark = 0, Ring = 1, Ember = 2, ScoreText = 3, Shard = 4, Native = 5, RescueText = 6 }
 /**
- * The journey outward from the Sun, mirrored from wasm/antariksh_defenders/src/waves.rs: seven legs, each in three sub-stages
- * (departure from the last world, transit through deep space, arrival in the destination's sky). Waves past the end repeat
+ * The journey outward from the Sun, mirrored from wasm/antariksh_defenders/src/waves.rs: seven legs, each in three stages named
+ * for the destination (Leaving for / Approaching / Reached <planet>); reaching a planet gives one extra life. Waves past the end repeat
  * the Aranya rescue. The render buffer's `stage` / `backdrop` slots hold the stage index (0..STAGE_COUNT-1).
  */
+/** Seconds the between-stages interstitial (wave banner + solar-system map) shows. Mirrors world.rs. */
+export const WAVE_INTRO_SECONDS = 3.0;
 export const LEG_NAMES = ['Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Pluto', 'Aranya'] as const;
 export const enum Leg { Mars = 0, Jupiter = 1, Saturn = 2, Uranus = 3, Neptune = 4, Pluto = 5, Aranya = 6 }
-export const SUB_STAGE_NAMES = ['Departure', 'Transit', 'Arrival'] as const;
 export const STAGES_PER_LEG = 3;
 export const STAGE_COUNT = LEG_NAMES.length * STAGES_PER_LEG;
 export const FINAL_LEG = Leg.Aranya;
 export const stageIndex = (wave: number) => Math.min(Math.max(1, wave), STAGE_COUNT) - 1;
 export const legOfStage = (stage: number) => Math.floor(stage / STAGES_PER_LEG) as Leg;
 export const subStageOf = (stage: number) => stage % STAGES_PER_LEG;
-const SUB_NAMES_ARANYA = ['Departure', 'Interstellar', 'Rescue'] as const;
+/** Every stage is named for its destination: "Leaving for Jupiter", "Approaching Jupiter", "Reached Jupiter". */
 export const STAGE_NAMES = Array.from({ length: STAGE_COUNT }, (_, stage) => {
-  const leg = legOfStage(stage);
-  return `${LEG_NAMES[leg]} · ${(leg === Leg.Aranya ? SUB_NAMES_ARANYA : SUB_STAGE_NAMES)[subStageOf(stage)]}`;
+  const planet = LEG_NAMES[legOfStage(stage)];
+  return [`Leaving for ${planet}`, `Approaching ${planet}`, `Reached ${planet}`][subStageOf(stage)];
 });
 export const stageName = (wave: number) => STAGE_NAMES[stageIndex(wave)];
-/** Where each leg starts from (the world being left behind on its departure stage). */
+/** Where each leg starts from (the world being left behind on its first stage). */
 export const ORIGIN_NAMES = ['Earth', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Pluto'] as const;
-/** One line under the wave banner: where you are on the journey. */
+/** Each planet's own enemies (the whole formation changes when a new leg starts). */
+export const LEG_ENEMY_NAMES = ['Mars Crawlers', 'Storm Jellies', 'Ring Shards', 'Uranian Spinners', 'Gale Wraiths', 'Cryo Mines', 'the Extraction Corp'] as const;
+/** One line under the wave banner: where you are on the journey and who you're facing. */
 export function stageTagline(stage: number) {
   const leg = legOfStage(stage), sub = subStageOf(stage);
-  if (leg === Leg.Aranya) return ['Beyond Pluto · leaving the Sun behind', 'Interstellar · Aranya calls for help', 'Free the natives · stop the Extraction Corp'][sub];
-  return [`Leaving ${ORIGIN_NAMES[leg]} for ${LEG_NAMES[leg]}`, `Deep space · ${LEG_NAMES[leg]} ahead`, `${LEG_NAMES[leg]} orbit reached`][sub];
+  if (leg === Leg.Aranya && sub === 2) return '+1 life · free the natives from the Extraction Corp';
+  if (sub === 0) return `From ${ORIGIN_NAMES[leg]} · new enemies: ${LEG_ENEMY_NAMES[leg]}`;
+  if (sub === 1) return `${LEG_NAMES[leg]} ahead · ${LEG_ENEMY_NAMES[leg]}`;
+  return `+1 life · ${LEG_NAMES[leg]} reached`;
 }
 
 /** Event bits returned by advance(). Mirrors `events` in world.rs. */
 export const Events = {
   shoot: 1, enemyDown: 2, playerDown: 4, march: 8, mysteryAppear: 16, mysteryDown: 32, shieldHit: 64, waveClear: 128, waveStart: 256,
   gameOver: 512, extraLife: 1024, powerUp: 2048, countdownTick: 4096, liftoff: 8192, enemyShoot: 16384, hitch: 32768, bubblePop: 65536, invaded: 131072,
-  queenHit: 262144, queenDown: 524288, weaponUnlock: 1048576, rescue: 2097152, armourHit: 4194304,
+  queenHit: 262144, queenDown: 524288, weaponUnlock: 1048576, rescue: 2097152, armourHit: 4194304, planetReached: 8388608,
 } as const;
 
 /** Pool sizes and the render buffer layout. Mirrors `render_slot` in lib.rs (checked by a test). */

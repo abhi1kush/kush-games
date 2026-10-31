@@ -9,7 +9,7 @@ import {
 } from './art';
 import {
   AntarikshDefenders, Buttons, createMemoryViews, EnemyKind, Events, GROUND_Y, loadAntarikshEngine, MAX_ENEMIES, type MemoryViews, MYSTERY_Y, Phase, PLAYER_Y, Power,
-  Leg, LEG_NAMES, legOfStage, RenderSlot, stageName, stageTagline, subStageOf, Weapons, WORLD_HEIGHT, WORLD_WIDTH,
+  Leg, LEG_NAMES, legOfStage, RenderSlot, WAVE_INTRO_SECONDS, stageName, stageTagline, subStageOf, Weapons, WORLD_HEIGHT, WORLD_WIDTH,
 } from './engine';
 import { createAntarikshSaveSlot } from './save';
 import { playLimited, playMarch, primeAudio, type SoundKind } from './sounds';
@@ -161,7 +161,7 @@ function drawFrame(renderer: Renderer, views: MemoryViews, clock: number, bestSc
     const kind = render[offset + 1];
     const x = render[offset + 2], y = render[offset + 3] + dropIn;
     if (kind === EnemyKind.Queen) { queenX = x; queenY = y; continue; }
-    context.drawImage(sprites.enemies[kind * 2 + marchFrame], x - ENEMY_SPRITE_WIDTH / 2, y - ENEMY_SPRITE_HEIGHT / 2, ENEMY_SPRITE_WIDTH, ENEMY_SPRITE_HEIGHT);
+    context.drawImage(kind === EnemyKind.Asteroid ? sprites.rocks[leg * 2 + marchFrame] : sprites.enemies[kind * 2 + marchFrame], x - ENEMY_SPRITE_WIDTH / 2, y - ENEMY_SPRITE_HEIGHT / 2, ENEMY_SPRITE_WIDTH, ENEMY_SPRITE_HEIGHT);
   }
   if (queenX >= 0) {
     // the queen: a pulsing aura, her sprite (flashing white when hit), and her armour pips
@@ -284,7 +284,7 @@ function drawFrame(renderer: Renderer, views: MemoryViews, clock: number, bestSc
     const stage = render[RenderSlot.stage];
     renderer.waveText = `W${wave} · ${stageName(wave).toUpperCase()}`;
     renderer.waveTitle = LEG_NAMES[legOfStage(stage)].toUpperCase();
-    renderer.stageTitle = `WAVE ${wave} · ${stageName(wave).split(' · ')[1].toUpperCase()}`;
+    renderer.stageTitle = `WAVE ${wave} · ${stageName(wave).toUpperCase()}`;
     renderer.stageTagline = stageTagline(stage);
   }
   context.textBaseline = 'alphabetic';
@@ -356,14 +356,15 @@ function drawFrame(renderer: Renderer, views: MemoryViews, clock: number, bestSc
     context.font = '800 6.5px system-ui, sans-serif';
     drawText(context, renderer.waveText, WORLD_WIDTH / 2, 192, '#7ee08a');
   } else if (phase === Phase.WaveIntro) {
-    context.globalAlpha = Math.min(1, phaseSeconds * 3, (1.8 - phaseSeconds) * 3);
-    drawPlate(context, 122, 54);
+    context.globalAlpha = Math.min(1, phaseSeconds * 3, (WAVE_INTRO_SECONDS - phaseSeconds) * 3);
+    drawPlate(context, 92, 54);
     context.font = '800 6px system-ui, sans-serif';
-    drawText(context, renderer.stageTitle, WORLD_WIDTH / 2, 131, '#7ee08a');
+    drawText(context, renderer.stageTitle, WORLD_WIDTH / 2, 101, '#7ee08a');
     context.font = '900 22px system-ui, sans-serif';
-    drawText(context, renderer.waveTitle, WORLD_WIDTH / 2, 150, leg === Leg.Aranya ? '#7dffc8' : SAFFRON);
+    drawText(context, renderer.waveTitle, WORLD_WIDTH / 2, 120, leg === Leg.Aranya ? '#7dffc8' : SAFFRON);
     context.font = '700 6.2px system-ui, sans-serif';
-    drawText(context, renderer.stageTagline, WORLD_WIDTH / 2, 168, 'rgba(255,255,255,0.88)');
+    drawText(context, renderer.stageTagline, WORLD_WIDTH / 2, 138, 'rgba(255,255,255,0.88)');
+    drawJourneyMap(context, render[RenderSlot.stage], Math.min(1, phaseSeconds / 1.4), clock);
     context.globalAlpha = 1;
   } else if (phase === Phase.WaveClear) {
     context.globalAlpha = Math.min(1, phaseSeconds * 4);
@@ -377,16 +378,84 @@ function drawFrame(renderer: Renderer, views: MemoryViews, clock: number, bestSc
     const age = BANNER_SECONDS - bannerLeft;
     context.globalAlpha = Math.min(1, age * 6, bannerLeft * 3);
     const pop = 1 + Math.max(0, 0.25 - age) * 1.6;
-    drawPlate(context, 196, 26);
+    drawPlate(context, 206, 26);
     context.font = `900 ${11 * pop}px system-ui, sans-serif`;
-    drawText(context, renderer.bannerTitle, WORLD_WIDTH / 2, 205, renderer.bannerColor);
+    drawText(context, renderer.bannerTitle, WORLD_WIDTH / 2, 215, renderer.bannerColor);
     context.font = '700 5.4px system-ui, sans-serif';
-    drawText(context, renderer.bannerSubtitle, WORLD_WIDTH / 2, 216, 'rgba(255,255,255,0.85)');
+    drawText(context, renderer.bannerSubtitle, WORLD_WIDTH / 2, 226, 'rgba(255,255,255,0.85)');
     context.globalAlpha = 1;
   }
 }
 
 const BANNER_SECONDS = 2.4;
+
+/** The journey's worlds left to right: Earth, Mars … Pluto, Aranya (fill colour, radius on the map). */
+const MAP_WORLDS: [string, string, number][] = [
+  ['Earth', '#3f8fe0', 2.4], ['Mars', '#d4602e', 2], ['Jupiter', '#d9a46a', 4.2], ['Saturn', '#e6cf8a', 3.6], ['Uranus', '#7fd8dc', 3],
+  ['Neptune', '#4a74e0', 3], ['Pluto', '#c9b29a', 1.6], ['Aranya', '#3fe0a0', 3.2],
+];
+const MAP_LEFT = 30, MAP_RIGHT = 226, MAP_Y = 178;
+const mapX = (world: number) => MAP_LEFT + (MAP_RIGHT - MAP_LEFT) * world / (MAP_WORLDS.length - 1);
+/** Where the ship is on the map for a stage: a third, two thirds, then all the way from the last world to the next. */
+const shipMapX = (stage: number) => {
+  if (stage < 0) return mapX(0);
+  const leg = legOfStage(stage);
+  return mapX(leg) + (mapX(leg + 1) - mapX(leg)) * (subStageOf(stage) + 1) / 3;
+};
+
+/** The between-stages solar-system map: the Sun, every world on the journey, the path flown and the ship moving to its new spot. */
+function drawJourneyMap(context: CanvasRenderingContext2D, stage: number, progress: number, clock: number) {
+  const top = MAP_Y - 28;
+  drawPlate(context, top, 50);
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.font = '800 4.4px system-ui, sans-serif';
+  drawText(context, 'SOLAR SYSTEM · YOUR POSITION', WORLD_WIDTH / 2, top + 6, 'rgba(255,255,255,0.6)');
+  // the Sun on the left edge
+  const sun = context.createRadialGradient(8, MAP_Y, 0, 8, MAP_Y, 14);
+  sun.addColorStop(0, '#fff6c8');
+  sun.addColorStop(0.35, '#ffb23f');
+  sun.addColorStop(1, 'rgba(255,120,30,0)');
+  context.fillStyle = sun;
+  context.beginPath(); context.arc(8, MAP_Y, 14, 0, Math.PI * 2); context.fill();
+  // the route
+  const eased = 1 - (1 - progress) * (1 - progress);
+  const shipX = shipMapX(stage - 1) + (shipMapX(stage) - shipMapX(stage - 1)) * eased;
+  context.strokeStyle = 'rgba(255,255,255,0.18)';
+  context.lineWidth = 0.5;
+  context.setLineDash([1.5, 1.5]);
+  context.beginPath(); context.moveTo(MAP_LEFT, MAP_Y); context.lineTo(MAP_RIGHT, MAP_Y); context.stroke();
+  context.setLineDash([]);
+  context.strokeStyle = 'rgba(255,153,51,0.85)';
+  context.lineWidth = 0.9;
+  context.beginPath(); context.moveTo(MAP_LEFT, MAP_Y); context.lineTo(shipX, MAP_Y); context.stroke();
+  const destination = legOfStage(stage) + 1;
+  for (let world = 0; world < MAP_WORLDS.length; world++) {
+    const [name, color, radius] = MAP_WORLDS[world];
+    const x = mapX(world);
+    const visited = x <= shipX + 0.5;
+    const isDestination = world === destination;
+    if (isDestination) {
+      context.strokeStyle = 'rgba(126,224,138,0.9)';
+      context.lineWidth = 0.6;
+      context.beginPath(); context.arc(x, MAP_Y, radius + 2.2 + Math.sin(clock * 6) * 0.6, 0, Math.PI * 2); context.stroke();
+    }
+    context.globalAlpha *= visited || isDestination ? 1 : 0.45;
+    context.fillStyle = color;
+    context.beginPath(); context.arc(x, MAP_Y, radius, 0, Math.PI * 2); context.fill();
+    if (name === 'Saturn') { context.strokeStyle = '#f3e3b0'; context.lineWidth = 0.5; context.beginPath(); context.ellipse(x, MAP_Y, radius + 2.4, 1, -0.3, 0, Math.PI * 2); context.stroke(); }
+    context.font = `${isDestination ? 800 : 600} 3.6px system-ui, sans-serif`;
+    drawText(context, name, x, MAP_Y + (world % 2 === 0 ? 9 : -9), isDestination ? '#7ee08a' : visited ? '#ffffff' : 'rgba(255,255,255,0.75)');
+    context.globalAlpha /= visited || isDestination ? 1 : 0.45;
+  }
+  // the ship, a little saffron arrow with a glow
+  context.fillStyle = 'rgba(255,153,51,0.35)';
+  context.beginPath(); context.arc(shipX, MAP_Y, 3.6, 0, Math.PI * 2); context.fill();
+  context.fillStyle = '#ffffff';
+  context.beginPath(); context.moveTo(shipX + 3, MAP_Y); context.lineTo(shipX - 2, MAP_Y - 2); context.lineTo(shipX - 1, MAP_Y); context.lineTo(shipX - 2, MAP_Y + 2); context.closePath(); context.fill();
+  context.fillStyle = SAFFRON;
+  context.fillRect(shipX - 3.2, MAP_Y - 0.4, 1.4, 0.8);
+}
 
 /** A soft dark plate behind centred banner text (y is the plate's top). */
 function drawPlate(context: CanvasRenderingContext2D, y: number, height: number) {
@@ -527,6 +596,11 @@ function AntarikshGame({ memory }: { memory: WebAssembly.Memory }) {
       const muted = isMutedRef.current;
       if (events & Events.march) playMarch(views.render[RenderSlot.marchNote], muted);
       if (renderer && events & Events.queenHit) renderer.queenHitUntil = performance.now() / 1000 + 0.08;
+      if (renderer && events & Events.planetReached) {
+        const planet = LEG_NAMES[legOfStage(views.render[RenderSlot.stage])].toUpperCase();
+        [renderer.bannerTitle, renderer.bannerSubtitle, renderer.bannerColor] = [`REACHED ${planet}`, '+1 extra life', '#7dffc8'];
+        renderer.bannerUntil = performance.now() / 1000 + BANNER_SECONDS;
+      }
       if (renderer && events & (Events.weaponUnlock | Events.queenDown)) {
         [renderer.bannerTitle, renderer.bannerSubtitle, renderer.bannerColor] = events & Events.weaponUnlock
           ? weaponBanner(views.render[RenderSlot.weapons])
@@ -669,8 +743,9 @@ function AntarikshGame({ memory }: { memory: WebAssembly.Memory }) {
         }} />
       </div>
       <p className="game-help">←→ or A/D move · Space, Z or ↑ fire (hold to keep firing) · P pause · M mute · Esc back to the hub.
-        The journey runs outward from Earth: Mars, Jupiter, Saturn, Uranus, Neptune and Pluto (departure, transit, arrival for each, every leg with
-        new enemies), then beyond Pluto to Aranya, where you free the natives from the Extraction Corp by shooting open their cages.
+        The journey runs outward from Earth, three stages per planet (Leaving for, Approaching, Reached): Mars, Jupiter, Saturn, Uranus,
+        Neptune, Pluto, then Aranya beyond Pluto, where you shoot open cages to free the natives from the Extraction Corp. Every planet
+        has its own enemies, and reaching a planet gives one extra life; between stages a solar-system map shows where your ship is.
         Bonuses: catch a T capsule (comet or mothership) for the triple shot; the crowned queen in the centre of every formation drops an M capsule
         for the machine gun; hold both for the triple stream. Bonuses last until you lose a ship.</p>
     </div>

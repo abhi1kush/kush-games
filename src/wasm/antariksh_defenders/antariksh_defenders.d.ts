@@ -47,7 +47,7 @@ export class AntarikshDefenders {
     static shields_length(): number;
     shields_pointer(): number;
     /**
-     * The stage name for a wave ("Mars · Departure", "Jupiter · Transit", … "Aranya · Rescue").
+     * The stage name for a wave ("Leaving for Mars", "Approaching Jupiter", … "Reached Aranya").
      */
     static stage_name(wave: number): string;
     start(): void;

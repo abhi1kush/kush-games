@@ -111,7 +111,7 @@ fn shots_fly_up_at_the_allowed_rate_and_kill_enemies() {
     }
     assert!(shots >= 2 && shots <= 4, "held fire repeats at the cooldown: {shots}");
     assert!(kills >= 1);
-    assert_eq!(world.score, 20 * kills as u32, "leaving Earth, the bottom rows are orbital debris");
+    assert_eq!(world.score, 10 * kills as u32, "the bottom rows are the leg's rocks");
     assert_eq!(world.enemies_alive, world.enemies_at_start - kills as u32);
     assert!(world.player_bullets.iter().filter(|bullet| bullet.active).count() <= MAX_PLAYER_SHOTS_IN_FLIGHT);
 }
@@ -203,13 +203,13 @@ fn waves_get_genuinely_harder() {
     assert_ne!(waves::formation_for_wave(1), waves::formation_for_wave(2));
     assert_ne!(waves::formation_for_wave(3), waves::formation_for_wave(4));
     // the journey
-    assert_eq!(waves::STAGE_NAMES[waves::stage_index(1)], "Mars · Departure");
-    assert_eq!(waves::STAGE_NAMES[waves::stage_index(2)], "Mars · Transit");
-    assert_eq!(waves::STAGE_NAMES[waves::stage_index(3)], "Mars · Arrival");
-    assert_eq!(waves::STAGE_NAMES[waves::stage_index(4)], "Jupiter · Departure");
-    assert_eq!(waves::STAGE_NAMES[waves::stage_index(18)], "Pluto · Arrival");
-    assert_eq!(waves::STAGE_NAMES[waves::stage_index(21)], "Aranya · Rescue");
-    assert_eq!(waves::STAGE_NAMES[waves::stage_index(40)], "Aranya · Rescue", "the rescue repeats");
+    assert_eq!(waves::STAGE_NAMES[waves::stage_index(1)], "Leaving for Mars");
+    assert_eq!(waves::STAGE_NAMES[waves::stage_index(2)], "Approaching Mars");
+    assert_eq!(waves::STAGE_NAMES[waves::stage_index(3)], "Reached Mars");
+    assert_eq!(waves::STAGE_NAMES[waves::stage_index(4)], "Leaving for Jupiter");
+    assert_eq!(waves::STAGE_NAMES[waves::stage_index(18)], "Reached Pluto");
+    assert_eq!(waves::STAGE_NAMES[waves::stage_index(21)], "Reached Aranya");
+    assert_eq!(waves::STAGE_NAMES[waves::stage_index(40)], "Reached Aranya", "the rescue repeats");
     assert_eq!((waves::leg_for_wave(1), waves::leg_for_wave(4), waves::leg_for_wave(19), waves::leg_for_wave(99)), (0, 1, 6, 6));
     assert_eq!((waves::sub_stage_for_wave(4), waves::sub_stage_for_wave(5), waves::sub_stage_for_wave(6)), (0, 1, 2));
     assert_eq!((waves::backdrop_for_wave(1), waves::backdrop_for_wave(5), waves::backdrop_for_wave(30)), (0, 4, 20));
@@ -323,6 +323,27 @@ fn each_leg_brings_a_new_enemy_kind_and_aranya_has_captives_to_free() {
         assert!(!seen.contains(&middle), "leg {leg} repeats {middle:?}");
         seen.push(middle);
     }
+    // every leg's formation is entirely its own: no kind (other than the shared rocks) carries over between legs
+    let roster = |leg: usize| {
+        let mut world = World::new();
+        world.setup_wave((leg * waves::STAGES_PER_LEG + 1) as u32);
+        let mut kinds: Vec<EnemyKind> = world.enemies.iter().filter(|enemy| enemy.alive && !enemy.queen && enemy.kind != EnemyKind::Asteroid).map(|enemy| enemy.kind).collect();
+        kinds.sort_by_key(|kind| *kind as u8);
+        kinds.dedup();
+        kinds
+    };
+    for leg in 1..waves::LEGS {
+        let (before, now) = (roster(leg - 1), roster(leg));
+        assert!(now.iter().all(|kind| !before.contains(kind)), "leg {leg} shares {now:?} with {before:?}");
+    }
+    // the three stages of a leg keep the same roster
+    for leg in 0..waves::LEGS {
+        let mut first = World::new();
+        first.setup_wave((leg * 3 + 1) as u32);
+        let mut last = World::new();
+        last.setup_wave((leg * 3 + 3) as u32);
+        assert_eq!(first.enemies[0].kind, last.enemies[0].kind);
+    }
     // armour: Saturn's ring shards take two hits
     let mut world = playing_world();
     world.setup_wave(8);
@@ -346,6 +367,39 @@ fn each_leg_brings_a_new_enemy_kind_and_aranya_has_captives_to_free() {
     assert!(all & events::RESCUE != 0);
     assert_eq!(world.rescued, 1);
     assert!(!world.enemies[captive].alive);
+}
+
+#[test]
+fn reaching_a_new_planet_gives_an_extra_life() {
+    let mut world = playing_world();
+    silence_enemies(&mut world);
+    world.debug_thin_formation(0);
+    // wave 2 (approaching Mars) clears → wave 3 is "Reached Mars"
+    world.setup_wave(2);
+    world.debug_thin_formation(0);
+    let lives = world.lives;
+    let mut all = 0;
+    for _ in 0..((WAVE_CLEAR_SECONDS + 0.2) / FRAME) as usize { all |= world.advance(FRAME); }
+    assert_eq!(world.wave, 3);
+    assert!(all & events::PLANET_REACHED != 0);
+    assert_eq!(world.lives, lives + 1);
+    // leaving for the next planet is not an arrival
+    world.set_phase_for_test(Phase::Playing);
+    world.debug_thin_formation(0);
+    let lives = world.lives;
+    let mut all = 0;
+    for _ in 0..((WAVE_CLEAR_SECONDS + 0.2) / FRAME) as usize { all |= world.advance(FRAME); }
+    assert_eq!(world.wave, 4);
+    assert!(all & events::PLANET_REACHED == 0);
+    assert_eq!(world.lives, lives);
+    // never past the cap
+    world.lives = MAX_LIVES;
+    world.set_phase_for_test(Phase::Playing);
+    world.setup_wave(5);
+    world.debug_thin_formation(0);
+    for _ in 0..((WAVE_CLEAR_SECONDS + 0.2) / FRAME) as usize { world.advance(FRAME); }
+    assert_eq!(world.wave, 6);
+    assert_eq!(world.lives, MAX_LIVES);
 }
 
 #[test]
@@ -524,7 +578,7 @@ fn render_buffer_matches_the_world() {
     assert_eq!(render[crate::render_slot::WAVE], 1.0);
     assert_eq!(render[crate::render_slot::LIVES], STARTING_LIVES as f32);
     assert_eq!(render[crate::render_slot::ENEMIES_ALIVE], 45.0);
-    assert_eq!(AntarikshDefenders::stage_name(5), "Jupiter · Transit");
+    assert_eq!(AntarikshDefenders::stage_name(5), "Approaching Jupiter");
 }
 
 #[test]

@@ -47,7 +47,7 @@ pub const RESPAWN_INVULNERABLE_SECONDS: f32 = 1.6;
 pub const DYING_SECONDS: f32 = 1.3;
 pub const COUNTDOWN_SECONDS: f32 = 3.6;
 pub const WAVE_CLEAR_SECONDS: f32 = 1.4;
-pub const WAVE_INTRO_SECONDS: f32 = 1.8;
+pub const WAVE_INTRO_SECONDS: f32 = 3.0;
 
 /// Formation grid: columns 18 units apart, rows 16 apart; each enemy is 12 × 10.
 pub const CELL_WIDTH: f32 = 18.0;
@@ -113,6 +113,8 @@ pub mod events {
     /// A captive native was freed on Aranya.
     pub const RESCUE: u32 = 2097152;
     pub const ARMOUR_HIT: u32 = 4194304;
+    /// Arrived at a new planet (the arrival stage began): one extra life.
+    pub const PLANET_REACHED: u32 = 8388608;
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -154,8 +156,9 @@ impl EnemyKind {
     pub fn introduced_on_leg(leg: usize) -> EnemyKind {
         [EnemyKind::Crawler, EnemyKind::Jelly, EnemyKind::RingShard, EnemyKind::Spinner, EnemyKind::Wraith, EnemyKind::CryoMine, EnemyKind::Mech][leg.min(FINAL_LEG)]
     }
-    /// Who sits at (row, column) on a leg / sub-stage.
-    pub fn for_slot(leg: usize, sub_stage: usize, row: usize, column: usize) -> EnemyKind {
+    /// Who sits at (row, column) on a leg. Every leg's formation is its own: the destination's signature kind in the top
+    /// three rows and that world's rocks (drawn in the planet's colours) in the bottom two, so a new leg looks different at once.
+    pub fn for_slot(leg: usize, row: usize, column: usize) -> EnemyKind {
         if leg >= FINAL_LEG {
             return match row {
                 0 => EnemyKind::Gunship,
@@ -163,11 +166,7 @@ impl EnemyKind {
                 _ => if column % 2 == 0 { EnemyKind::Captive } else { EnemyKind::Gunship },
             };
         }
-        match row {
-            0 => if leg == 0 { EnemyKind::Drone } else { EnemyKind::introduced_on_leg(leg - 1) },
-            1 | 2 => EnemyKind::introduced_on_leg(leg),
-            _ => if sub_stage == 0 { EnemyKind::Debris } else { EnemyKind::Asteroid },
-        }
+        if row <= 2 { EnemyKind::introduced_on_leg(leg) } else { EnemyKind::Asteroid }
     }
 }
 
@@ -295,7 +294,6 @@ impl World {
         self.difficulty = waves::difficulty_for_wave(self.wave);
         let formation = waves::formation_for_wave(self.wave);
         let leg = waves::leg_for_wave(self.wave);
-        let sub_stage = waves::sub_stage_for_wave(self.wave);
         let mut alive = 0;
         for row in 0..ROWS {
             let pattern = formation[row].as_bytes();
@@ -306,7 +304,7 @@ impl World {
                 // the queen and her guard ring are in every formation
                 let guard = (QUEEN_ROW - 1..=QUEEN_ROW + 1).contains(&row) && (QUEEN_COLUMN - 1..=QUEEN_COLUMN + 1).contains(&column);
                 enemy.queen = row == QUEEN_ROW && column == QUEEN_COLUMN;
-                enemy.kind = EnemyKind::for_slot(leg, sub_stage, row, column);
+                enemy.kind = EnemyKind::for_slot(leg, row, column);
                 enemy.hits_left = if enemy.queen { World::queen_hits(wave) as u8 } else { enemy.kind.toughness() };
                 enemy.alive = pattern[column] == b'X' || guard;
                 if enemy.alive { alive += 1; }
@@ -436,6 +434,7 @@ impl World {
                     let next = self.wave + 1;
                     self.setup_wave(next);
                     self.set_phase(Phase::WaveIntro);
+                    if waves::sub_stage_for_wave(next) == 2 && waves::stage_index(next) + 1 == next as usize { self.reach_planet(); }
                 }
             }
             Phase::WaveIntro => {
@@ -444,6 +443,12 @@ impl World {
                 if self.phase_seconds >= WAVE_INTRO_SECONDS { self.set_phase(Phase::Playing); self.events |= events::WAVE_START; }
             }
         }
+    }
+
+    /// A new planet: one extra life (up to MAX_LIVES).
+    fn reach_planet(&mut self) {
+        self.events |= events::PLANET_REACHED;
+        if self.lives < MAX_LIVES { self.lives += 1; self.events |= events::EXTRA_LIFE; }
     }
 
     fn game_over(&mut self) {
