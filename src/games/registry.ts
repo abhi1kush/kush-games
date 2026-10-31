@@ -309,8 +309,8 @@ export const games: GameDefinition[] = [
     component: lazy(() => import('./pralayrun/PralayRun')),
   },
   {
-    id: 'ghat-climb',
-    title: 'Ghat Climb',
+    id: 'mountain-climb',
+    title: 'Mountain Climb',
     tagline: 'Gas the jeep up the mountain. Don’t flip it.',
     description: 'A hill-climb drive up one mountain road. Hold the gas and the jeep’s nose lifts; tap the brake to bring it back down before you flip past vertical. Coins and jerry cans sit on the dirt, and the tank runs dry if you hold the gas the whole way — roll to a stop empty and the climb is over. Reach the flag at the pass for a bonus. The road, the two-wheel jeep, fuel and coins run in Rust compiled to WebAssembly; a climb in progress and your best score are saved.',
     categories: ['Arcade'],
@@ -328,7 +328,7 @@ export const GENRE_FILTERS: GameCategory[] = ['Puzzle', 'Arcade', 'Strategy', 'C
 export const genreSlug = (genre: GameCategory) => genre.toLowerCase().replace(/\s+/g, '-');
 
 /** The "Most liked" rail at the top of the home page, in this order (these games stay in All games too). */
-export const MOST_LIKED_IDS = ['power-of-2', 'color-trails', 'flappy-wings', 'paani-pour', 'connect-four', 'memory-match', 'jal-path'];
+export const MOST_LIKED_IDS = ['power-of-2', 'color-trails', 'flappy-wings', 'paani-pour', 'connect-four', 'memory-match', 'jal-path', 'mountain-climb'];
 
 export interface HomeSections {
   /** The hand-picked "Most liked" games, shown first. */
@@ -356,7 +356,7 @@ export function buildHomeSections(allGames: GameDefinition[] = games): HomeSecti
 }
 
 /** Old game ids that were renamed: old id → current id. Old links, saves and featured picks keep working through these. */
-export const RENAMED_GAME_IDS: Readonly<Record<string, string>> = { '2048': 'power-of-2' };
+export const RENAMED_GAME_IDS: Readonly<Record<string, string>> = { '2048': 'power-of-2', 'ghat-climb': 'mountain-climb' };
 
 /** The current id for a game id (an old, renamed id maps to its new one). */
 export const currentGameId = (gameId: string) => (Object.prototype.hasOwnProperty.call(RENAMED_GAME_IDS, gameId) ? RENAMED_GAME_IDS[gameId] : gameId);

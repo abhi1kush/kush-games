@@ -18,6 +18,14 @@ describe('hash routing', () => {
     expect(renamedHash('#/title/2048')).toBe('#/title/power-of-2');
     expect(renamedHash('#/play/2048?x=1')).toBe('#/play/power-of-2?x=1');
     expect(renamedHash('#/play/power-of-2')).toBeNull();
+  });
+
+  it('keeps old links to Ghat Climb working (ghat-climb → Mountain Climb)', () => {
+    expect(parseHash('#/play/ghat-climb')).toEqual({ page: 'play', gameId: 'mountain-climb' });
+    expect(parseHash('#/title/ghat-climb')).toEqual({ page: 'home', infoGameId: 'mountain-climb' });
+    expect(renamedHash('#/play/ghat-climb')).toBe('#/play/mountain-climb');
+    expect(renamedHash('#/title/ghat-climb')).toBe('#/title/mountain-climb');
+    expect(renamedHash('#/play/mountain-climb')).toBeNull();
     expect(renamedHash('#/play/snake')).toBeNull();
     expect(renamedHash('#/')).toBeNull();
   });

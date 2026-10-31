@@ -143,6 +143,18 @@ describe('save slots', () => {
     expect(storage.getItem('kush-games:snake:save:v1')).toBe('{}');
   });
 
+  it('moves Ghat Climb\'s save and best score to Mountain Climb', () => {
+    const storage = memoryStorage();
+    storage.setItem('kush-games:ghat-climb:save:v1', '{"version":1,"savedAt":0,"data":{"x":420,"fuel":60,"coins":3}}');
+    storage.setItem('kush-games-ghat-climb-best', '1234');
+    migrateRenamedGameData(storage);
+    expect(storage.getItem('kush-games:mountain-climb:save:v1')).toContain('"x":420');
+    expect(storage.getItem('kush-games-mountain-climb-best')).toBe('1234');
+    expect(storage.getItem('kush-games:ghat-climb:save:v1')).toBeNull();
+    expect(storage.getItem('kush-games-ghat-climb-best')).toBeNull();
+    expect(hasSavedGame('mountain-climb', storage)).toBe(true);
+  });
+
   it('never overwrites newer data already under the new key', () => {
     const storage = memoryStorage();
     storage.setItem('kush-games:2048:save:v1', 'old');

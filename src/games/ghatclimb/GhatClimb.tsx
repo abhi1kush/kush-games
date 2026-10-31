@@ -1,5 +1,5 @@
 /**
- * Ghat Climb — drive a jeep up one mountain road. Gas lifts the nose, brake brings it down. Coins and jerry cans
+ * Mountain Climb (formerly Ghat Climb) — drive a jeep up one mountain road. Gas lifts the nose, brake brings it down. Coins and jerry cans
  * sit on the dirt; the tank runs dry if you hold the gas the whole way. Rust/wasm owns the road and the jeep.
  */
 import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useRef, useState } from 'react';
@@ -11,10 +11,11 @@ import { Renderer } from './render';
 import { EngineSound, playGhatSound, type GhatSound } from './sounds';
 import '../shared.css';
 import '../online/online.css';
+import { ShareGameButton } from '../ShareGameButton';
 import './ghat.css';
 
-const BEST_KEY = 'kush-games-ghat-climb-best';
-const createRunSlot = () => createSaveSlot<RunSave>({ gameId: 'ghat-climb', version: SAVE_VERSIONS['ghat-climb'], parse: parseRun });
+const BEST_KEY = 'kush-games-mountain-climb-best';
+const createRunSlot = () => createSaveSlot<RunSave>({ gameId: 'mountain-climb', version: SAVE_VERSIONS['mountain-climb'], parse: parseRun });
 const readBest = () => { try { return Number(localStorage.getItem(BEST_KEY)) || 0; } catch { return 0; } };
 const writeBest = (score: number) => { try { localStorage.setItem(BEST_KEY, String(score)); } catch { /* storage unavailable */ } };
 const isTouchDevice = () => typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
@@ -50,7 +51,7 @@ function RotatePrompt({ onBack }: { onBack: () => void }) {
     <div className="ghat-rotate" role="dialog" aria-modal="true" aria-labelledby="ghat-rotate-title" data-testid="ghat-rotate">
       <div className="ghat-rotate__phone" aria-hidden="true"><span /></div>
       <h2 id="ghat-rotate-title">Turn your phone sideways</h2>
-      <p>Ghat Climb is played in landscape, with the brake under your left thumb and the accelerator under your right.</p>
+      <p>Mountain Climb is played in landscape, with the brake under your left thumb and the accelerator under your right.</p>
       <div className="ghat-actions">
         {canForce && <button type="button" className="online-button online-button--primary" onClick={() => { unlockAudio(); void forceLandscape(); }} data-testid="ghat-rotate-fullscreen">Play full screen</button>}
         <button type="button" className="online-button" onClick={onBack} data-testid="ghat-rotate-back">← Back to games</button>
@@ -303,7 +304,7 @@ function GhatClimbScreens() {
       {portrait && <RotatePrompt onBack={() => navigate(homePath)} />}
       <div className="ghat-frame">
       <div className="ghat-stage" ref={stageRef} data-testid="ghat-stage">
-        <canvas ref={canvasRef} className="ghat-canvas" data-testid="ghat-canvas" aria-label="Ghat Climb mountain road" />
+        <canvas ref={canvasRef} className="ghat-canvas" data-testid="ghat-canvas" aria-label="Mountain Climb mountain road" />
         {driving && (
           <div className="ghat-hud" data-testid="ghat-hud">
             <div className="ghat-hud__stats">
@@ -320,7 +321,7 @@ function GhatClimbScreens() {
         {driving && debug && <pre className="ghat-debug" ref={debugRef} data-testid="ghat-debug" />}
         {phase === PHASE.ready && (
           <div className="ghat-overlay" data-testid="ghat-start">
-            <h1>Ghat Climb</h1>
+            <h1>Mountain Climb</h1>
             <p>One road to the pass. Gas lifts the nose. Brake brings it down.</p>
             <div className="ghat-card" data-testid="ghat-controls">
               Hold the gas on the flat, ease off on the steep faces, and grab the jerry cans. Flip past vertical, or roll to a stop on an empty tank, and the climb is over.
@@ -329,6 +330,7 @@ function GhatClimbScreens() {
             <div className="ghat-actions">
               {savedRun.current && <button type="button" className="online-button online-button--primary" onClick={() => { const run = savedRun.current; savedRun.current = null; begin(run); }} data-testid="ghat-continue">Continue climb</button>}
               <button type="button" className={`online-button${savedRun.current ? '' : ' online-button--primary'}`} onClick={() => { savedRun.current = null; begin(null); }} data-testid="ghat-play">{savedRun.current ? 'New climb' : 'Begin'}</button>
+              <ShareGameButton gameId="mountain-climb" gameName="Mountain Climb" testId="ghat-share" />
               {mute}
             </div>
             {best > 0 && <p data-testid="ghat-best">Best {best}</p>}
@@ -351,6 +353,7 @@ function GhatClimbScreens() {
             <p data-testid="ghat-score">Score {hud.score} · {hud.meters} m · {hud.coins} coins{hud.score >= best && hud.score > 0 ? ' · best' : ''}</p>
             <div className="ghat-actions">
               <button type="button" className="online-button online-button--primary" onClick={() => begin(null)} data-testid="ghat-again">Climb again</button>
+              <ShareGameButton gameId="mountain-climb" gameName="Mountain Climb" testId="ghat-share-end" />
               {mute}
             </div>
           </div>

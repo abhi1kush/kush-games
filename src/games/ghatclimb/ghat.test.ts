@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { engineMood, parseRun } from './engine';
 
-describe('Ghat Climb save', () => {
+describe('Mountain Climb save', () => {
   it('keeps a climb that is still on the road and drops a broken one', () => {
     expect(parseRun({ x: 420, fuel: 60, coins: 3 })).toEqual({ x: 420, fuel: 60, coins: 3 });
     expect(parseRun({ x: 10, fuel: 60, coins: 0 })).toBeNull();
@@ -11,7 +11,7 @@ describe('Ghat Climb save', () => {
   });
 });
 
-describe('Ghat Climb engine gauge', () => {
+describe('Mountain Climb engine gauge', () => {
   it('reads the slope load and the rear tyre', () => {
     expect(engineMood(false, 50, 0.8, 3).mood).toBe('idle');
     expect(engineMood(true, 0, 0.8, 3).mood).toBe('empty');

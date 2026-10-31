@@ -38,7 +38,7 @@ export interface SaveSlot<Data> {
 /** Saves for the current versions; the home page uses this to show "Continue" badges. */
 export const SAVE_VERSIONS: Record<string, number> = {
   'power-of-2': 1, snake: 1, blocks: 1, chess: 1, minesweeper: 1, sudoku: 1, 'tic-tac-toe': 1, 'memory-match': 1, 'flappy-wings': 1,
-  'arrow-out': 3, 'color-trails': 1, breakout: 1, 'connect-four': 1, checkers: 1, 'kush-jump': 1, 'antariksh-defenders': 1, 'mithai-match': 1, ludo: 1, 'snakes-ladders': 1, 'fleet-clash': 1, carrom: 1, 'jal-path': 1, 'paani-pour': 1, 'ember-lane': 1, 'pralay-run': 1, 'ghat-climb': 1,
+  'arrow-out': 3, 'color-trails': 1, breakout: 1, 'connect-four': 1, checkers: 1, 'kush-jump': 1, 'antariksh-defenders': 1, 'mithai-match': 1, ludo: 1, 'snakes-ladders': 1, 'fleet-clash': 1, carrom: 1, 'jal-path': 1, 'paani-pour': 1, 'ember-lane': 1, 'pralay-run': 1, 'mountain-climb': 1,
 };
 
 /** Storage keys left behind by games that were removed from the hub; cleared once on startup. */
@@ -48,10 +48,13 @@ export function clearRemovedGameData(storage: KeyValueStorage | null = browserSt
   for (const key of REMOVED_GAME_STORAGE_KEYS) { try { storage?.removeItem(key); } catch { /* storage unavailable */ } }
 }
 
-/** Storage keys of renamed games (2048 → Power of 2, id `power-of-2`): old key → new key, moved once on startup. */
+/** Storage keys of renamed games (2048 → Power of 2, Ghat Climb → Mountain Climb): old key → new key, moved once on startup. */
 export const RENAMED_GAME_STORAGE_KEYS: readonly (readonly [string, string])[] = [
   ['kush-games:2048:save:v1', 'kush-games:power-of-2:save:v1'],
   ['2048-best', 'kush-games-power-of-2-best'],
+  // Ghat Climb → Mountain Climb (id `mountain-climb`)
+  ['kush-games:ghat-climb:save:v1', 'kush-games:mountain-climb:save:v1'],
+  ['kush-games-ghat-climb-best', 'kush-games-mountain-climb-best'],
 ];
 
 /** Move a renamed game's saves to its new keys so progress isn't lost. A value already under the new key wins. */
