@@ -22,6 +22,24 @@ pub const PLAYER_MAX_X: f32 = WORLD_WIDTH - 10.0;
 pub const PLAYER_BULLET_SPEED: f32 = 270.0;
 pub const FIRE_COOLDOWN_SECONDS: f32 = 0.34;
 pub const MAX_PLAYER_SHOTS_IN_FLIGHT: usize = 2;
+/// Weapon bonuses (bits in `World::weapons`), kept across waves until the ship is lost.
+/// Triple shot comes from T capsules; the machine gun is the predictable one: shoot down the queen in the formation's centre.
+/// Holding both fuses them into the triple stream: three continuous streams.
+pub mod weapons {
+    pub const TRIPLE: u32 = 1;
+    pub const RAPID: u32 = 2;
+    pub const BOTH: u32 = TRIPLE | RAPID;
+}
+pub const TRIPLE_SPREAD: f32 = 50.0;
+pub const TRIPLE_SHOTS_IN_FLIGHT: usize = 9;
+pub const RAPID_COOLDOWN_SECONDS: f32 = 0.085;
+pub const RAPID_SHOTS_IN_FLIGHT: usize = 14;
+pub const STREAM_COOLDOWN_SECONDS: f32 = 0.1;
+pub const STREAM_SPREAD: f32 = 40.0;
+/// The queen: always in the centre of the formation (row 2, column 5), ringed by eight guards that every formation keeps.
+pub const QUEEN_ROW: usize = 2;
+pub const QUEEN_COLUMN: usize = 5;
+pub const QUEEN_POINTS: u32 = 500;
 pub const STARTING_LIVES: u32 = 3;
 pub const MAX_LIVES: u32 = 6;
 pub const EXTRA_LIFE_EVERY: u32 = 5000;
@@ -55,11 +73,10 @@ pub const MYSTERY_SPEED: f32 = 48.0;
 pub const MYSTERY_POINTS: [u32; 4] = [50, 100, 150, 300];
 
 pub const CAPSULE_SPEED: f32 = 42.0;
-pub const TRIPLE_SHOT_SECONDS: f32 = 9.0;
 pub const SHIELD_BUBBLE_SECONDS: f32 = 9.0;
 
 pub const MAX_ENEMIES: usize = ROWS * COLUMNS;
-pub const MAX_PLAYER_BULLETS: usize = 8;
+pub const MAX_PLAYER_BULLETS: usize = 40;
 pub const MAX_ENEMY_BULLETS: usize = 10;
 pub const MAX_PARTICLES: usize = 160;
 pub const MAX_CAPSULES: usize = 2;
@@ -89,24 +106,29 @@ pub mod events {
     pub const HITCH: u32 = 32768;
     pub const BUBBLE_POP: u32 = 65536;
     pub const INVADED: u32 = 131072;
+    pub const QUEEN_HIT: u32 = 262144;
+    pub const QUEEN_DOWN: u32 = 524288;
+    /// A weapon bonus was gained (read `weapons` for which).
+    pub const WEAPON_UNLOCK: u32 = 1048576;
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Phase { Ready = 0, Countdown = 1, Playing = 2, Dying = 3, WaveClear = 4, WaveIntro = 5, GameOver = 6 }
 
-/// Bottom rows are asteroids, the middle rows debris clusters, the top row rogue drones.
+/// Bottom rows are asteroids, the middle rows debris clusters, the top row rogue drones; the queen sits in the centre.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
-pub enum EnemyKind { Asteroid = 0, Debris = 1, Drone = 2 }
+pub enum EnemyKind { Asteroid = 0, Debris = 1, Drone = 2, Queen = 3 }
 
 impl EnemyKind {
     pub fn for_row(row: usize) -> EnemyKind { match row { 0 => EnemyKind::Drone, 1 | 2 => EnemyKind::Debris, _ => EnemyKind::Asteroid } }
-    pub fn points(self) -> u32 { match self { EnemyKind::Asteroid => 10, EnemyKind::Debris => 20, EnemyKind::Drone => 30 } }
+    pub fn points(self) -> u32 { match self { EnemyKind::Asteroid => 10, EnemyKind::Debris => 20, EnemyKind::Drone => 30, EnemyKind::Queen => QUEEN_POINTS } }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
+/// Capsule contents. `TripleShot` capsules grant the permanent triple-shot weapon bit; `Bubble` is a timed shield.
 pub enum Power { None = 0, TripleShot = 1, Bubble = 2 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -114,10 +136,10 @@ pub enum Power { None = 0, TripleShot = 1, Bubble = 2 }
 pub enum ParticleKind { Spark = 0, Ring = 1, Ember = 2, ScoreText = 3, Shard = 4 }
 
 #[derive(Clone, Copy, Debug, Default)]
-pub struct Enemy { pub alive: bool, pub row: u8, pub column: u8, pub x: f32, pub y: f32 }
+pub struct Enemy { pub alive: bool, pub row: u8, pub column: u8, pub x: f32, pub y: f32, pub queen: bool, pub hits_left: u8 }
 
 impl Enemy {
-    pub fn kind(&self) -> EnemyKind { EnemyKind::for_row(self.row as usize) }
+    pub fn kind(&self) -> EnemyKind { if self.queen { EnemyKind::Queen } else { EnemyKind::for_row(self.row as usize) } }
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -151,6 +173,9 @@ pub struct World {
     pub fire_cooldown: f32,
     pub power: Power,
     pub power_seconds: f32,
+    /// Weapon bonus bits (`weapons::TRIPLE`, `weapons::RAPID`).
+    pub weapons: u32,
+    pub queen_hits_max: u32,
     pub input: u32,
     /// Where a finger wants the ship (world x), or negative for none; the ship flies there at its normal speed.
     pub target_x: f32,
@@ -191,7 +216,7 @@ impl World {
         let mut world = World {
             phase: Phase::Ready, phase_seconds: 0.0, wave: 1, difficulty: waves::difficulty_for_wave(1), score: 0, lives: STARTING_LIVES,
             next_extra_life: EXTRA_LIFE_EVERY, player_x: WORLD_WIDTH / 2.0, invulnerable_seconds: 0.0, fire_cooldown: 0.0,
-            power: Power::None, power_seconds: 0.0, input: 0, target_x: -1.0,
+            power: Power::None, power_seconds: 0.0, weapons: 0, queen_hits_max: 0, input: 0, target_x: -1.0,
             enemies: [Enemy::default(); MAX_ENEMIES], enemies_at_start: 0, enemies_alive: 0, formation_x: 0.0, formation_y: 0.0,
             march_direction: 1.0, march_timer: 0.0, descend_next: false, march_note: 0, march_frame: 0, shot_timer: 0.0,
             mystery: Mystery::default(), mystery_timer: 0.0, mysteries_seen: 0,
@@ -226,11 +251,16 @@ impl World {
                 let enemy = &mut self.enemies[row * COLUMNS + column];
                 enemy.row = row as u8;
                 enemy.column = column as u8;
-                enemy.alive = pattern[column] == b'X';
+                // the queen and her guard ring are in every formation
+                let guard = (QUEEN_ROW - 1..=QUEEN_ROW + 1).contains(&row) && (QUEEN_COLUMN - 1..=QUEEN_COLUMN + 1).contains(&column);
+                enemy.queen = row == QUEEN_ROW && column == QUEEN_COLUMN;
+                enemy.hits_left = if enemy.queen { World::queen_hits(wave) as u8 } else { 1 };
+                enemy.alive = pattern[column] == b'X' || guard;
                 if enemy.alive { alive += 1; }
             }
         }
         self.enemies_at_start = alive;
+        self.queen_hits_max = World::queen_hits(self.wave);
         self.enemies_alive = alive;
         self.formation_x = (WORLD_WIDTH - CELL_WIDTH * COLUMNS as f32) / 2.0;
         self.formation_y = self.difficulty.start_y;
@@ -244,6 +274,15 @@ impl World {
         self.clear_shields();
         self.clear_shots();
         for capsule in self.capsules.iter_mut() { capsule.active = false; }
+    }
+
+    /// Shots it takes to bring the queen down: 4 on wave 1, one more every two waves, at most 8.
+    pub fn queen_hits(wave: u32) -> u32 { (4 + (wave.max(1) - 1) / 2).min(8) }
+
+    /// Shots the queen can still take (0 when she's down).
+    pub fn queen_hits_left(&self) -> u32 {
+        let queen = &self.enemies[QUEEN_ROW * COLUMNS + QUEEN_COLUMN];
+        if queen.alive { queen.hits_left as u32 } else { 0 }
     }
 
     fn clear_shots(&mut self) {
@@ -271,6 +310,7 @@ impl World {
         self.next_extra_life = EXTRA_LIFE_EVERY;
         self.power = Power::None;
         self.power_seconds = 0.0;
+        self.weapons = 0;
         self.player_x = WORLD_WIDTH / 2.0;
         self.invulnerable_seconds = 0.0;
         self.kills = 0;
@@ -398,19 +438,32 @@ impl World {
         self.fire_cooldown = (self.fire_cooldown - dt).max(0.0);
         if self.input & buttons::FIRE == 0 || self.fire_cooldown > 0.0 { return; }
         let in_flight = self.player_bullets.iter().filter(|bullet| bullet.active).count();
-        let limit = if self.power == Power::TripleShot { MAX_PLAYER_BULLETS } else { MAX_PLAYER_SHOTS_IN_FLIGHT };
+        let (limit, cooldown, spread) = match self.weapons & weapons::BOTH {
+            weapons::BOTH => (MAX_PLAYER_BULLETS, STREAM_COOLDOWN_SECONDS, STREAM_SPREAD),
+            weapons::RAPID => (RAPID_SHOTS_IN_FLIGHT, RAPID_COOLDOWN_SECONDS, 0.0),
+            weapons::TRIPLE => (TRIPLE_SHOTS_IN_FLIGHT, FIRE_COOLDOWN_SECONDS, TRIPLE_SPREAD),
+            _ => (MAX_PLAYER_SHOTS_IN_FLIGHT, FIRE_COOLDOWN_SECONDS, 0.0),
+        };
         if in_flight >= limit { return; }
         let x = self.player_x;
-        if self.power == Power::TripleShot {
-            self.add_player_bullet(x, -50.0);
+        if spread > 0.0 {
+            self.add_player_bullet(x - 3.0, -spread);
             self.add_player_bullet(x, 0.0);
-            self.add_player_bullet(x, 50.0);
+            self.add_player_bullet(x + 3.0, spread);
         } else {
             self.add_player_bullet(x, 0.0);
         }
-        self.fire_cooldown = FIRE_COOLDOWN_SECONDS;
+        self.fire_cooldown = cooldown;
         self.events |= events::SHOOT;
         self.add_particle(ParticleKind::Ember, x, PLAYER_Y - 9.0, 0.0, -20.0, 0.08, 0.0);
+    }
+
+    /// Gain a weapon bonus (no-op if already held).
+    pub fn grant_weapon(&mut self, bit: u32) {
+        if self.weapons & bit != 0 { return; }
+        self.weapons |= bit;
+        self.events |= events::WEAPON_UNLOCK;
+        self.add_particle(ParticleKind::Ring, self.player_x, PLAYER_Y, 0.0, 0.0, 0.5, 5.0);
     }
 
     fn add_player_bullet(&mut self, x: f32, velocity_x: f32) {
@@ -435,7 +488,7 @@ impl World {
             }
             if let Some(enemy_index) = self.enemy_at(x, y) {
                 self.player_bullets[index].active = false;
-                self.destroy_enemy(enemy_index);
+                self.hit_enemy(enemy_index);
                 continue;
             }
             // Shots can cancel enemy shots head-on.
@@ -454,6 +507,19 @@ impl World {
         self.enemies.iter().position(|enemy| enemy.alive && (enemy.x - x).abs() <= ENEMY_HALF_WIDTH && (enemy.y - y).abs() <= ENEMY_HALF_HEIGHT)
     }
 
+    /// A shot hit an enemy: the queen soaks several hits; everyone else goes down at once.
+    fn hit_enemy(&mut self, index: usize) {
+        let enemy = self.enemies[index];
+        if enemy.hits_left > 1 {
+            self.enemies[index].hits_left -= 1;
+            self.events |= events::QUEEN_HIT;
+            self.add_sparks(enemy.x, enemy.y + 3.0, 5, 3.0);
+            self.shake = self.shake.max(0.15);
+            return;
+        }
+        self.destroy_enemy(index);
+    }
+
     fn destroy_enemy(&mut self, index: usize) {
         let enemy = self.enemies[index];
         self.enemies[index].alive = false;
@@ -464,10 +530,20 @@ impl World {
         self.add_sparks(enemy.x, enemy.y, 7, enemy.kind() as u8 as f32);
         self.add_particle(ParticleKind::Ring, enemy.x, enemy.y, 0.0, 0.0, 0.28, enemy.kind() as u8 as f32);
         self.shake = self.shake.max(0.25);
+        if enemy.queen {
+            // the predictable bonus: the queen always gives the machine gun
+            self.events |= events::QUEEN_DOWN;
+            self.shake = 0.8;
+            self.flash = self.flash.max(0.3);
+            self.add_sparks(enemy.x, enemy.y, 18, 3.0);
+            self.add_particle(ParticleKind::Ring, enemy.x, enemy.y, 0.0, 0.0, 0.5, 3.0);
+            self.add_particle(ParticleKind::ScoreText, enemy.x, enemy.y, 0.0, -10.0, 1.2, QUEEN_POINTS as f32);
+            self.grant_weapon(weapons::RAPID);
+            return;
+        }
         let capsule_falling = self.capsules.iter().any(|capsule| capsule.active);
-        if !capsule_falling && self.power == Power::None && self.enemies_alive > 3 && self.random() < 0.03 {
-            let power = if self.random() < 0.5 { Power::TripleShot } else { Power::Bubble };
-            self.drop_capsule(enemy.x, enemy.y, power);
+        if !capsule_falling && self.enemies_alive > 3 && self.random() < 0.03 {
+            if let Some(power) = self.next_capsule_power() { self.drop_capsule(enemy.x, enemy.y, power); }
         }
     }
 
@@ -492,6 +568,7 @@ impl World {
         self.lives = self.lives.saturating_sub(1);
         self.power = Power::None;
         self.power_seconds = 0.0;
+        self.weapons = 0; // weapon bonuses go down with the ship
         self.events |= events::PLAYER_DOWN;
         self.shake = 1.0;
         self.flash = 0.6;
@@ -619,7 +696,7 @@ impl World {
 
     fn enemy_shoots(&mut self, index: usize) {
         let enemy = self.enemies[index];
-        let kind = enemy.kind() as u8;
+        let kind = if enemy.queen { EnemyKind::Drone as u8 } else { enemy.kind() as u8 };
         let speed = self.difficulty.enemy_bullet_speed * if kind == EnemyKind::Debris as u8 { 1.2 } else { 1.0 };
         if let Some(bullet) = self.enemy_bullets.iter_mut().find(|bullet| !bullet.active) {
             *bullet = Bullet { active: true, x: enemy.x, y: enemy.y + ENEMY_HALF_HEIGHT + 2.0, velocity_x: 0.0, velocity_y: speed, kind, age: 0.0 };
@@ -683,10 +760,16 @@ impl World {
         self.add_sparks(mystery.x, MYSTERY_Y, 14, 3.0);
         self.add_particle(ParticleKind::Ring, mystery.x, MYSTERY_Y, 0.0, 0.0, 0.45, 3.0);
         self.add_particle(ParticleKind::ScoreText, mystery.x, MYSTERY_Y, 0.0, -10.0, 1.2, mystery.points as f32);
-        if self.power == Power::None && !self.capsules.iter().any(|capsule| capsule.active) {
-            let power = if self.mysteries_seen % 2 == 1 { Power::TripleShot } else { Power::Bubble };
-            self.drop_capsule(mystery.x.clamp(12.0, WORLD_WIDTH - 12.0), MYSTERY_Y, power);
+        if !self.capsules.iter().any(|capsule| capsule.active) {
+            if let Some(power) = self.next_capsule_power() { self.drop_capsule(mystery.x.clamp(12.0, WORLD_WIDTH - 12.0), MYSTERY_Y, power); }
         }
+    }
+
+    /// What a capsule should hold: triple shot until you have it, then a shield bubble (none if you already have both).
+    fn next_capsule_power(&self) -> Option<Power> {
+        if self.weapons & weapons::TRIPLE == 0 { Some(Power::TripleShot) }
+        else if self.power == Power::None { Some(Power::Bubble) }
+        else { None }
     }
 
     pub fn drop_capsule(&mut self, x: f32, y: f32, power: Power) {
@@ -702,9 +785,11 @@ impl World {
             if (capsule.x - self.player_x).abs() < PLAYER_HALF_WIDTH + 4.0 && (capsule.y - PLAYER_Y).abs() < 9.0 {
                 let power = capsule.power;
                 capsule.active = false;
-                self.power = power;
-                self.power_seconds = if power == Power::TripleShot { TRIPLE_SHOT_SECONDS } else { SHIELD_BUBBLE_SECONDS };
                 self.events |= events::POWER_UP;
+                if power == Power::TripleShot { self.grant_weapon(weapons::TRIPLE); } else {
+                    self.power = Power::Bubble;
+                    self.power_seconds = SHIELD_BUBBLE_SECONDS;
+                }
                 self.add_particle(ParticleKind::Ring, self.player_x, PLAYER_Y, 0.0, 0.0, 0.35, 5.0);
             }
         }

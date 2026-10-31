@@ -271,13 +271,14 @@ fn power_ups_triple_shot_and_bubble() {
     world.drop_capsule(120.0, PLAYER_Y - 20.0, Power::TripleShot);
     let events = run(&mut world, 0.8);
     assert!(events & events::POWER_UP != 0);
-    assert_eq!(world.power, Power::TripleShot);
+    assert!(events & events::WEAPON_UNLOCK != 0);
+    assert_eq!(world.weapons, weapons::TRIPLE);
     world.input = buttons::FIRE;
     world.advance(FRAME);
     world.input = 0;
     assert_eq!(world.player_bullets.iter().filter(|bullet| bullet.active).count(), 3);
-    run(&mut world, TRIPLE_SHOT_SECONDS);
-    assert_eq!(world.power, Power::None, "wears off");
+    run(&mut world, 20.0);
+    assert_eq!(world.weapons, weapons::TRIPLE, "weapon bonuses don't wear off");
     world.drop_capsule(120.0, PLAYER_Y - 20.0, Power::Bubble);
     run(&mut world, 0.8);
     assert_eq!(world.power, Power::Bubble);
@@ -286,6 +287,80 @@ fn power_ups_triple_shot_and_bubble() {
     assert!(events & events::BUBBLE_POP != 0);
     assert_eq!(world.lives, STARTING_LIVES, "the bubble took the hit");
     assert_eq!(world.power, Power::None);
+    assert_eq!(world.weapons, weapons::TRIPLE, "a popped bubble keeps the weapon");
+}
+
+#[test]
+fn queen_sits_in_the_centre_with_a_guard_ring_in_every_formation() {
+    for wave in 1..=8 {
+        let mut world = World::new();
+        world.setup_wave(wave);
+        let queen = world.enemies[QUEEN_ROW * COLUMNS + QUEEN_COLUMN];
+        assert!(queen.alive && queen.queen, "wave {wave}");
+        assert_eq!(queen.kind(), EnemyKind::Queen);
+        assert_eq!(world.enemies.iter().filter(|enemy| enemy.queen).count(), 1);
+        assert_eq!(queen.hits_left as u32, World::queen_hits(wave));
+        for row in QUEEN_ROW - 1..=QUEEN_ROW + 1 {
+            for column in QUEEN_COLUMN - 1..=QUEEN_COLUMN + 1 {
+                assert!(world.enemies[row * COLUMNS + column].alive, "guard at {row},{column} on wave {wave}");
+            }
+        }
+    }
+}
+
+#[test]
+fn killing_the_queen_unlocks_the_machine_gun_and_both_make_a_triple_stream() {
+    let mut world = playing_world();
+    silence_enemies(&mut world);
+    world.march_timer = -1.0e9;
+    world.debug_invincible = true;
+    let queen_index = QUEEN_ROW * COLUMNS + QUEEN_COLUMN;
+    // clear the guards below her, then shoot her repeatedly from straight underneath
+    for row in QUEEN_ROW + 1..ROWS { if world.enemies[row * COLUMNS + QUEEN_COLUMN].alive { world.enemies[row * COLUMNS + QUEEN_COLUMN].alive = false; world.enemies_alive -= 1; } }
+    world.player_x = world.enemies[queen_index].x;
+    let hits = World::queen_hits(1);
+    let mut all = 0;
+    world.input = buttons::FIRE;
+    for _ in 0..(10.0 / FRAME) as usize {
+        all |= world.advance(FRAME);
+        if !world.enemies[queen_index].alive { break; }
+    }
+    world.input = 0;
+    assert!(all & events::QUEEN_HIT != 0, "she soaks hits first ({hits})");
+    assert!(all & events::QUEEN_DOWN != 0);
+    assert!(all & events::WEAPON_UNLOCK != 0);
+    assert_eq!(world.weapons, weapons::RAPID);
+    // machine gun: a stream of single shots far faster than normal
+    for bullet in world.player_bullets.iter_mut() { bullet.active = false; }
+    world.player_x = 20.0;
+    world.input = buttons::FIRE;
+    let mut shots = 0;
+    for _ in 0..60 { if world.advance(FRAME) & events::SHOOT != 0 { shots += 1; } }
+    assert!(shots >= 9, "rapid fire: {shots} volleys in 1 s");
+    // triple shot on top → three continuous streams
+    world.input = 0;
+    run(&mut world, 1.5);
+    world.player_x = 120.0;
+    world.drop_capsule(120.0, PLAYER_Y - 20.0, Power::TripleShot);
+    run(&mut world, 0.8);
+    assert_eq!(world.weapons, weapons::BOTH);
+    for bullet in world.player_bullets.iter_mut() { bullet.active = false; }
+    world.player_x = 20.0;
+    world.input = buttons::FIRE;
+    for _ in 0..30 { world.advance(FRAME); }
+    let in_flight = world.player_bullets.iter().filter(|bullet| bullet.active).count();
+    assert!(in_flight >= 12, "three streams: {in_flight} bullets");
+    assert!(world.player_bullets.iter().any(|bullet| bullet.active && bullet.velocity_x < 0.0));
+    assert!(world.player_bullets.iter().any(|bullet| bullet.active && bullet.velocity_x > 0.0));
+    // bonuses survive into the next wave, but are lost with the ship
+    world.setup_wave(2);
+    assert_eq!(world.weapons, weapons::BOTH);
+    world.debug_invincible = false;
+    world.invulnerable_seconds = 0.0;
+    world.input = 0;
+    world.enemy_bullets[0] = Bullet { active: true, x: world.player_x, y: 245.0, velocity_x: 0.0, velocity_y: 80.0, kind: 0, age: 0.0 };
+    run(&mut world, 0.4);
+    assert_eq!(world.weapons, 0);
 }
 
 #[test]

@@ -100,6 +100,12 @@ export function createBackdrop(scale: number, backdrop: Backdrop): BackdropLayer
     gradient.addColorStop(1, tints[1]);
     context.fillStyle = gradient;
     context.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+    // baked-in vignette: darker edges frame the action (free at run time)
+    const shade = context.createRadialGradient(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, WORLD_HEIGHT * 0.3, WORLD_WIDTH / 2, WORLD_HEIGHT / 2, WORLD_HEIGHT * 0.75);
+    shade.addColorStop(0, 'rgba(0,0,8,0)');
+    shade.addColorStop(1, 'rgba(0,0,8,0.6)');
+    context.fillStyle = shade;
+    context.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
   });
   const farStars = starTile(scale, 17 + backdrop * 31, 150, [0.45, 0.8], [0.15, 0.55], 0.06);
   const midStars = starTile(scale, 101 + backdrop * 13, 42, [0.7, 1.1], [0.45, 0.95], 0.25);
@@ -259,7 +265,7 @@ function drawLaunchPad(context: CanvasRenderingContext2D) {
 // ------------------------------------------------------------------ sprites
 
 export interface Sprites {
-  /** [kind * 2 + frame], 16 × 12 units, centred on the enemy. */
+  /** [kind * 2 + frame], 16 × 12 units, centred on the enemy (kind 3, the queen, is QUEEN_SPRITE_WIDTH × QUEEN_SPRITE_HEIGHT). */
   enemies: HTMLCanvasElement[];
   /** the launcher, 18 × 18 units, centred on (x, PLAYER_Y). */
   player: HTMLCanvasElement;
@@ -268,77 +274,146 @@ export interface Sprites {
   /** triple-shot and bubble capsules, 9 × 9 units. */
   capsules: HTMLCanvasElement[];
   life: HTMLCanvasElement;
+  /** soft additive glows, GLOW_SIZE units across, one per GlowColor. */
+  glows: HTMLCanvasElement[];
+  /** player bolts: standard, machine gun, triple stream; 4 × 11 units. */
+  bolts: HTMLCanvasElement[];
 }
 
 export const ENEMY_SPRITE_WIDTH = 16;
 export const ENEMY_SPRITE_HEIGHT = 12;
+export const QUEEN_SPRITE_WIDTH = 28;
+export const QUEEN_SPRITE_HEIGHT = 20;
 export const PLAYER_SPRITE_SIZE = 18;
 export const MYSTERY_SPRITE_WIDTH = 30;
 export const MYSTERY_SPRITE_HEIGHT = 14;
+export const GLOW_SIZE = 16;
+export const BOLT_WIDTH = 4;
+export const BOLT_HEIGHT = 11;
+export const enum GlowColor { Saffron = 0, Cyan = 1, Magenta = 2, White = 3, Gold = 4, Green = 5 }
+const GLOW_RGB = ['255,153,51', '79,195,247', '255,79,216', '255,255,255', '255,210,63', '105,240,174'];
+
+/** Like makeSprite, but everything painted gets a soft coloured halo (rendered once). */
+function makeGlowingSprite(width: number, height: number, scale: number, glow: string, blur: number, paint: Paint) {
+  return makeSprite(width, height, scale, context => {
+    context.shadowColor = glow;
+    context.shadowBlur = blur * scale;
+    paint(context);
+  });
+}
 
 export function createSprites(scale: number): Sprites {
   const enemies: HTMLCanvasElement[] = [];
   for (const kind of [EnemyKind.Asteroid, EnemyKind.Debris, EnemyKind.Drone]) {
-    for (const frame of [0, 1]) enemies.push(makeSprite(ENEMY_SPRITE_WIDTH, ENEMY_SPRITE_HEIGHT, scale, context => {
+    const halo = kind === EnemyKind.Drone ? 'rgba(255,79,216,0.55)' : kind === EnemyKind.Debris ? 'rgba(120,170,255,0.45)' : 'rgba(255,190,120,0.3)';
+    for (const frame of [0, 1]) enemies.push(makeGlowingSprite(ENEMY_SPRITE_WIDTH, ENEMY_SPRITE_HEIGHT, scale, halo, 1.6, context => {
       context.translate(ENEMY_SPRITE_WIDTH / 2, ENEMY_SPRITE_HEIGHT / 2);
       if (kind === EnemyKind.Asteroid) paintAsteroid(context, frame);
       else if (kind === EnemyKind.Debris) paintDebris(context, frame);
       else paintDrone(context, frame);
     }));
   }
-  const player = makeSprite(PLAYER_SPRITE_SIZE, PLAYER_SPRITE_SIZE, scale, context => { context.translate(PLAYER_SPRITE_SIZE / 2, PLAYER_SPRITE_SIZE / 2); paintLauncher(context, 1); });
+  for (const frame of [0, 1]) enemies.push(makeGlowingSprite(QUEEN_SPRITE_WIDTH, QUEEN_SPRITE_HEIGHT, scale, 'rgba(255,79,216,0.7)', 2.4, context => {
+    context.translate(QUEEN_SPRITE_WIDTH / 2, QUEEN_SPRITE_HEIGHT / 2);
+    paintQueen(context, frame);
+  }));
+  const player = makeGlowingSprite(PLAYER_SPRITE_SIZE, PLAYER_SPRITE_SIZE, scale, 'rgba(255,200,140,0.45)', 1.5, context => { context.translate(PLAYER_SPRITE_SIZE / 2, PLAYER_SPRITE_SIZE / 2); paintLauncher(context, 1); });
   const life = makeSprite(8, 10, scale, context => { context.translate(4, 5.5); context.scale(0.5, 0.5); paintLauncher(context, 1); });
   const mystery = [1, -1].map(direction => makeSprite(MYSTERY_SPRITE_WIDTH, MYSTERY_SPRITE_HEIGHT, scale, context => {
     context.translate(MYSTERY_SPRITE_WIDTH / 2, MYSTERY_SPRITE_HEIGHT / 2);
     paintComet(context, direction);
   }));
-  mystery.push(makeSprite(MYSTERY_SPRITE_WIDTH, MYSTERY_SPRITE_HEIGHT, scale, context => { context.translate(MYSTERY_SPRITE_WIDTH / 2, MYSTERY_SPRITE_HEIGHT / 2); paintMothership(context); }));
-  const capsules = [Power.TripleShot, Power.Bubble].map(power => makeSprite(9, 9, scale, context => {
+  mystery.push(makeGlowingSprite(MYSTERY_SPRITE_WIDTH, MYSTERY_SPRITE_HEIGHT, scale, 'rgba(180,120,255,0.6)', 2, context => { context.translate(MYSTERY_SPRITE_WIDTH / 2, MYSTERY_SPRITE_HEIGHT / 2); paintMothership(context); }));
+  const capsules = [Power.TripleShot, Power.Bubble].map(power => makeGlowingSprite(9, 9, scale, power === Power.TripleShot ? SAFFRON : '#4fc3f7', 2, context => {
     context.translate(4.5, 4.5);
-    context.fillStyle = power === Power.TripleShot ? SAFFRON : '#4fc3f7';
-    context.strokeStyle = '#ffffff';
-    context.lineWidth = 0.8;
+    const color = power === Power.TripleShot ? SAFFRON : '#4fc3f7';
+    const body = context.createRadialGradient(-1.2, -1.2, 0.3, 0, 0, 3.8);
+    body.addColorStop(0, '#ffffff');
+    body.addColorStop(0.35, color);
+    body.addColorStop(1, power === Power.TripleShot ? '#a34d00' : '#0d5a8a');
+    context.fillStyle = body;
+    context.strokeStyle = 'rgba(255,255,255,0.9)';
+    context.lineWidth = 0.6;
     context.beginPath();
     context.arc(0, 0, 3.8, 0, Math.PI * 2);
     context.fill();
     context.stroke();
+    context.shadowBlur = 0;
     context.fillStyle = '#0b1530';
-    context.font = 'bold 5px system-ui, sans-serif';
+    context.font = '900 4.6px system-ui, sans-serif';
     context.textAlign = 'center';
     context.textBaseline = 'middle';
     context.fillText(power === Power.TripleShot ? 'T' : 'S', 0, 0.4);
   }));
-  return { enemies, player, mystery, capsules, life };
+  const glows = GLOW_RGB.map(rgb => makeSprite(GLOW_SIZE, GLOW_SIZE, scale, context => {
+    const glow = context.createRadialGradient(GLOW_SIZE / 2, GLOW_SIZE / 2, 0, GLOW_SIZE / 2, GLOW_SIZE / 2, GLOW_SIZE / 2);
+    glow.addColorStop(0, `rgba(${rgb},0.9)`);
+    glow.addColorStop(0.25, `rgba(${rgb},0.45)`);
+    glow.addColorStop(1, `rgba(${rgb},0)`);
+    context.fillStyle = glow;
+    context.fillRect(0, 0, GLOW_SIZE, GLOW_SIZE);
+  }));
+  const bolts = [['255,153,51', '#fff7e0'], ['79,195,247', '#e6fbff'], ['255,210,63', '#fffbe6']].map(([rgb, core]) => makeSprite(BOLT_WIDTH, BOLT_HEIGHT, scale, context => {
+    const halo = context.createLinearGradient(0, 0, 0, BOLT_HEIGHT);
+    halo.addColorStop(0, `rgba(${rgb},0.9)`);
+    halo.addColorStop(1, `rgba(${rgb},0)`);
+    context.fillStyle = halo;
+    context.beginPath();
+    context.ellipse(BOLT_WIDTH / 2, 4, BOLT_WIDTH / 2, 4, 0, 0, Math.PI * 2);
+    context.fill();
+    context.fillRect(BOLT_WIDTH / 2 - 0.9, 4, 1.8, BOLT_HEIGHT - 4);
+    context.fillStyle = core;
+    context.beginPath();
+    context.ellipse(BOLT_WIDTH / 2, 3.6, 0.7, 2.8, 0, 0, Math.PI * 2);
+    context.fill();
+  }));
+  return { enemies, player, mystery, capsules, life, glows, bolts };
 }
 
 function paintAsteroid(context: CanvasRenderingContext2D, frame: number) {
   context.rotate(frame ? 0.35 : 0);
-  context.fillStyle = '#8a7765';
+  const rock = context.createRadialGradient(-2, -2.5, 0.5, 0, 0, 6.5);
+  rock.addColorStop(0, '#c9b29a');
+  rock.addColorStop(0.55, '#8a7765');
+  rock.addColorStop(1, '#3f3329');
+  context.fillStyle = rock;
   polygon(context, [-6, -1, -4, -4.5, 0, -5.2, 4, -4, 6, -0.5, 5, 3.5, 1, 5, -3.5, 4.4]);
   context.fill();
-  context.fillStyle = '#b39c84';
-  polygon(context, [-4, -3.5, 0, -4.4, 3, -3.2, 0, -1.5, -3, -1]);
-  context.fill();
-  context.fillStyle = '#5a4a3c';
-  context.beginPath(); context.arc(-1.8, 1.2, 1.4, 0, Math.PI * 2); context.fill();
-  context.beginPath(); context.arc(2.8, 0.2, 0.9, 0, Math.PI * 2); context.fill();
-  context.beginPath(); context.arc(0.8, 3.2, 0.7, 0, Math.PI * 2); context.fill();
+  context.shadowBlur = 0;
+  context.strokeStyle = 'rgba(255,220,180,0.35)';
+  context.lineWidth = 0.4;
+  context.beginPath(); context.moveTo(-5.6, -1.2); context.lineTo(-3.8, -4.3); context.lineTo(0, -5); context.lineTo(3.8, -3.9); context.stroke();
+  for (const [x, y, radius] of [[-1.8, 1.2, 1.4], [2.8, 0.2, 0.9], [0.8, 3.2, 0.7]]) {
+    context.fillStyle = '#4a3c30';
+    context.beginPath(); context.arc(x, y, radius, 0, Math.PI * 2); context.fill();
+    context.fillStyle = 'rgba(255,230,200,0.25)';
+    context.beginPath(); context.arc(x + radius * 0.25, y + radius * 0.3, radius * 0.55, 0, Math.PI); context.fill();
+  }
 }
 
 function paintDebris(context: CanvasRenderingContext2D, frame: number) {
   // a broken solar panel, a gold-foil fragment and loose bolts, tumbling
   context.rotate(frame ? -0.25 : 0.12);
-  context.fillStyle = '#2b4f9e';
+  const panel = context.createLinearGradient(-6.5, -3.5, 0.5, 2.5);
+  panel.addColorStop(0, '#4b78d6');
+  panel.addColorStop(1, '#1d3a7a');
+  context.fillStyle = panel;
   context.fillRect(-6.5, -3.5, 7, 6);
-  context.strokeStyle = '#7fa8ff';
-  context.lineWidth = 0.35;
+  context.shadowBlur = 0;
+  context.strokeStyle = 'rgba(160,200,255,0.8)';
+  context.lineWidth = 0.3;
   for (let line = -5; line < 0; line += 1.8) { context.beginPath(); context.moveTo(line, -3.5); context.lineTo(line, 2.5); context.stroke(); }
   context.beginPath(); context.moveTo(-6.5, -0.5); context.lineTo(0.5, -0.5); context.stroke();
-  context.fillStyle = '#d4a52b';
+  context.fillStyle = 'rgba(255,255,255,0.35)';
+  polygon(context, [-6.5, -3.5, -3, -3.5, -6.5, -0.5]);
+  context.fill();
+  const foil = context.createLinearGradient(0.5, -4.5, 6, 4.5);
+  foil.addColorStop(0, '#fff0a8');
+  foil.addColorStop(0.4, '#d4a52b');
+  foil.addColorStop(1, '#7a5a10');
+  context.fillStyle = foil;
   polygon(context, [0.5, -4.5, 6, -2.5, 5, 3.5, 1, 4.5]);
   context.fill();
-  context.fillStyle = '#f5d76e';
-  context.fillRect(2, -2.5, 2, 1.2);
   context.fillStyle = '#c0c7d0';
   context.fillRect(frame ? 4.5 : -5.5, frame ? 3.5 : 3.2, 1.6, 1.6);
   context.fillRect(frame ? -6 : 5, frame ? -5 : -5.2, 1.2, 1.2);
@@ -348,6 +423,7 @@ function paintDrone(context: CanvasRenderingContext2D, frame: number) {
   // a rogue alien drone: hull, glowing eye, flapping antennae
   context.strokeStyle = '#69f0ae';
   context.lineWidth = 0.7;
+  context.lineCap = 'round';
   context.beginPath();
   const spread = frame ? 1.5 : -0.5;
   context.moveTo(-3, -2); context.lineTo(-5.5, -4.5 - spread);
@@ -355,45 +431,137 @@ function paintDrone(context: CanvasRenderingContext2D, frame: number) {
   context.moveTo(-4, 2); context.lineTo(-6.5, 4.5 + spread);
   context.moveTo(4, 2); context.lineTo(6.5, 4.5 + spread);
   context.stroke();
-  context.fillStyle = '#5b2a86';
+  const hull = context.createLinearGradient(0, -3.5, 0, 3.5);
+  hull.addColorStop(0, '#a35ad6');
+  hull.addColorStop(1, '#3a1460');
+  context.fillStyle = hull;
   polygon(context, [-5, 0, -2.5, -3.5, 2.5, -3.5, 5, 0, 2.5, 3.5, -2.5, 3.5]);
   context.fill();
-  context.fillStyle = '#8e44ad';
-  polygon(context, [-3.5, 0, -2, -2.4, 2, -2.4, 3.5, 0]);
+  context.shadowBlur = 0;
+  context.fillStyle = 'rgba(255,255,255,0.25)';
+  polygon(context, [-3.5, -0.4, -2, -2.8, 2, -2.8, 3.5, -0.4]);
+  context.fill();
+  const eye = context.createRadialGradient(0, 0.6, 0.2, 0, 0.6, 2);
+  eye.addColorStop(0, '#ffffff');
+  eye.addColorStop(0.4, '#ff4fd8');
+  eye.addColorStop(1, '#7a0f66');
+  context.fillStyle = eye;
+  context.beginPath(); context.arc(0, 0.6, 1.8, 0, Math.PI * 2); context.fill();
+  context.fillStyle = '#ffffff';
+  context.fillRect(-0.5 + (frame ? 0.4 : -0.4), 0, 0.8, 0.8);
+}
+
+/** The queen: a crowned alien matriarch with membrane wings and a blazing core. */
+function paintQueen(context: CanvasRenderingContext2D, frame: number) {
+  const flap = frame ? 1.2 : -0.6;
+  // wings
+  for (const side of [-1, 1]) {
+    const wing = context.createLinearGradient(side * 4, 0, side * 13.5, 0);
+    wing.addColorStop(0, 'rgba(160,70,220,0.95)');
+    wing.addColorStop(1, 'rgba(255,79,216,0.35)');
+    context.fillStyle = wing;
+    polygon(context, [side * 4, -3, side * 12, -7 - flap, side * 13.5, -1 - flap * 0.4, side * 11, 4, side * 4, 3]);
+    context.fill();
+    context.strokeStyle = 'rgba(255,200,250,0.7)';
+    context.lineWidth = 0.35;
+    context.beginPath();
+    context.moveTo(side * 4.5, -1); context.lineTo(side * 12, -6 - flap);
+    context.moveTo(side * 4.5, 0.5); context.lineTo(side * 13, -1 - flap * 0.4);
+    context.moveTo(side * 4.5, 2); context.lineTo(side * 10.5, 3.5);
+    context.stroke();
+  }
+  // pincers
+  context.strokeStyle = '#ffd23f';
+  context.lineWidth = 0.8;
+  context.lineCap = 'round';
+  context.beginPath();
+  context.moveTo(-2.5, 5); context.quadraticCurveTo(-4, 8, -1.5 - flap * 0.3, 9);
+  context.moveTo(2.5, 5); context.quadraticCurveTo(4, 8, 1.5 + flap * 0.3, 9);
+  context.stroke();
+  // carapace
+  const shell = context.createLinearGradient(0, -6, 0, 6);
+  shell.addColorStop(0, '#c77dff');
+  shell.addColorStop(0.5, '#6a1fb0');
+  shell.addColorStop(1, '#2a0750');
+  context.fillStyle = shell;
+  polygon(context, [-5.5, -1, -3.5, -5, 3.5, -5, 5.5, -1, 4.5, 4, 0, 6.5, -4.5, 4]);
+  context.fill();
+  context.shadowBlur = 0;
+  context.strokeStyle = '#ffd23f';
+  context.lineWidth = 0.45;
+  context.stroke();
+  context.fillStyle = 'rgba(255,255,255,0.22)';
+  polygon(context, [-4.5, -1.2, -3, -4.2, 3, -4.2, 4.5, -1.2]);
+  context.fill();
+  // crown
+  const gold = context.createLinearGradient(0, -9.5, 0, -5);
+  gold.addColorStop(0, '#fff3b0');
+  gold.addColorStop(1, '#c8901a');
+  context.fillStyle = gold;
+  polygon(context, [-4, -5, -4.4, -8.4, -2.2, -6.6, 0, -9.6, 2.2, -6.6, 4.4, -8.4, 4, -5]);
   context.fill();
   context.fillStyle = '#ff4fd8';
-  context.beginPath(); context.arc(0, 0.6, 1.7, 0, Math.PI * 2); context.fill();
-  context.fillStyle = '#ffffff';
-  context.fillRect(-0.5 + (frame ? 0.4 : -0.4), 0, 0.9, 0.9);
+  for (const x of [-4.4, 0, 4.4]) { context.beginPath(); context.arc(x, x === 0 ? -9.4 : -8.2, 0.6, 0, Math.PI * 2); context.fill(); }
+  // core eye
+  const core = context.createRadialGradient(0, 0.6, 0.2, 0, 0.6, 2.8);
+  core.addColorStop(0, '#ffffff');
+  core.addColorStop(0.35, '#ff9de8');
+  core.addColorStop(0.7, '#ff4fd8');
+  core.addColorStop(1, 'rgba(120,0,100,0.9)');
+  context.fillStyle = core;
+  context.beginPath(); context.arc(0, 0.6, 2.6, 0, Math.PI * 2); context.fill();
 }
 
 /** The player's launcher: a white core stage with saffron and green bands, strap-on boosters, a chakra-blue dot. */
 export function paintLauncher(context: CanvasRenderingContext2D, alpha: number) {
   context.globalAlpha = alpha;
-  // strap-on boosters
+  // swept fins
   for (const side of [-1, 1]) {
-    context.fillStyle = '#e8ecf2';
-    context.fillRect(side * 4.6 - 1.2, -2.5, 2.4, 8);
-    context.fillStyle = '#c9ced6';
-    polygon(context, [side * 4.6 - 1.2, -2.5, side * 4.6, -4.8, side * 4.6 + 1.2, -2.5]);
-    context.fill();
-    context.fillStyle = INDIA_GREEN;
-    polygon(context, [side * 6.4, 6, side * 5.8, 2, side * 3.4, 5.5]);
+    const fin = context.createLinearGradient(side * 2.6, 0, side * 7.5, 0);
+    fin.addColorStop(0, '#1a9a14');
+    fin.addColorStop(1, '#0b5a08');
+    context.fillStyle = fin;
+    polygon(context, [side * 2.6, 1, side * 7.6, 6.5, side * 7, 7.6, side * 2.6, 5.6]);
     context.fill();
   }
+  // strap-on boosters
+  for (const side of [-1, 1]) {
+    const booster = context.createLinearGradient(side * 4.6 - 1.2, 0, side * 4.6 + 1.2, 0);
+    booster.addColorStop(0, side < 0 ? '#aab2bd' : '#ffffff');
+    booster.addColorStop(1, side < 0 ? '#ffffff' : '#aab2bd');
+    context.fillStyle = booster;
+    context.fillRect(side * 4.6 - 1.2, -2.5, 2.4, 8);
+    context.fillStyle = SAFFRON;
+    polygon(context, [side * 4.6 - 1.2, -2.5, side * 4.6, -5, side * 4.6 + 1.2, -2.5]);
+    context.fill();
+    context.fillStyle = '#6b7380';
+    context.fillRect(side * 4.6 - 1, 5.5, 2, 1);
+  }
   // core stage
-  context.fillStyle = '#ffffff';
+  const body = context.createLinearGradient(-2.6, 0, 2.6, 0);
+  body.addColorStop(0, '#c9d0da');
+  body.addColorStop(0.45, '#ffffff');
+  body.addColorStop(1, '#a7afba');
+  context.fillStyle = body;
   context.fillRect(-2.6, -6.5, 5.2, 12.5);
-  context.fillStyle = SAFFRON;
-  polygon(context, [-2.6, -6.5, 0, -9.5, 2.6, -6.5]);
+  const nose = context.createLinearGradient(-2.6, 0, 2.6, 0);
+  nose.addColorStop(0, '#d9741a');
+  nose.addColorStop(0.5, '#ffb35c');
+  nose.addColorStop(1, '#c4600c');
+  context.fillStyle = nose;
+  polygon(context, [-2.6, -6.5, 0, -10, 2.6, -6.5]);
   context.fill();
   context.fillStyle = SAFFRON;
-  context.fillRect(-2.6, -3.6, 5.2, 1.4);
+  context.fillRect(-2.6, -3.6, 5.2, 1.3);
   context.fillStyle = INDIA_GREEN;
-  context.fillRect(-2.6, 2.2, 5.2, 1.4);
-  context.fillStyle = CHAKRA_BLUE;
-  context.beginPath(); context.arc(0, -0.2, 0.9, 0, Math.PI * 2); context.fill();
-  context.fillStyle = '#9aa3ae';
+  context.fillRect(-2.6, 2.2, 5.2, 1.3);
+  // cockpit window with a glint
+  const glass = context.createRadialGradient(-0.3, -0.6, 0.1, 0, -0.2, 1.3);
+  glass.addColorStop(0, '#bfe8ff');
+  glass.addColorStop(1, CHAKRA_BLUE);
+  context.fillStyle = glass;
+  context.beginPath(); context.arc(0, -0.2, 1.15, 0, Math.PI * 2); context.fill();
+  context.fillStyle = '#6b7380';
   context.fillRect(-1.8, 6, 3.6, 1.2);
   context.globalAlpha = 1;
 }
@@ -407,6 +575,9 @@ function paintComet(context: CanvasRenderingContext2D, direction: number) {
   context.fillStyle = tail;
   polygon(context, [direction * 6, -3.5, -direction * 15, -6.5, -direction * 15, 6.5, direction * 6, 3.5]);
   context.fill();
+  context.fillStyle = 'rgba(255,255,255,0.35)';
+  polygon(context, [direction * 6, -1, -direction * 13, -2, -direction * 13, 2, direction * 6, 1]);
+  context.fill();
   const glow = context.createRadialGradient(direction * 7, 0, 0.5, direction * 7, 0, 6);
   glow.addColorStop(0, '#ffffff');
   glow.addColorStop(0.5, '#bfefff');
@@ -416,88 +587,134 @@ function paintComet(context: CanvasRenderingContext2D, direction: number) {
 }
 
 function paintMothership(context: CanvasRenderingContext2D) {
-  context.fillStyle = 'rgba(180,120,255,0.25)';
-  context.beginPath(); context.ellipse(0, 1, 14, 6, 0, 0, Math.PI * 2); context.fill();
-  context.fillStyle = '#7e57c2';
-  context.beginPath(); context.ellipse(0, 1.5, 12, 3.6, 0, 0, Math.PI * 2); context.fill();
-  context.fillStyle = '#b39ddb';
-  context.beginPath(); context.ellipse(0, -1.2, 5.5, 3.6, 0, Math.PI, 0); context.fill();
-  context.fillStyle = '#69f0ae';
-  for (let light = -9; light <= 9; light += 4.5) { context.beginPath(); context.arc(light, 2, 0.9, 0, Math.PI * 2); context.fill(); }
+  const hull = context.createLinearGradient(0, -2, 0, 5);
+  hull.addColorStop(0, '#b794f6');
+  hull.addColorStop(1, '#3d1d7a');
+  context.fillStyle = hull;
+  context.beginPath(); context.ellipse(0, 1.5, 12.5, 3.8, 0, 0, Math.PI * 2); context.fill();
+  context.shadowBlur = 0;
+  const dome = context.createRadialGradient(-1.5, -3, 0.3, 0, -1.2, 5.5);
+  dome.addColorStop(0, '#ffffff');
+  dome.addColorStop(0.4, '#c9b6ff');
+  dome.addColorStop(1, 'rgba(120,90,200,0.8)');
+  context.fillStyle = dome;
+  context.beginPath(); context.ellipse(0, -1.2, 5.5, 3.8, 0, Math.PI, 0); context.fill();
+  context.fillStyle = 'rgba(255,255,255,0.3)';
+  context.fillRect(-11, 0.6, 22, 0.5);
+  for (let light = -9; light <= 9; light += 4.5) {
+    const lamp = context.createRadialGradient(light, 2.2, 0, light, 2.2, 1.6);
+    lamp.addColorStop(0, '#ffffff');
+    lamp.addColorStop(0.4, '#69f0ae');
+    lamp.addColorStop(1, 'rgba(105,240,174,0)');
+    context.fillStyle = lamp;
+    context.beginPath(); context.arc(light, 2.2, 1.6, 0, Math.PI * 2); context.fill();
+  }
 }
 
 // ------------------------------------------------------------------ dynamic bits
 
-export function drawFlame(context: CanvasRenderingContext2D, x: number, y: number, clock: number) {
-  const flicker = 2.2 + Math.sin(clock * 47) * 0.8 + Math.sin(clock * 31) * 0.5;
-  context.fillStyle = SAFFRON;
-  context.fillRect(x - 1.3, y + 7, 2.6, flicker + 1);
-  context.fillStyle = '#ffe08a';
-  context.fillRect(x - 0.7, y + 7, 1.4, flicker * 0.6 + 0.6);
+/** An additive glow centred on (x, y), `size` units across. Callers set globalCompositeOperation = 'lighter' around batches. */
+export function drawGlow(context: CanvasRenderingContext2D, sprites: Sprites, color: GlowColor, x: number, y: number, size: number, alpha: number) {
+  if (alpha <= 0) return;
+  context.globalAlpha = Math.min(1, alpha);
+  context.drawImage(sprites.glows[color], x - size / 2, y - size / 2, size, size);
+  context.globalAlpha = 1;
 }
 
-export function drawPlayerBullet(context: CanvasRenderingContext2D, x: number, y: number) {
-  context.fillStyle = 'rgba(255,153,51,0.45)';
-  context.fillRect(x - 1.2, y - 1, 2.4, 7);
-  context.fillStyle = '#fff7e0';
-  context.fillRect(x - 0.6, y - 2, 1.2, 6);
+export function drawFlame(context: CanvasRenderingContext2D, x: number, y: number, clock: number, sprites?: Sprites) {
+  const flicker = 2.6 + Math.sin(clock * 47) * 0.8 + Math.sin(clock * 31) * 0.5;
+  if (sprites) {
+    context.globalCompositeOperation = 'lighter';
+    drawGlow(context, sprites, GlowColor.Saffron, x, y + 8.5 + flicker * 0.4, 9 + flicker, 0.7);
+    context.globalCompositeOperation = 'source-over';
+  }
+  context.fillStyle = SAFFRON;
+  polygon(context, [x - 1.6, y + 7, x + 1.6, y + 7, x, y + 8 + flicker * 1.4]);
+  context.fill();
+  context.fillStyle = '#ffe08a';
+  polygon(context, [x - 0.9, y + 7, x + 0.9, y + 7, x, y + 7.6 + flicker * 0.9]);
+  context.fill();
+  context.fillStyle = '#ffffff';
+  context.fillRect(x - 0.4, y + 7, 0.8, 0.9);
+}
+
+/** `style`: 0 standard, 1 machine gun, 2 triple stream (sprites.bolts). */
+export function drawPlayerBullet(context: CanvasRenderingContext2D, sprites: Sprites, x: number, y: number, style: number) {
+  context.drawImage(sprites.bolts[style], x - BOLT_WIDTH / 2, y - 2.5, BOLT_WIDTH, BOLT_HEIGHT);
 }
 
 export function drawEnemyBullet(context: CanvasRenderingContext2D, kind: number, x: number, y: number, age: number) {
   if (kind === EnemyKind.Drone) {
-    context.fillStyle = (Math.floor(age * 12) & 1) ? '#ff4fd8' : '#69f0ae';
-    context.fillRect(x - 1.2, y - 1.5, 2.4, 4.5);
+    const pink = (Math.floor(age * 12) & 1) === 1;
+    context.fillStyle = pink ? 'rgba(255,79,216,0.35)' : 'rgba(105,240,174,0.35)';
+    context.beginPath(); context.arc(x, y + 0.8, 2.6, 0, Math.PI * 2); context.fill();
+    context.fillStyle = pink ? '#ff9de8' : '#b9ffd9';
+    context.beginPath(); context.arc(x, y + 0.8, 1.3, 0, Math.PI * 2); context.fill();
   } else if (kind === EnemyKind.Debris) {
+    context.fillStyle = 'rgba(144,202,249,0.35)';
+    context.fillRect(x - 1.3, y - 3, 2.6, 7.5);
     context.fillStyle = '#e8ecf2';
-    context.fillRect(x - 0.6, y - 2.5, 1.2, 6);
-    context.fillStyle = '#90caf9';
-    context.fillRect(x - 0.6, y + 2.5, 1.2, 1.2);
+    context.fillRect(x - 0.55, y - 2.5, 1.1, 6);
   } else {
+    context.fillStyle = 'rgba(255,122,69,0.35)';
+    context.beginPath(); context.arc(x, y + 1, 2.4, 0, Math.PI * 2); context.fill();
     context.fillStyle = '#ff7a45';
-    context.fillRect(x - 1.1, y - 1, 2.2, 4);
-    context.fillStyle = '#ffd0a0';
-    context.fillRect(x - 0.5, y + 1.5, 1, 1.5);
+    context.fillRect(x - 1, y - 1, 2, 4);
+    context.fillStyle = '#ffe0c0';
+    context.fillRect(x - 0.45, y - 0.5, 0.9, 2.5);
   }
 }
 
 const PARTICLE_COLORS = [
-  ['#d9b996', '#8a7765', '#ffcc80'],
+  ['#e8cdb0', '#a08a76', '#ffcc80'],
   ['#ffd54f', '#7fa8ff', '#ffffff'],
-  ['#ff4fd8', '#69f0ae', '#e1bee7'],
-  ['#ffffff', '#bfefff', '#ffcc80'],
+  ['#ff4fd8', '#69f0ae', '#f3c6ff'],
+  ['#ffffff', '#ffd23f', '#ff9de8'],
   [SAFFRON, '#ffffff', '#3fbf3a'],
   ['#ffd54f', '#5f8de0', '#ffffff'],
 ];
-const NUMBER_TEXT: Record<number, string> = { 50: '50', 100: '100', 150: '150', 300: '300' };
+const PARTICLE_GLOWS = [GlowColor.Saffron, GlowColor.Cyan, GlowColor.Magenta, GlowColor.Gold, GlowColor.Saffron, GlowColor.Gold];
+const NUMBER_TEXT: Record<number, string> = { 50: '+50', 100: '+100', 150: '+150', 300: '+300', 500: '+500' };
 
-export function drawParticle(context: CanvasRenderingContext2D, kind: ParticleKind, x: number, y: number, progress: number, value: number, index: number) {
-  const palette = PARTICLE_COLORS[Math.min(value, 5) | 0];
+export function drawParticle(context: CanvasRenderingContext2D, sprites: Sprites, kind: ParticleKind, x: number, y: number, progress: number, value: number, index: number) {
+  const colorIndex = Math.min(value, 5) | 0;
+  const palette = PARTICLE_COLORS[colorIndex];
   const fade = 1 - progress;
   if (kind === ParticleKind.Spark || kind === ParticleKind.Shard) {
+    context.globalCompositeOperation = 'lighter';
     context.globalAlpha = fade;
     context.fillStyle = palette[index % 3];
-    const size = kind === ParticleKind.Shard ? 1.6 : 1;
+    const size = (kind === ParticleKind.Shard ? 1.7 : 1.1) * (0.6 + fade * 0.4);
     context.fillRect(x - size / 2, y - size / 2, size, size);
+    context.globalCompositeOperation = 'source-over';
   } else if (kind === ParticleKind.Ring) {
-    // a bright hit flash that opens into a ring
-    context.globalAlpha = fade * 0.9;
-    if (progress < 0.25) {
-      context.fillStyle = '#ffffff';
-      context.beginPath(); context.arc(x, y, 2 + progress * 16, 0, Math.PI * 2); context.fill();
-    }
+    // a bright fireball flash that opens into a shockwave ring
+    context.globalCompositeOperation = 'lighter';
+    if (progress < 0.45) drawGlow(context, sprites, PARTICLE_GLOWS[colorIndex], x, y, 10 + progress * (value === 4 ? 60 : 34), (0.45 - progress) * 2.4);
+    if (progress < 0.2) drawGlow(context, sprites, GlowColor.White, x, y, 6 + progress * 30, 1 - progress * 5);
+    context.globalCompositeOperation = 'source-over';
+    context.globalAlpha = fade * 0.85;
     context.strokeStyle = palette[0];
-    context.lineWidth = 1.2 * fade + 0.3;
+    context.lineWidth = 1.1 * fade + 0.25;
     context.beginPath(); context.arc(x, y, 3 + progress * (value === 4 ? 22 : 11), 0, Math.PI * 2); context.stroke();
   } else if (kind === ParticleKind.Ember) {
+    // muzzle flash
+    context.globalCompositeOperation = 'lighter';
+    drawGlow(context, sprites, GlowColor.Saffron, x, y, 7 + fade * 4, fade);
     context.globalAlpha = fade;
     context.fillStyle = '#fff1c1';
-    context.beginPath(); context.arc(x, y, 2.2 * fade + 0.6, 0, Math.PI * 2); context.fill();
+    context.beginPath(); context.arc(x, y, 1.6 * fade + 0.4, 0, Math.PI * 2); context.fill();
+    context.globalCompositeOperation = 'source-over';
   } else if (kind === ParticleKind.ScoreText) {
     context.globalAlpha = Math.min(1, fade * 2);
-    context.fillStyle = '#ffd23f';
-    context.font = 'bold 8px ui-monospace, Menlo, Consolas, monospace';
+    context.font = '900 7.5px system-ui, sans-serif';
     context.textAlign = 'center';
-    context.fillText(NUMBER_TEXT[value] ?? '', x, y);
+    context.lineWidth = 1.6;
+    context.strokeStyle = 'rgba(40,10,0,0.85)';
+    const text = NUMBER_TEXT[value] ?? '';
+    context.strokeText(text, x, y);
+    context.fillStyle = value >= 500 ? '#ff9de8' : '#ffd23f';
+    context.fillText(text, x, y);
   }
   context.globalAlpha = 1;
 }

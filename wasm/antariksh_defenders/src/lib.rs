@@ -36,6 +36,10 @@ pub mod render_slot {
     pub const BACKDROP: usize = 22;
     pub const MARCH_NOTE: usize = 23;
     pub const ENEMIES_AT_START: usize = 24;
+    /// weapon bonus bits: 1 triple shot, 2 machine gun (3 = triple stream)
+    pub const WEAPONS: usize = 25;
+    pub const QUEEN_HITS_LEFT: usize = 26;
+    pub const QUEEN_HITS_MAX: usize = 27;
     /// alive (0/1), kind, x, y for every formation slot (fixed order, dead ones included)
     pub const ENEMIES: usize = 32;
     pub const ENEMY_STRIDE: usize = 4;
@@ -117,6 +121,9 @@ impl AntarikshDefenders {
         render[BACKDROP] = waves::backdrop_for_wave(world.wave) as f32;
         render[MARCH_NOTE] = world.march_note as f32;
         render[ENEMIES_AT_START] = world.enemies_at_start as f32;
+        render[WEAPONS] = world.weapons as f32;
+        render[QUEEN_HITS_LEFT] = world.queen_hits_left() as f32;
+        render[QUEEN_HITS_MAX] = world.queen_hits_max as f32;
         for (index, enemy) in world.enemies.iter().enumerate() {
             let offset = ENEMIES + index * ENEMY_STRIDE;
             render[offset] = if enemy.alive { 1.0 } else { 0.0 };
@@ -179,6 +186,8 @@ impl AntarikshDefenders {
     pub fn kills(&self) -> u32 { self.world.kills }
     pub fn formation_y(&self) -> f32 { self.world.formation_y }
     pub fn power(&self) -> u32 { self.world.power as u32 }
+    pub fn weapons(&self) -> u32 { self.world.weapons }
+    pub fn queen_hits_left(&self) -> u32 { self.world.queen_hits_left() }
     pub fn march_interval(&self) -> f32 { self.world.march_interval() }
     pub fn shield_cells_left(&self) -> u32 { self.world.shield_cells_left() as u32 }
     /// The stage name for a wave ("Low Earth Orbit", "Lunar Orbit", "Mars Approach", ...).
@@ -189,6 +198,7 @@ impl AntarikshDefenders {
     pub fn debug_thin_formation(&mut self, keep: u32) { self.world.debug_thin_formation(keep); self.fill_render(); }
     pub fn debug_launch_mystery(&mut self) { self.world.launch_mystery(); self.fill_render(); }
     pub fn debug_set_wave(&mut self, wave: u32) { self.world.setup_wave(wave); self.fill_render(); }
+    pub fn debug_set_weapons(&mut self, bits: u32) { self.world.weapons = bits & weapons::BOTH; self.fill_render(); }
     pub fn debug_drop_capsule(&mut self, power: u8) {
         let power = if power == 2 { Power::Bubble } else { Power::TripleShot };
         let x = self.world.player_x;

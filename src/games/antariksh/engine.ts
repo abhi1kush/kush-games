@@ -20,7 +20,9 @@ export const SHIELD_COUNT = 4;
 export const Buttons = { left: 1, right: 2, fire: 4 } as const;
 
 export const enum Phase { Ready = 0, Countdown = 1, Playing = 2, Dying = 3, WaveClear = 4, WaveIntro = 5, GameOver = 6 }
-export const enum EnemyKind { Asteroid = 0, Debris = 1, Drone = 2 }
+export const enum EnemyKind { Asteroid = 0, Debris = 1, Drone = 2, Queen = 3 }
+/** Weapon bonus bits (render slot `weapons`). Mirrors `weapons` in world.rs. */
+export const Weapons = { triple: 1, rapid: 2, both: 3 } as const;
 export const enum Power { None = 0, TripleShot = 1, Bubble = 2 }
 export const enum ParticleKind { Spark = 0, Ring = 1, Ember = 2, ScoreText = 3, Shard = 4 }
 /** 0 Earth, 1 Moon, 2 Mars, 3 deep space. */
@@ -33,11 +35,12 @@ export const stageName = (wave: number) => STAGE_NAMES[Math.min(Math.max(1, wave
 export const Events = {
   shoot: 1, enemyDown: 2, playerDown: 4, march: 8, mysteryAppear: 16, mysteryDown: 32, shieldHit: 64, waveClear: 128, waveStart: 256,
   gameOver: 512, extraLife: 1024, powerUp: 2048, countdownTick: 4096, liftoff: 8192, enemyShoot: 16384, hitch: 32768, bubblePop: 65536, invaded: 131072,
+  queenHit: 262144, queenDown: 524288, weaponUnlock: 1048576,
 } as const;
 
 /** Pool sizes and the render buffer layout. Mirrors `render_slot` in lib.rs (checked by a test). */
 export const MAX_ENEMIES = 55;
-export const MAX_PLAYER_BULLETS = 8;
+export const MAX_PLAYER_BULLETS = 40;
 export const MAX_ENEMY_BULLETS = 10;
 export const MAX_PARTICLES = 160;
 export const MAX_CAPSULES = 2;
@@ -49,7 +52,7 @@ const CAPSULES = PARTICLES + MAX_PARTICLES * 5;
 export const RenderSlot = {
   phase: 0, phaseSeconds: 1, wave: 2, score: 3, lives: 4, playerX: 5, invulnerable: 6, power: 7, powerSeconds: 8, marchFrame: 9, mysteryActive: 10,
   mysteryX: 11, mysteryDirection: 12, shake: 13, flash: 14, shieldVersion: 15, enemiesAlive: 16, playerBulletCount: 17, enemyBulletCount: 18,
-  particleCount: 19, capsuleCount: 20, stage: 21, backdrop: 22, marchNote: 23, enemiesAtStart: 24,
+  particleCount: 19, capsuleCount: 20, stage: 21, backdrop: 22, marchNote: 23, enemiesAtStart: 24, weapons: 25, queenHitsLeft: 26, queenHitsMax: 27,
   enemies: ENEMIES, enemyStride: 4, playerBullets: PLAYER_BULLETS, playerBulletStride: 3, enemyBullets: ENEMY_BULLETS, enemyBulletStride: 4,
   particles: PARTICLES, particleStride: 5, capsules: CAPSULES, capsuleStride: 3, length: CAPSULES + MAX_CAPSULES * 3,
 } as const;

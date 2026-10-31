@@ -50,6 +50,12 @@ export class AntarikshDefenders {
         wasm.antarikshdefenders_debug_set_wave(this.__wbg_ptr, wave);
     }
     /**
+     * @param {number} bits
+     */
+    debug_set_weapons(bits) {
+        wasm.antarikshdefenders_debug_set_weapons(this.__wbg_ptr, bits);
+    }
+    /**
      * @param {number} keep
      */
     debug_thin_formation(keep) {
@@ -115,6 +121,13 @@ export class AntarikshDefenders {
      */
     power() {
         const ret = wasm.antarikshdefenders_power(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @returns {number}
+     */
+    queen_hits_left() {
+        const ret = wasm.antarikshdefenders_queen_hits_left(this.__wbg_ptr);
         return ret >>> 0;
     }
     /**
@@ -221,6 +234,13 @@ export class AntarikshDefenders {
      */
     wave() {
         const ret = wasm.antarikshdefenders_wave(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @returns {number}
+     */
+    weapons() {
+        const ret = wasm.antarikshdefenders_weapons(this.__wbg_ptr);
         return ret >>> 0;
     }
 }

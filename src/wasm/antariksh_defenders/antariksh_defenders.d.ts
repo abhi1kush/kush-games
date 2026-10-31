@@ -16,6 +16,7 @@ export class AntarikshDefenders {
     debug_nearest_enemy_x(): number;
     debug_set_invincible(invincible: boolean): void;
     debug_set_wave(wave: number): void;
+    debug_set_weapons(bits: number): void;
     debug_thin_formation(keep: number): void;
     enemies_alive(): number;
     formation_y(): number;
@@ -26,6 +27,7 @@ export class AntarikshDefenders {
     phase(): number;
     player_x(): number;
     power(): number;
+    queen_hits_left(): number;
     static render_length(): number;
     render_pointer(): number;
     restart(): void;
@@ -49,6 +51,7 @@ export class AntarikshDefenders {
     static stage_name(wave: number): string;
     start(): void;
     wave(): number;
+    weapons(): number;
 }
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
@@ -62,6 +65,7 @@ export interface InitOutput {
     readonly antarikshdefenders_debug_nearest_enemy_x: (a: number) => number;
     readonly antarikshdefenders_debug_set_invincible: (a: number, b: number) => void;
     readonly antarikshdefenders_debug_set_wave: (a: number, b: number) => void;
+    readonly antarikshdefenders_debug_set_weapons: (a: number, b: number) => void;
     readonly antarikshdefenders_debug_thin_formation: (a: number, b: number) => void;
     readonly antarikshdefenders_enemies_alive: (a: number) => number;
     readonly antarikshdefenders_formation_y: (a: number) => number;
@@ -72,6 +76,7 @@ export interface InitOutput {
     readonly antarikshdefenders_phase: (a: number) => number;
     readonly antarikshdefenders_player_x: (a: number) => number;
     readonly antarikshdefenders_power: (a: number) => number;
+    readonly antarikshdefenders_queen_hits_left: (a: number) => number;
     readonly antarikshdefenders_render_length: () => number;
     readonly antarikshdefenders_render_pointer: (a: number) => number;
     readonly antarikshdefenders_restart: (a: number) => void;
@@ -86,6 +91,7 @@ export interface InitOutput {
     readonly antarikshdefenders_stage_name: (a: number, b: number) => void;
     readonly antarikshdefenders_start: (a: number) => void;
     readonly antarikshdefenders_wave: (a: number) => number;
+    readonly antarikshdefenders_weapons: (a: number) => number;
     readonly __wbindgen_add_to_stack_pointer: (a: number) => number;
     readonly __wbindgen_export: (a: number, b: number, c: number) => void;
 }
