@@ -3,11 +3,33 @@
 pub const ROWS: usize = 5;
 pub const COLUMNS: usize = 11;
 
-/// Stage names, one per wave; after the last one the journey continues in deep space (and keeps getting harder).
-pub const STAGE_NAMES: [&str; 7] = ["Low Earth Orbit", "Earth Departure", "Lunar Orbit", "Lunar Far Side", "Mars Transfer", "Mars Approach", "Deep Space"];
-/// Which backdrop to draw: 0 Earth, 1 Moon, 2 Mars, 3 deep space.
-pub fn backdrop_for_wave(wave: u32) -> u32 { match wave { 1 | 2 => 0, 3 | 4 => 1, 5 | 6 => 2, _ => 3 } }
-pub fn stage_index(wave: u32) -> usize { (wave.max(1) as usize - 1).min(STAGE_NAMES.len() - 1) }
+/// The journey outward from the Sun: seven legs (Earth → Mars → Jupiter → Saturn → Uranus → Neptune → Pluto → Aranya, an
+/// alien jungle world beyond Pluto), each in three sub-stages: departure (leaving the last world), transit (deep space
+/// between) and arrival (in the destination's own sky). One wave per sub-stage; after the last one the rescue on Aranya
+/// repeats (still harder).
+pub const LEGS: usize = 7;
+pub const LEG_NAMES: [&str; LEGS] = ["Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto", "Aranya"];
+pub const STAGES_PER_LEG: usize = 3;
+pub const STAGE_COUNT: usize = LEGS * STAGES_PER_LEG;
+pub const STAGE_NAMES: [&str; STAGE_COUNT] = [
+    "Mars · Departure", "Mars · Transit", "Mars · Arrival",
+    "Jupiter · Departure", "Jupiter · Transit", "Jupiter · Arrival",
+    "Saturn · Departure", "Saturn · Transit", "Saturn · Arrival",
+    "Uranus · Departure", "Uranus · Transit", "Uranus · Arrival",
+    "Neptune · Departure", "Neptune · Transit", "Neptune · Arrival",
+    "Pluto · Departure", "Pluto · Transit", "Pluto · Arrival",
+    "Aranya · Departure", "Aranya · Interstellar", "Aranya · Rescue",
+];
+/// The final leg: the jungle world where the natives are rescued from the extraction corporation.
+pub const FINAL_LEG: usize = LEGS - 1;
+
+/// Which stage a wave is (0-based); waves past the end stay on the last stage (the Aranya rescue).
+pub fn stage_index(wave: u32) -> usize { (wave.max(1) as usize - 1).min(STAGE_COUNT - 1) }
+/// Which leg of the journey (0 Mars … 6 Aranya) and which sub-stage (0 departure, 1 transit, 2 arrival).
+pub fn leg_for_wave(wave: u32) -> usize { stage_index(wave) / STAGES_PER_LEG }
+pub fn sub_stage_for_wave(wave: u32) -> usize { stage_index(wave) % STAGES_PER_LEG }
+/// The backdrop is the stage itself (0..STAGE_COUNT): the renderer paints the origin and destination worlds for it.
+pub fn backdrop_for_wave(wave: u32) -> u32 { stage_index(wave) as u32 }
 
 /// Formations: 5 rows of 11 columns, 'X' = an enemy.
 const FORMATIONS: [[&str; ROWS]; 5] = [

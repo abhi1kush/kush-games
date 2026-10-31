@@ -3,7 +3,7 @@
  * Everything static (backdrop layers, enemy/player/mothership sprites) is pre-rendered into offscreen canvases at the
  * current scale, so a frame is mostly drawImage calls plus a few fillRects. No strings or objects are created per frame.
  */
-import { Backdrop, EnemyKind, GROUND_Y, ParticleKind, Power, WORLD_HEIGHT, WORLD_WIDTH } from './engine';
+import { EnemyKind, GROUND_Y, Leg, legOfStage, ParticleKind, Power, subStageOf, WORLD_HEIGHT, WORLD_WIDTH } from './engine';
 
 export const SAFFRON = '#ff9933';
 export const INDIA_GREEN = '#138808';
@@ -57,12 +57,20 @@ export const GROUND_STRIP_HEIGHT = WORLD_HEIGHT - GROUND_Y + 2;
 /** World units per second each layer scrolls at cruising speed. */
 export const LAYER_SPEEDS = { farStars: 8, nebula: 14, midStars: 28, scenery: 4 } as const;
 
-const NEBULA_TINTS = [
-  ['rgba(80,140,255,0.13)', 'rgba(19,136,8,0.08)', 'rgba(255,153,51,0.07)'],
-  ['rgba(180,180,210,0.10)', 'rgba(90,110,255,0.10)', 'rgba(255,153,51,0.06)'],
-  ['rgba(255,110,60,0.12)', 'rgba(160,50,40,0.10)', 'rgba(255,190,120,0.06)'],
-  ['rgba(255,153,51,0.12)', 'rgba(19,136,8,0.11)', 'rgba(120,80,255,0.13)'],
-] as const;
+/** Per leg: sky top/bottom and three nebula tints (Mars, Jupiter, Saturn, Uranus, Neptune, Pluto, Aranya). */
+const LEG_SKIES: [string, string][] = [
+  ['#06040f', '#2a0f14'], ['#07050c', '#2b1a0e'], ['#07060a', '#2a2210'], ['#030a10', '#0c2a33'],
+  ['#02040f', '#0a1a46'], ['#050508', '#1a1a24'], ['#05030f', '#103028'],
+];
+const NEBULA_TINTS: [string, string, string][] = [
+  ['rgba(255,110,60,0.12)', 'rgba(80,140,255,0.08)', 'rgba(255,190,120,0.06)'],
+  ['rgba(255,170,90,0.12)', 'rgba(200,110,60,0.10)', 'rgba(255,220,160,0.06)'],
+  ['rgba(255,215,130,0.11)', 'rgba(180,150,90,0.09)', 'rgba(120,120,255,0.06)'],
+  ['rgba(90,230,230,0.11)', 'rgba(60,160,200,0.09)', 'rgba(180,255,240,0.05)'],
+  ['rgba(60,110,255,0.14)', 'rgba(40,70,200,0.10)', 'rgba(150,200,255,0.06)'],
+  ['rgba(200,180,255,0.08)', 'rgba(180,160,140,0.07)', 'rgba(120,120,160,0.07)'],
+  ['rgba(60,255,180,0.12)', 'rgba(160,80,255,0.13)', 'rgba(80,200,255,0.10)'],
+];
 
 /** Draw `paint` three times (shifted by ±WORLD_HEIGHT) so whatever crosses the tile's top/bottom edge wraps seamlessly. */
 function paintWrapped(context: CanvasRenderingContext2D, paint: (offsetY: number) => void) {
@@ -92,12 +100,15 @@ function starTile(scale: number, seed: number, count: number, sizes: [number, nu
   });
 }
 
-export function createBackdrop(scale: number, backdrop: Backdrop): BackdropLayers {
+/** The scene for a stage (0..STAGE_COUNT-1): the leg's sky and nebulae, plus the world being left (departure), the
+ * destination growing ahead (transit) or filling the sky (arrival); Aranya's rescue stage is a lush jungle world. */
+export function createBackdrop(scale: number, stage: number): BackdropLayers {
+  const leg = legOfStage(stage), sub = subStageOf(stage);
   const sky = makeSprite(WORLD_WIDTH, WORLD_HEIGHT, scale, context => {
     const gradient = context.createLinearGradient(0, 0, 0, WORLD_HEIGHT);
-    const tints = [['#030818', '#0a1f45'], ['#04060f', '#161b2e'], ['#07040d', '#2a0f12'], ['#05030f', '#1a0b2e']][backdrop];
-    gradient.addColorStop(0, tints[0]);
-    gradient.addColorStop(1, tints[1]);
+    const [top, bottom] = LEG_SKIES[leg];
+    gradient.addColorStop(0, top);
+    gradient.addColorStop(1, bottom);
     context.fillStyle = gradient;
     context.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
     // baked-in vignette: darker edges frame the action (free at run time)
@@ -107,12 +118,12 @@ export function createBackdrop(scale: number, backdrop: Backdrop): BackdropLayer
     context.fillStyle = shade;
     context.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
   });
-  const farStars = starTile(scale, 17 + backdrop * 31, 150, [0.45, 0.8], [0.15, 0.55], 0.06);
-  const midStars = starTile(scale, 101 + backdrop * 13, 42, [0.7, 1.1], [0.45, 0.95], 0.25);
+  const farStars = starTile(scale, 17 + stage * 31, 150, [0.45, 0.8], [0.15, 0.55], 0.06);
+  const midStars = starTile(scale, 101 + stage * 13, 42, [0.7, 1.1], [0.45, 0.95], 0.25);
   const nebula = makeSprite(WORLD_WIDTH, WORLD_HEIGHT, scale, context => {
-    const random = seededRandom(7 + backdrop * 19);
-    const tints = NEBULA_TINTS[backdrop];
-    const clouds = backdrop === Backdrop.DeepSpace ? 7 : 5;
+    const random = seededRandom(7 + stage * 19);
+    const tints = NEBULA_TINTS[leg];
+    const clouds = sub === 1 ? 7 : 5;
     for (let index = 0; index < clouds; index++) {
       const x = random() * WORLD_WIDTH, y = random() * WORLD_HEIGHT, radius = 35 + random() * 55;
       const stretch = 0.5 + random() * 0.6;
@@ -137,16 +148,210 @@ export function createBackdrop(scale: number, backdrop: Backdrop): BackdropLayer
     }
   });
   const scenery = makeSprite(WORLD_WIDTH, WORLD_HEIGHT, scale, context => {
-    if (backdrop === Backdrop.Earth) drawEarthLimb(context);
-    else if (backdrop === Backdrop.Moon) { drawSmallEarth(context, 26, 60, 6); drawMoon(context, 214, 170, 44); }
-    else if (backdrop === Backdrop.Mars) { drawMars(context, 30, 168, 38); drawMoonlet(context, 200, 70, 3.5); }
-    else drawMars(context, 205, 60, 10);
+    const origin = leg as number as World, destination = (leg + 1) as World;
+    if (sub === 0) {
+      // departure: the destination is a bright speck ahead, the world just left fills the bottom and falls away
+      drawPlanet(context, destination, 40 + ((leg * 47) % 160), 46, 3.2);
+      if (leg === Leg.Mars) drawEarthLimb(context);
+      else drawPlanet(context, origin, 120, 345, 120);
+    } else if (sub === 1) {
+      // transit: the destination grows ahead
+      if (leg === Leg.Jupiter) drawAsteroidBelt(context, seededRandom(91));
+      if (leg === Leg.Aranya) drawWarpRing(context);
+      drawPlanet(context, destination, 176, 74, leg === Leg.Aranya ? 14 : 18);
+    } else if (leg === Leg.Aranya) {
+      drawAranyaWorld(context, seededRandom(23));
+    } else {
+      // arrival: in the destination's sky
+      drawPlanet(context, destination, 62, 158, destination === World.Jupiter ? 64 : 52);
+      drawPlanet(context, World.Moonlet, 196, 64, 4);
+    }
   });
   const pad = makeSprite(WORLD_WIDTH, GROUND_STRIP_HEIGHT, scale, context => {
     context.translate(0, -GROUND_Y);
     drawLaunchPad(context);
   });
   return { sky, farStars, nebula, midStars, scenery, pad };
+}
+
+/** Every world on the journey, in order outward, plus a generic grey moonlet. */
+const enum World { Earth = 0, Mars = 1, Jupiter = 2, Saturn = 3, Uranus = 4, Neptune = 5, Pluto = 6, Aranya = 7, Moonlet = 8 }
+/** light, mid, dark body colours and the atmosphere glow (rgb). */
+const WORLD_COLORS: [string, string, string, string][] = [
+  ['#9fd8ff', '#2f7fd1', '#0c2f66', '80,170,255'],
+  ['#f2a46a', '#c1502e', '#4a160c', '255,120,70'],
+  ['#f6dfba', '#c9935c', '#5a3a1e', '255,200,140'],
+  ['#fbecc0', '#d9bd7a', '#6a5426', '255,230,170'],
+  ['#d8fbfb', '#7fd8dc', '#1f6a78', '140,240,240'],
+  ['#9cc0ff', '#3a64e0', '#0b1a66', '90,140,255'],
+  ['#efe2d0', '#b49a80', '#4e3e32', '220,210,200'],
+  ['#a9ffe0', '#1fae86', '#0a3b44', '90,255,200'],
+  ['#c9c4bc', '#8a847a', '#3e3a34', '200,200,200'],
+];
+
+function drawPlanet(context: CanvasRenderingContext2D, world: World, x: number, y: number, radius: number) {
+  const [light, mid, dark, glow] = WORLD_COLORS[world];
+  context.save();
+  // atmosphere halo
+  if (radius > 6 && world !== World.Moonlet && world !== World.Pluto) {
+    const halo = context.createRadialGradient(x, y, radius * 0.95, x, y, radius * 1.25);
+    halo.addColorStop(0, `rgba(${glow},0.35)`);
+    halo.addColorStop(1, `rgba(${glow},0)`);
+    context.fillStyle = halo;
+    context.beginPath(); context.arc(x, y, radius * 1.25, 0, Math.PI * 2); context.fill();
+  }
+  if (world === World.Saturn) drawRing(context, x, y, radius, false, 2.3, 0.32, -0.25);
+  if (world === World.Uranus) drawRing(context, x, y, radius, false, 1.7, 0.18, 1.35);
+  const body = context.createRadialGradient(x - radius * 0.35, y - radius * 0.35, radius * 0.1, x, y, radius);
+  body.addColorStop(0, light);
+  body.addColorStop(0.6, mid);
+  body.addColorStop(1, dark);
+  context.fillStyle = body;
+  context.beginPath(); context.arc(x, y, radius, 0, Math.PI * 2); context.fill();
+  context.save();
+  context.clip();
+  const random = seededRandom(world * 13 + 5);
+  if (world === World.Earth || world === World.Aranya) {
+    context.fillStyle = world === World.Earth ? 'rgba(70,150,80,0.65)' : 'rgba(40,200,90,0.7)';
+    for (let land = 0; land < 6; land++) {
+      context.beginPath();
+      context.ellipse(x + (random() - 0.5) * radius * 1.6, y + (random() - 0.5) * radius * 1.6, radius * (0.15 + random() * 0.25), radius * (0.08 + random() * 0.15), random() * 3, 0, Math.PI * 2);
+      context.fill();
+    }
+    context.fillStyle = 'rgba(255,255,255,0.3)';
+    for (let cloud = 0; cloud < 7; cloud++) {
+      context.beginPath();
+      context.ellipse(x + (random() - 0.5) * radius * 1.8, y + (random() - 0.5) * radius * 1.8, radius * 0.3, radius * 0.04 + 0.3, -0.1, 0, Math.PI * 2);
+      context.fill();
+    }
+  } else if (world === World.Mars) {
+    context.fillStyle = 'rgba(90,30,15,0.35)';
+    context.fillRect(x - radius, y - radius * 0.1, radius * 2, radius * 0.14);
+    context.fillRect(x - radius, y + radius * 0.3, radius * 2, radius * 0.08);
+    context.fillStyle = 'rgba(255,255,255,0.85)';
+    context.beginPath(); context.ellipse(x, y - radius * 0.95, radius * 0.4, radius * 0.12, 0, 0, Math.PI * 2); context.fill();
+  } else if (world === World.Jupiter || world === World.Saturn) {
+    const bands = world === World.Jupiter ? ['rgba(140,80,40,0.45)', 'rgba(255,240,210,0.35)', 'rgba(170,100,50,0.4)'] : ['rgba(160,130,70,0.25)', 'rgba(255,250,220,0.25)'];
+    for (let band = -5; band <= 5; band++) {
+      context.fillStyle = bands[(band + 6) % bands.length];
+      context.fillRect(x - radius, y + band * radius * 0.17 - radius * 0.05, radius * 2, radius * (0.07 + random() * 0.06));
+    }
+    if (world === World.Jupiter) {
+      context.fillStyle = 'rgba(200,80,50,0.85)';
+      context.beginPath(); context.ellipse(x + radius * 0.3, y + radius * 0.35, radius * 0.2, radius * 0.11, 0, 0, Math.PI * 2); context.fill();
+    }
+  } else if (world === World.Neptune) {
+    context.fillStyle = 'rgba(10,20,80,0.55)';
+    context.beginPath(); context.ellipse(x - radius * 0.2, y + radius * 0.2, radius * 0.22, radius * 0.12, 0, 0, Math.PI * 2); context.fill();
+    context.fillStyle = 'rgba(255,255,255,0.45)';
+    context.fillRect(x - radius * 0.1, y - radius * 0.1, radius * 0.5, radius * 0.04 + 0.2);
+  } else if (world === World.Pluto || world === World.Moonlet) {
+    if (world === World.Pluto) {
+      context.fillStyle = 'rgba(255,248,235,0.7)';
+      context.beginPath();
+      context.arc(x + radius * 0.12, y + radius * 0.05, radius * 0.22, 0, Math.PI * 2);
+      context.arc(x + radius * 0.42, y + radius * 0.05, radius * 0.22, 0, Math.PI * 2);
+      context.fill();
+      polygon(context, [x - radius * 0.08, y + radius * 0.12, x + radius * 0.62, y + radius * 0.12, x + radius * 0.27, y + radius * 0.55]);
+      context.fill();
+    }
+    context.fillStyle = 'rgba(40,30,25,0.3)';
+    for (let crater = 0; crater < 10; crater++) {
+      context.beginPath();
+      context.arc(x + (random() - 0.5) * radius * 1.6, y + (random() - 0.5) * radius * 1.6, radius * (0.05 + random() * 0.12), 0, Math.PI * 2);
+      context.fill();
+    }
+  }
+  // night side
+  const night = context.createLinearGradient(x - radius, y - radius, x + radius, y + radius);
+  night.addColorStop(0.45, 'rgba(0,0,10,0)');
+  night.addColorStop(1, 'rgba(0,0,10,0.6)');
+  context.fillStyle = night;
+  context.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+  context.restore();
+  if (world === World.Saturn) drawRing(context, x, y, radius, true, 2.3, 0.32, -0.25);
+  if (world === World.Uranus) drawRing(context, x, y, radius, true, 1.7, 0.18, 1.35);
+  context.restore();
+}
+
+/** Half a ring (the back half behind the planet, then the front half over it). */
+function drawRing(context: CanvasRenderingContext2D, x: number, y: number, radius: number, front: boolean, reach: number, flatten: number, tilt: number) {
+  context.save();
+  context.translate(x, y);
+  context.rotate(tilt);
+  context.scale(1, flatten);
+  for (const [inner, color, width] of [[1.35, 'rgba(240,220,170,0.55)', 0.22], [1.7, 'rgba(255,240,200,0.4)', 0.3], [reach - 0.15, 'rgba(200,180,140,0.35)', 0.15]] as const) {
+    context.strokeStyle = color;
+    context.lineWidth = radius * width;
+    context.beginPath();
+    context.arc(0, 0, radius * inner, front ? 0 : Math.PI, front ? Math.PI : Math.PI * 2);
+    context.stroke();
+  }
+  context.restore();
+}
+
+function drawAsteroidBelt(context: CanvasRenderingContext2D, random: () => number) {
+  for (let rock = 0; rock < 46; rock++) {
+    const x = random() * WORLD_WIDTH, y = 120 + (random() - 0.5) * 70 + x * 0.25 - 30;
+    const size = 0.6 + random() * 2.2;
+    context.fillStyle = `rgba(${150 + random() * 60},${120 + random() * 40},${100 + random() * 30},${0.35 + random() * 0.4})`;
+    context.beginPath(); context.ellipse(x, y, size, size * 0.75, random() * 3, 0, Math.PI * 2); context.fill();
+  }
+}
+
+function drawWarpRing(context: CanvasRenderingContext2D) {
+  // a faint interstellar gate shimmer around the distant world
+  for (let ring = 0; ring < 3; ring++) {
+    context.strokeStyle = `rgba(120,255,210,${0.18 - ring * 0.05})`;
+    context.lineWidth = 1.2;
+    context.beginPath(); context.ellipse(176, 74, 26 + ring * 9, 10 + ring * 4, -0.3, 0, Math.PI * 2); context.stroke();
+  }
+}
+
+/** Aranya, the rescue: a glowing jungle horizon, floating mountains draped in vines, bioluminescent spores. */
+function drawAranyaWorld(context: CanvasRenderingContext2D, random: () => number) {
+  // a gas-giant parent in the sky
+  drawPlanet(context, World.Jupiter, 190, 54, 26);
+  const glow = context.createRadialGradient(120, 560, 300, 120, 560, 350);
+  glow.addColorStop(0, 'rgba(90,255,200,0.4)');
+  glow.addColorStop(1, 'rgba(90,255,200,0)');
+  context.fillStyle = glow;
+  context.fillRect(0, 170, WORLD_WIDTH, 110);
+  context.save();
+  context.beginPath(); context.arc(120, 560, 312, 0, Math.PI * 2); context.clip();
+  const jungle = context.createLinearGradient(0, 245, 0, 280);
+  jungle.addColorStop(0, '#1f8a5c');
+  jungle.addColorStop(1, '#06281f');
+  context.fillStyle = jungle;
+  context.fillRect(0, 240, WORLD_WIDTH, 40);
+  for (let tree = 0; tree < 60; tree++) {
+    const x = random() * WORLD_WIDTH;
+    context.fillStyle = random() < 0.5 ? 'rgba(20,90,60,0.9)' : 'rgba(30,120,80,0.85)';
+    context.beginPath(); context.arc(x, 252 + random() * 18, 3 + random() * 4, 0, Math.PI * 2); context.fill();
+  }
+  context.restore();
+  // floating mountains
+  for (const [x, y, width] of [[42, 150, 34], [176, 186, 26], [118, 112, 18]] as const) {
+    const rock = context.createLinearGradient(x, y - 6, x, y + width * 0.8);
+    rock.addColorStop(0, '#2f6b55');
+    rock.addColorStop(1, '#122a28');
+    context.fillStyle = rock;
+    polygon(context, [x - width / 2, y, x - width * 0.3, y - 5, x + width * 0.1, y - 7, x + width / 2, y - 2, x + width * 0.2, y + width * 0.8, x - width * 0.1, y + width * 0.55]);
+    context.fill();
+    context.fillStyle = 'rgba(60,200,120,0.85)';
+    context.fillRect(x - width / 2, y - 3, width, 2.4);
+    context.strokeStyle = 'rgba(70,200,120,0.6)';
+    context.lineWidth = 0.4;
+    for (let vine = 0; vine < 4; vine++) {
+      const vineX = x - width * 0.35 + vine * width * 0.22;
+      context.beginPath(); context.moveTo(vineX, y); context.quadraticCurveTo(vineX + 1.5, y + 6, vineX, y + 10 + vine * 2); context.stroke();
+    }
+  }
+  // bioluminescent spores
+  for (let spore = 0; spore < 40; spore++) {
+    context.fillStyle = random() < 0.5 ? 'rgba(120,255,230,0.75)' : 'rgba(200,140,255,0.7)';
+    context.beginPath(); context.arc(random() * WORLD_WIDTH, 120 + random() * 150, 0.4 + random() * 0.6, 0, Math.PI * 2); context.fill();
+  }
 }
 
 function drawEarthLimb(context: CanvasRenderingContext2D) {
@@ -187,69 +392,6 @@ function drawEarthLimb(context: CanvasRenderingContext2D) {
   context.stroke();
 }
 
-function drawSmallEarth(context: CanvasRenderingContext2D, x: number, y: number, radius: number) {
-  const body = context.createRadialGradient(x - radius * 0.4, y - radius * 0.4, 1, x, y, radius);
-  body.addColorStop(0, '#7cc4ff');
-  body.addColorStop(1, '#174a8a');
-  context.fillStyle = body;
-  context.beginPath();
-  context.arc(x, y, radius, 0, Math.PI * 2);
-  context.fill();
-  context.fillStyle = 'rgba(80,160,80,0.8)';
-  context.fillRect(x - 2, y - 3, 3, 4);
-}
-
-function drawMoon(context: CanvasRenderingContext2D, x: number, y: number, radius: number) {
-  const body = context.createRadialGradient(x - radius * 0.35, y - radius * 0.35, radius * 0.1, x, y, radius);
-  body.addColorStop(0, '#e9e6df');
-  body.addColorStop(0.7, '#a9a59c');
-  body.addColorStop(1, '#5e5b55');
-  context.globalAlpha = 0.5;
-  context.fillStyle = body;
-  context.beginPath();
-  context.arc(x, y, radius, 0, Math.PI * 2);
-  context.fill();
-  const random = seededRandom(5);
-  context.fillStyle = 'rgba(70,66,60,0.35)';
-  for (let crater = 0; crater < 16; crater++) {
-    const angle = random() * Math.PI * 2, distance = random() * radius * 0.85, size = 1.5 + random() * 6;
-    context.beginPath();
-    context.arc(x + Math.cos(angle) * distance, y + Math.sin(angle) * distance, size, 0, Math.PI * 2);
-    context.fill();
-  }
-  context.globalAlpha = 1;
-}
-
-function drawMoonlet(context: CanvasRenderingContext2D, x: number, y: number, radius: number) {
-  context.fillStyle = '#8a7a6a';
-  context.beginPath();
-  context.ellipse(x, y, radius * 1.3, radius, 0.4, 0, Math.PI * 2);
-  context.fill();
-}
-
-function drawMars(context: CanvasRenderingContext2D, x: number, y: number, radius: number) {
-  const body = context.createRadialGradient(x - radius * 0.35, y - radius * 0.35, radius * 0.1, x, y, radius);
-  body.addColorStop(0, '#f2a46a');
-  body.addColorStop(0.6, '#c1502e');
-  body.addColorStop(1, '#5a1c10');
-  context.globalAlpha = radius > 20 ? 0.55 : 0.85;
-  context.fillStyle = body;
-  context.beginPath();
-  context.arc(x, y, radius, 0, Math.PI * 2);
-  context.fill();
-  context.save();
-  context.clip();
-  context.fillStyle = 'rgba(90,30,15,0.35)';
-  context.fillRect(x - radius, y - 4, radius * 2, 5);
-  context.fillRect(x - radius, y + 10, radius * 2, 3);
-  context.fillStyle = 'rgba(255,255,255,0.85)';
-  context.beginPath();
-  context.ellipse(x, y - radius + 2, radius * 0.4, 4, 0, 0, Math.PI * 2);
-  context.fill();
-  context.restore();
-  context.globalAlpha = 1;
-}
-
 function drawLaunchPad(context: CanvasRenderingContext2D) {
   // the ground station line under the ship, with a tricolour accent strip
   context.fillStyle = 'rgba(5,11,31,0.85)';
@@ -282,6 +424,12 @@ export interface Sprites {
 
 export const ENEMY_SPRITE_WIDTH = 16;
 export const ENEMY_SPRITE_HEIGHT = 12;
+/** Index into Sprites.enemies of the overseer (the queen on Aranya), two frames. */
+export const OVERSEER_SPRITE = 13 * 2;
+/** Capsule look by Power: colour, dark rim, letter (index 0 unused). */
+const CAPSULE_LOOK: [string, string, string][] = [['#ffffff', '#888888', '?'], [SAFFRON, '#a34d00', 'T'], ['#4fc3f7', '#0d5a8a', 'S'], ['#ff4fd8', '#6a0a5a', 'M']];
+/** Sprites.capsules index for a capsule's Power. */
+export const capsuleSprite = (power: number) => power === Power.Bubble ? 1 : power === Power.MachineGun ? 2 : 0;
 export const QUEEN_SPRITE_WIDTH = 28;
 export const QUEEN_SPRITE_HEIGHT = 20;
 export const PLAYER_SPRITE_SIZE = 18;
@@ -303,19 +451,20 @@ function makeGlowingSprite(width: number, height: number, scale: number, glow: s
 }
 
 export function createSprites(scale: number): Sprites {
+  // [kind * 2 + frame] for every EnemyKind (the queen is bigger), then the corporate overseer (the queen on Aranya) at OVERSEER_SPRITE
   const enemies: HTMLCanvasElement[] = [];
-  for (const kind of [EnemyKind.Asteroid, EnemyKind.Debris, EnemyKind.Drone]) {
-    const halo = kind === EnemyKind.Drone ? 'rgba(255,79,216,0.55)' : kind === EnemyKind.Debris ? 'rgba(120,170,255,0.45)' : 'rgba(255,190,120,0.3)';
-    for (const frame of [0, 1]) enemies.push(makeGlowingSprite(ENEMY_SPRITE_WIDTH, ENEMY_SPRITE_HEIGHT, scale, halo, 1.6, context => {
-      context.translate(ENEMY_SPRITE_WIDTH / 2, ENEMY_SPRITE_HEIGHT / 2);
-      if (kind === EnemyKind.Asteroid) paintAsteroid(context, frame);
-      else if (kind === EnemyKind.Debris) paintDebris(context, frame);
-      else paintDrone(context, frame);
+  for (let kind = 0; kind < ENEMY_PAINTERS.length; kind++) {
+    const [paint, halo] = ENEMY_PAINTERS[kind];
+    const isBoss = kind === EnemyKind.Queen;
+    const width = isBoss ? QUEEN_SPRITE_WIDTH : ENEMY_SPRITE_WIDTH, height = isBoss ? QUEEN_SPRITE_HEIGHT : ENEMY_SPRITE_HEIGHT;
+    for (const frame of [0, 1]) enemies.push(makeGlowingSprite(width, height, scale, halo, isBoss ? 2.4 : 1.6, context => {
+      context.translate(width / 2, height / 2);
+      paint(context, frame);
     }));
   }
-  for (const frame of [0, 1]) enemies.push(makeGlowingSprite(QUEEN_SPRITE_WIDTH, QUEEN_SPRITE_HEIGHT, scale, 'rgba(255,79,216,0.7)', 2.4, context => {
+  for (const frame of [0, 1]) enemies.push(makeGlowingSprite(QUEEN_SPRITE_WIDTH, QUEEN_SPRITE_HEIGHT, scale, 'rgba(255,60,40,0.6)', 2.4, context => {
     context.translate(QUEEN_SPRITE_WIDTH / 2, QUEEN_SPRITE_HEIGHT / 2);
-    paintQueen(context, frame);
+    paintOverseer(context, frame);
   }));
   const player = makeGlowingSprite(PLAYER_SPRITE_SIZE, PLAYER_SPRITE_SIZE, scale, 'rgba(255,200,140,0.45)', 1.5, context => { context.translate(PLAYER_SPRITE_SIZE / 2, PLAYER_SPRITE_SIZE / 2); paintLauncher(context, 1); });
   const life = makeSprite(8, 10, scale, context => { context.translate(4, 5.5); context.scale(0.5, 0.5); paintLauncher(context, 1); });
@@ -324,13 +473,13 @@ export function createSprites(scale: number): Sprites {
     paintComet(context, direction);
   }));
   mystery.push(makeGlowingSprite(MYSTERY_SPRITE_WIDTH, MYSTERY_SPRITE_HEIGHT, scale, 'rgba(180,120,255,0.6)', 2, context => { context.translate(MYSTERY_SPRITE_WIDTH / 2, MYSTERY_SPRITE_HEIGHT / 2); paintMothership(context); }));
-  const capsules = [Power.TripleShot, Power.Bubble].map(power => makeGlowingSprite(9, 9, scale, power === Power.TripleShot ? SAFFRON : '#4fc3f7', 2, context => {
+  const capsules = [Power.TripleShot, Power.Bubble, Power.MachineGun].map(power => makeGlowingSprite(9, 9, scale, CAPSULE_LOOK[power][0], 2, context => {
     context.translate(4.5, 4.5);
-    const color = power === Power.TripleShot ? SAFFRON : '#4fc3f7';
+    const [color, dark, letter] = CAPSULE_LOOK[power];
     const body = context.createRadialGradient(-1.2, -1.2, 0.3, 0, 0, 3.8);
     body.addColorStop(0, '#ffffff');
     body.addColorStop(0.35, color);
-    body.addColorStop(1, power === Power.TripleShot ? '#a34d00' : '#0d5a8a');
+    body.addColorStop(1, dark);
     context.fillStyle = body;
     context.strokeStyle = 'rgba(255,255,255,0.9)';
     context.lineWidth = 0.6;
@@ -343,7 +492,7 @@ export function createSprites(scale: number): Sprites {
     context.font = '900 4.6px system-ui, sans-serif';
     context.textAlign = 'center';
     context.textBaseline = 'middle';
-    context.fillText(power === Power.TripleShot ? 'T' : 'S', 0, 0.4);
+    context.fillText(letter, 0, 0.4);
   }));
   const glows = GLOW_RGB.map(rgb => makeSprite(GLOW_SIZE, GLOW_SIZE, scale, context => {
     const glow = context.createRadialGradient(GLOW_SIZE / 2, GLOW_SIZE / 2, 0, GLOW_SIZE / 2, GLOW_SIZE / 2, GLOW_SIZE / 2);
@@ -368,6 +517,281 @@ export function createSprites(scale: number): Sprites {
     context.fill();
   }));
   return { enemies, player, mystery, capsules, life, glows, bolts };
+}
+
+type EnemyPaint = (context: CanvasRenderingContext2D, frame: number) => void;
+/** Painter and halo colour for each EnemyKind, in kind order. */
+const ENEMY_PAINTERS: [EnemyPaint, string][] = [
+  [(context, frame) => paintAsteroid(context, frame), 'rgba(255,190,120,0.3)'],
+  [(context, frame) => paintDebris(context, frame), 'rgba(120,170,255,0.45)'],
+  [(context, frame) => paintDrone(context, frame), 'rgba(255,79,216,0.55)'],
+  [(context, frame) => paintQueen(context, frame), 'rgba(255,79,216,0.7)'],
+  [(context, frame) => paintCrawler(context, frame), 'rgba(255,110,60,0.5)'],
+  [(context, frame) => paintJelly(context, frame), 'rgba(255,170,120,0.55)'],
+  [(context, frame) => paintRingShard(context, frame), 'rgba(255,235,180,0.5)'],
+  [(context, frame) => paintSpinner(context, frame), 'rgba(90,240,240,0.55)'],
+  [(context, frame) => paintWraith(context, frame), 'rgba(80,130,255,0.6)'],
+  [(context, frame) => paintCryoMine(context, frame), 'rgba(200,180,255,0.55)'],
+  [(context, frame) => paintGunship(context, frame), 'rgba(255,90,40,0.45)'],
+  [(context, frame) => paintMech(context, frame), 'rgba(255,200,60,0.4)'],
+  [(context, frame) => paintCaptive(context, frame), 'rgba(90,255,220,0.6)'],
+];
+
+/** Mars: a red-sand crab bot with snapping claws. */
+function paintCrawler(context: CanvasRenderingContext2D, frame: number) {
+  context.strokeStyle = '#7a2a12';
+  context.lineWidth = 0.7;
+  context.lineCap = 'round';
+  context.beginPath();
+  for (const side of [-1, 1]) for (let leg = 0; leg < 3; leg++) {
+    const lift = (leg + frame) % 2 === 0 ? -1 : 0.6;
+    context.moveTo(side * 2.5, 1 + leg * 0.8); context.lineTo(side * (5 + leg * 0.6), 2.8 + leg * 0.7 + lift); context.lineTo(side * (6 + leg * 0.4), 5 + leg * 0.3);
+  }
+  context.stroke();
+  for (const side of [-1, 1]) {
+    context.fillStyle = '#e8653a';
+    context.beginPath(); context.arc(side * 5.6, -2.6, 1.6, frame ? 0.3 : -0.2, Math.PI * 1.7); context.lineTo(side * 5.6, -2.6); context.fill();
+  }
+  const shell = context.createRadialGradient(-1, -2.5, 0.3, 0, 0, 5);
+  shell.addColorStop(0, '#ffb07a');
+  shell.addColorStop(0.5, '#d4502a');
+  shell.addColorStop(1, '#5a1608');
+  context.fillStyle = shell;
+  context.beginPath(); context.ellipse(0, 0, 4.6, 3.6, 0, 0, Math.PI * 2); context.fill();
+  context.shadowBlur = 0;
+  context.fillStyle = '#ffe14a';
+  context.fillRect(-2, -1.4, 1.2, 1.2);
+  context.fillRect(0.8, -1.4, 1.2, 1.2);
+  context.fillStyle = 'rgba(255,255,255,0.3)';
+  context.beginPath(); context.ellipse(-1, -2.2, 2.4, 0.8, -0.2, 0, Math.PI * 2); context.fill();
+}
+
+/** Jupiter: a storm jelly, an amber bell trailing swaying tendrils. */
+function paintJelly(context: CanvasRenderingContext2D, frame: number) {
+  context.strokeStyle = 'rgba(255,190,150,0.8)';
+  context.lineWidth = 0.5;
+  context.beginPath();
+  for (let tendril = -3; tendril <= 3; tendril += 1.5) {
+    const sway = (frame ? 1 : -1) * (tendril % 3 === 0 ? 1 : -0.6);
+    context.moveTo(tendril, 1); context.quadraticCurveTo(tendril + sway, 3.5, tendril - sway * 0.5, 6);
+  }
+  context.stroke();
+  const bell = context.createRadialGradient(0, -2, 0.3, 0, -1, 5.5);
+  bell.addColorStop(0, '#fff2d8');
+  bell.addColorStop(0.45, 'rgba(255,150,90,0.95)');
+  bell.addColorStop(1, 'rgba(160,60,40,0.85)');
+  context.fillStyle = bell;
+  context.beginPath(); context.ellipse(0, -0.5, 5.5, 4.6, 0, Math.PI, 0); context.quadraticCurveTo(0, 2.6, -5.5, -0.5); context.fill();
+  context.shadowBlur = 0;
+  context.fillStyle = 'rgba(255,255,255,0.4)';
+  for (let spot = -3; spot <= 3; spot += 2) { context.beginPath(); context.arc(spot, -2 + Math.abs(spot) * 0.3, 0.55, 0, Math.PI * 2); context.fill(); }
+  context.fillStyle = '#ffe9a8';
+  context.beginPath(); context.arc(0, -0.8, 1.1, 0, Math.PI * 2); context.fill();
+}
+
+/** Saturn: an armoured shard of ring ice (two hits). */
+function paintRingShard(context: CanvasRenderingContext2D, frame: number) {
+  context.rotate(frame ? 0.12 : -0.08);
+  const ice = context.createLinearGradient(-6, -5, 6, 5);
+  ice.addColorStop(0, '#ffffff');
+  ice.addColorStop(0.4, '#f1dfae');
+  ice.addColorStop(1, '#8a7240');
+  context.fillStyle = ice;
+  polygon(context, [-6, 0, -3, -5, 2, -4.5, 6, -1, 4, 4.5, -2, 5]);
+  context.fill();
+  context.shadowBlur = 0;
+  context.strokeStyle = 'rgba(255,255,255,0.75)';
+  context.lineWidth = 0.35;
+  context.beginPath(); context.moveTo(-3, -5); context.lineTo(0, 0); context.lineTo(4, 4.5); context.moveTo(0, 0); context.lineTo(-6, 0); context.stroke();
+  // armour bands
+  context.fillStyle = '#5c6470';
+  context.fillRect(-6, -0.9, 12, 1.8);
+  context.fillStyle = '#c9d0da';
+  for (let rivet = -4.5; rivet <= 4.5; rivet += 3) context.fillRect(rivet - 0.4, -0.4, 0.8, 0.8);
+}
+
+/** Uranus: a tilted cyan top with spinning spokes; it aims its shots. */
+function paintSpinner(context: CanvasRenderingContext2D, frame: number) {
+  context.rotate(0.5);
+  const disc = context.createRadialGradient(-1, -1, 0.3, 0, 0, 6);
+  disc.addColorStop(0, '#e6ffff');
+  disc.addColorStop(0.5, '#4fd8dc');
+  disc.addColorStop(1, '#0d4a56');
+  context.fillStyle = disc;
+  context.beginPath(); context.ellipse(0, 0, 6.2, 3, 0, 0, Math.PI * 2); context.fill();
+  context.shadowBlur = 0;
+  context.strokeStyle = 'rgba(10,40,60,0.7)';
+  context.lineWidth = 0.5;
+  for (let spoke = 0; spoke < 4; spoke++) {
+    const angle = spoke * Math.PI / 4 + (frame ? Math.PI / 8 : 0);
+    context.beginPath(); context.moveTo(0, 0); context.lineTo(Math.cos(angle) * 6, Math.sin(angle) * 3); context.stroke();
+  }
+  context.fillStyle = '#ffffff';
+  context.beginPath(); context.arc(0, 0, 1.3, 0, Math.PI * 2); context.fill();
+  context.fillStyle = '#0d4a56';
+  context.beginPath(); context.arc(0, 0, 0.6, 0, Math.PI * 2); context.fill();
+}
+
+/** Neptune: a hooded gale wraith trailing wisps; its bolts accelerate. */
+function paintWraith(context: CanvasRenderingContext2D, frame: number) {
+  const cloak = context.createLinearGradient(0, -5.5, 0, 6);
+  cloak.addColorStop(0, '#9cc0ff');
+  cloak.addColorStop(0.5, '#3a64e0');
+  cloak.addColorStop(1, 'rgba(20,40,140,0.2)');
+  context.fillStyle = cloak;
+  const wave = frame ? 1 : -1;
+  polygon(context, [0, -5.5, 4.5, -2, 5, 2, 3.5 + wave, 6, 1.5, 3.5, 0, 6 - wave, -1.5, 3.5, -3.5 - wave, 6, -5, 2, -4.5, -2]);
+  context.fill();
+  context.shadowBlur = 0;
+  context.fillStyle = '#0a1240';
+  context.beginPath(); context.ellipse(0, -1.4, 2.8, 2.4, 0, 0, Math.PI * 2); context.fill();
+  context.fillStyle = '#bff3ff';
+  context.fillRect(-1.7, -1.8, 1.2, 0.8);
+  context.fillRect(0.5, -1.8, 1.2, 0.8);
+}
+
+/** Pluto: an armoured frost mine with a blinking light; bursts into shards. */
+function paintCryoMine(context: CanvasRenderingContext2D, frame: number) {
+  context.strokeStyle = '#e9e2ff';
+  context.lineWidth = 0.9;
+  context.lineCap = 'round';
+  context.beginPath();
+  for (let spike = 0; spike < 8; spike++) {
+    const angle = spike * Math.PI / 4 + (frame ? 0.2 : 0);
+    context.moveTo(Math.cos(angle) * 3.5, Math.sin(angle) * 3.5); context.lineTo(Math.cos(angle) * 5.8, Math.sin(angle) * 5.2);
+  }
+  context.stroke();
+  const shell = context.createRadialGradient(-1.2, -1.2, 0.3, 0, 0, 4.2);
+  shell.addColorStop(0, '#ffffff');
+  shell.addColorStop(0.5, '#b8a8e0');
+  shell.addColorStop(1, '#3e3266');
+  context.fillStyle = shell;
+  context.beginPath(); context.arc(0, 0, 4, 0, Math.PI * 2); context.fill();
+  context.shadowBlur = 0;
+  context.fillStyle = '#5c6470';
+  context.fillRect(-4, -0.6, 8, 1.2);
+  context.fillStyle = frame ? '#ff3b3b' : '#6a1010';
+  context.beginPath(); context.arc(0, 0, 1, 0, Math.PI * 2); context.fill();
+}
+
+/** Aranya: the extraction corporation's gunship, gunmetal with hazard stripes. */
+function paintGunship(context: CanvasRenderingContext2D, frame: number) {
+  const hull = context.createLinearGradient(0, -4, 0, 4);
+  hull.addColorStop(0, '#9aa3ae');
+  hull.addColorStop(1, '#2c3138');
+  context.fillStyle = hull;
+  polygon(context, [-7, -1, -3, -3.5, 3, -3.5, 7, -1, 4, 3, 0, 4.5, -4, 3]);
+  context.fill();
+  context.shadowBlur = 0;
+  // rotors
+  context.fillStyle = 'rgba(200,210,220,0.55)';
+  context.fillRect(frame ? -7.5 : -6, -4.6, frame ? 4 : 2.5, 0.6);
+  context.fillRect(frame ? 4.5 : 3.5, -4.6, frame ? 3 : 2.5, 0.6);
+  // hazard stripes
+  for (let stripe = -5; stripe <= 4; stripe += 2) {
+    context.fillStyle = stripe % 4 === 1 || stripe % 4 === -3 ? '#ffb000' : '#111317';
+    context.fillRect(stripe, 0.6, 1, 1.1);
+  }
+  context.fillStyle = '#ff3b2f';
+  context.fillRect(-1, -2.6, 2, 1.4);
+  context.fillStyle = '#ffd0c0';
+  context.fillRect(-0.4, -2.3, 0.8, 0.6);
+}
+
+/** Aranya: an armoured corporate mech (two hits) with twin cannons. */
+function paintMech(context: CanvasRenderingContext2D, frame: number) {
+  context.fillStyle = '#3a3f47';
+  const stride = frame ? 0.8 : -0.8;
+  context.fillRect(-3.4 + stride * 0.3, 2.5, 1.8, 3.4);
+  context.fillRect(1.6 - stride * 0.3, 2.5, 1.8, 3.4);
+  for (const side of [-1, 1]) {
+    context.fillStyle = '#5a616c';
+    context.fillRect(side * 5.2 - 1, -2, 2, 4);
+    context.fillStyle = '#1b1e23';
+    context.fillRect(side * 5.2 - 0.5, 2, 1, 2.2);
+  }
+  const body = context.createLinearGradient(0, -5, 0, 3);
+  body.addColorStop(0, '#b4bcc6');
+  body.addColorStop(1, '#4a5058');
+  context.fillStyle = body;
+  polygon(context, [-4, -4, 4, -4, 4.5, 2.5, -4.5, 2.5]);
+  context.fill();
+  context.shadowBlur = 0;
+  const glass = context.createLinearGradient(-2.5, -3.2, 2.5, -0.5);
+  glass.addColorStop(0, '#bfe8ff');
+  glass.addColorStop(1, '#1c4a66');
+  context.fillStyle = glass;
+  context.fillRect(-2.6, -3.3, 5.2, 2.6);
+  context.fillStyle = '#ffb000';
+  context.fillRect(-4.5, 1.4, 9, 0.9);
+  context.fillStyle = '#111317';
+  for (let stripe = -4; stripe < 4.5; stripe += 2) context.fillRect(stripe, 1.4, 0.9, 0.9);
+}
+
+/** Aranya: a native held in a corporate cage (shoot the cage to free them). */
+function paintCaptive(context: CanvasRenderingContext2D, frame: number) {
+  // the native: tall, blue, with glowing freckles
+  const skin = context.createLinearGradient(0, -5, 0, 5);
+  skin.addColorStop(0, '#6fd6ff');
+  skin.addColorStop(1, '#1f5fa8');
+  context.fillStyle = skin;
+  context.beginPath(); context.ellipse(0, -3, 1.4, 1.7, 0, 0, Math.PI * 2); context.fill();
+  context.fillRect(-1, -1.5, 2, 4.2);
+  context.fillRect(-1, 2.6, 0.8, 2.6);
+  context.fillRect(0.2, 2.6, 0.8, 2.6);
+  context.fillRect(frame ? -2.6 : -2.2, frame ? -3.5 : -1.2, 0.7, 2.6);
+  context.fillRect(frame ? 1.9 : 1.5, frame ? -3.5 : -1.2, 0.7, 2.6);
+  context.shadowBlur = 0;
+  context.fillStyle = '#d8fff4';
+  context.fillRect(-0.6, -3.4, 0.4, 0.4);
+  context.fillRect(0.3, -3.4, 0.4, 0.4);
+  // the cage
+  context.strokeStyle = '#8b939e';
+  context.lineWidth = 0.55;
+  context.strokeRect(-4.5, -5.5, 9, 11);
+  context.beginPath();
+  for (let bar = -3; bar <= 3; bar += 1.5) { context.moveTo(bar, -5.5); context.lineTo(bar, 5.5); }
+  context.stroke();
+  context.fillStyle = '#ffb000';
+  context.fillRect(-4.5, -6, 9, 1);
+  context.fillStyle = '#ff3b2f';
+  context.fillRect(-0.6, -6, 1.2, 1);
+}
+
+/** The queen on Aranya: the corporation's command overseer craft. */
+function paintOverseer(context: CanvasRenderingContext2D, frame: number) {
+  const hull = context.createLinearGradient(0, -8, 0, 8);
+  hull.addColorStop(0, '#c4ccd6');
+  hull.addColorStop(0.5, '#4a5160');
+  hull.addColorStop(1, '#1b1e26');
+  context.fillStyle = hull;
+  polygon(context, [-13, -1, -8, -6, -3, -7.5, 3, -7.5, 8, -6, 13, -1, 9, 4, 3, 7, -3, 7, -9, 4]);
+  context.fill();
+  context.shadowBlur = 0;
+  context.strokeStyle = '#ffb000';
+  context.lineWidth = 0.45;
+  context.stroke();
+  // window strip
+  for (let window = -8; window <= 8; window += 2.4) {
+    context.fillStyle = (Math.round(window) + frame) % 2 === 0 ? '#ff5a3c' : '#ffb59e';
+    context.fillRect(window - 0.6, -3.2, 1.2, 1);
+  }
+  // corporate hex logo
+  context.fillStyle = '#ffb000';
+  polygon(context, [0, -1.2, 2.8, 0.4, 2.8, 3.4, 0, 5, -2.8, 3.4, -2.8, 0.4]);
+  context.fill();
+  context.fillStyle = '#1b1e26';
+  context.font = '900 3.4px system-ui, sans-serif';
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.fillText('X', 0, 2.3);
+  // antennae
+  context.strokeStyle = '#9aa3ae';
+  context.lineWidth = 0.5;
+  context.beginPath(); context.moveTo(-4, -7.5); context.lineTo(-5, -9.6); context.moveTo(4, -7.5); context.lineTo(5, -9.6); context.stroke();
+  context.fillStyle = frame ? '#ff3b2f' : '#6a1010';
+  context.fillRect(-5.5, -10, 1, 1);
+  context.fillRect(4.5, -10, 1, 1);
 }
 
 function paintAsteroid(context: CanvasRenderingContext2D, frame: number) {
@@ -643,7 +1067,35 @@ export function drawPlayerBullet(context: CanvasRenderingContext2D, sprites: Spr
   context.drawImage(sprites.bolts[style], x - BOLT_WIDTH / 2, y - 2.5, BOLT_WIDTH, BOLT_HEIGHT);
 }
 
+/** Enemy shot looks per kind: halo colour, core colour, radius x/y of the halo (classic kinds keep their own drawings). */
+const SHOT_LOOKS: Record<number, [string, string, number, number]> = {
+  [EnemyKind.Crawler]: ['rgba(255,110,60,0.4)', '#ffd0a0', 2.2, 2.2],
+  [EnemyKind.Jelly]: ['rgba(255,150,120,0.4)', '#ffe2c8', 2.6, 2.6],
+  [EnemyKind.RingShard]: ['rgba(255,235,180,0.35)', '#ffffff', 1.4, 3.4],
+  [EnemyKind.Spinner]: ['rgba(90,240,240,0.4)', '#e6ffff', 2.2, 2.2],
+  [EnemyKind.Wraith]: ['rgba(80,130,255,0.45)', '#d8ecff', 1.6, 3.8],
+  [EnemyKind.CryoMine]: ['rgba(200,180,255,0.45)', '#ffffff', 1.8, 2.4],
+  [EnemyKind.Gunship]: ['rgba(255,60,40,0.45)', '#ffd0c0', 1.4, 3.6],
+  [EnemyKind.Mech]: ['rgba(255,190,40,0.45)', '#fff2c0', 1.8, 2.8],
+};
+
 export function drawEnemyBullet(context: CanvasRenderingContext2D, kind: number, x: number, y: number, age: number) {
+  const look = SHOT_LOOKS[kind];
+  if (look) {
+    const [halo, core, radiusX, radiusY] = look;
+    context.fillStyle = halo;
+    context.beginPath(); context.ellipse(x, y + 1, radiusX + 0.8, radiusY + 0.8, 0, 0, Math.PI * 2); context.fill();
+    context.fillStyle = core;
+    if (kind === EnemyKind.Spinner || kind === EnemyKind.CryoMine) {
+      const spin = age * 9;
+      polygon(context, [x + Math.cos(spin) * 1.6, y + 1 + Math.sin(spin) * 1.6, x - Math.sin(spin) * 1.6, y + 1 + Math.cos(spin) * 1.6,
+        x - Math.cos(spin) * 1.6, y + 1 - Math.sin(spin) * 1.6, x + Math.sin(spin) * 1.6, y + 1 - Math.cos(spin) * 1.6]);
+      context.fill();
+    } else {
+      context.beginPath(); context.ellipse(x, y + 1, radiusX * 0.5, radiusY * 0.55, 0, 0, Math.PI * 2); context.fill();
+    }
+    return;
+  }
   if (kind === EnemyKind.Drone) {
     const pink = (Math.floor(age * 12) & 1) === 1;
     context.fillStyle = pink ? 'rgba(255,79,216,0.35)' : 'rgba(105,240,174,0.35)';
@@ -665,6 +1117,7 @@ export function drawEnemyBullet(context: CanvasRenderingContext2D, kind: number,
   }
 }
 
+/** Particle palettes: 0-2 classic enemies, 3 queen / mothership, 4 the ship, 5 power-ups, 6.. the newer kinds (EnemyKind + 2). */
 const PARTICLE_COLORS = [
   ['#e8cdb0', '#a08a76', '#ffcc80'],
   ['#ffd54f', '#7fa8ff', '#ffffff'],
@@ -672,12 +1125,22 @@ const PARTICLE_COLORS = [
   ['#ffffff', '#ffd23f', '#ff9de8'],
   [SAFFRON, '#ffffff', '#3fbf3a'],
   ['#ffd54f', '#5f8de0', '#ffffff'],
+  ['#ff7a45', '#ffd0a0', '#ffe14a'],
+  ['#ffb07a', '#fff2d8', '#ff8a60'],
+  ['#ffffff', '#f1dfae', '#c9d0da'],
+  ['#4fd8dc', '#e6ffff', '#ffffff'],
+  ['#9cc0ff', '#3a64e0', '#d8ecff'],
+  ['#e9e2ff', '#b8a8e0', '#ff3b3b'],
+  ['#ffb000', '#ff3b2f', '#c9d0da'],
+  ['#ffb000', '#b4bcc6', '#ffffff'],
+  ['#6fd6ff', '#a9ffe0', '#ffffff'],
 ];
-const PARTICLE_GLOWS = [GlowColor.Saffron, GlowColor.Cyan, GlowColor.Magenta, GlowColor.Gold, GlowColor.Saffron, GlowColor.Gold];
+const PARTICLE_GLOWS = [GlowColor.Saffron, GlowColor.Cyan, GlowColor.Magenta, GlowColor.Gold, GlowColor.Saffron, GlowColor.Gold,
+  GlowColor.Saffron, GlowColor.Saffron, GlowColor.White, GlowColor.Cyan, GlowColor.Cyan, GlowColor.Magenta, GlowColor.Saffron, GlowColor.Gold, GlowColor.Green];
 const NUMBER_TEXT: Record<number, string> = { 50: '+50', 100: '+100', 150: '+150', 300: '+300', 500: '+500' };
 
 export function drawParticle(context: CanvasRenderingContext2D, sprites: Sprites, kind: ParticleKind, x: number, y: number, progress: number, value: number, index: number) {
-  const colorIndex = Math.min(value, 5) | 0;
+  const colorIndex = Math.min(value, PARTICLE_COLORS.length - 1) | 0;
   const palette = PARTICLE_COLORS[colorIndex];
   const fade = 1 - progress;
   if (kind === ParticleKind.Spark || kind === ParticleKind.Shard) {
@@ -705,6 +1168,28 @@ export function drawParticle(context: CanvasRenderingContext2D, sprites: Sprites
     context.fillStyle = '#fff1c1';
     context.beginPath(); context.arc(x, y, 1.6 * fade + 0.4, 0, Math.PI * 2); context.fill();
     context.globalCompositeOperation = 'source-over';
+  } else if (kind === ParticleKind.Native) {
+    // a freed native drifting up, arms raised, in a green glow
+    context.globalCompositeOperation = 'lighter';
+    drawGlow(context, sprites, GlowColor.Green, x, y, 12, fade * 0.8);
+    context.globalCompositeOperation = 'source-over';
+    context.globalAlpha = Math.min(1, fade * 1.6);
+    context.fillStyle = '#6fd6ff';
+    context.beginPath(); context.ellipse(x, y - 3, 1.3, 1.6, 0, 0, Math.PI * 2); context.fill();
+    context.fillRect(x - 0.9, y - 1.5, 1.8, 4);
+    context.fillRect(x - 2.3, y - 4, 0.7, 2.8);
+    context.fillRect(x + 1.6, y - 4, 0.7, 2.8);
+    context.fillRect(x - 0.9, y + 2.4, 0.7, 2.2);
+    context.fillRect(x + 0.2, y + 2.4, 0.7, 2.2);
+  } else if (kind === ParticleKind.RescueText) {
+    context.globalAlpha = Math.min(1, fade * 2);
+    context.font = '900 6.5px system-ui, sans-serif';
+    context.textAlign = 'center';
+    context.lineWidth = 1.5;
+    context.strokeStyle = 'rgba(0,30,20,0.85)';
+    context.strokeText('FREED!', x, y);
+    context.fillStyle = '#7dffc8';
+    context.fillText('FREED!', x, y);
   } else if (kind === ParticleKind.ScoreText) {
     context.globalAlpha = Math.min(1, fade * 2);
     context.font = '900 7.5px system-ui, sans-serif';

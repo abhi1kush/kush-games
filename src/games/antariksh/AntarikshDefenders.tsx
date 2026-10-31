@@ -4,12 +4,12 @@ import { readStoredJson, saveStoredJson } from '../random';
 import { MuteButton, useSharedMute } from '../sharedSound';
 import { type ControlsGuide, ControlsPanel, ControlsToggle } from '../ControlsPanel';
 import {
-  type BackdropLayers, createBackdrop, createSprites, drawEnemyBullet, drawFlame, drawGlow, drawParticle, drawPlayerBullet, ENEMY_SPRITE_HEIGHT, ENEMY_SPRITE_WIDTH,
-  GlowColor, GROUND_STRIP_HEIGHT, LAYER_SPEEDS, MYSTERY_SPRITE_HEIGHT, MYSTERY_SPRITE_WIDTH, PLAYER_SPRITE_SIZE, QUEEN_SPRITE_HEIGHT, QUEEN_SPRITE_WIDTH, SAFFRON, type Sprites,
+  type BackdropLayers, capsuleSprite, createBackdrop, createSprites, drawEnemyBullet, drawFlame, drawGlow, drawParticle, drawPlayerBullet, ENEMY_SPRITE_HEIGHT, ENEMY_SPRITE_WIDTH,
+  GlowColor, GROUND_STRIP_HEIGHT, LAYER_SPEEDS, MYSTERY_SPRITE_HEIGHT, MYSTERY_SPRITE_WIDTH, OVERSEER_SPRITE, PLAYER_SPRITE_SIZE, QUEEN_SPRITE_HEIGHT, QUEEN_SPRITE_WIDTH, SAFFRON, type Sprites,
 } from './art';
 import {
-  AntarikshDefenders, Backdrop, Buttons, createMemoryViews, EnemyKind, Events, GROUND_Y, loadAntarikshEngine, MAX_ENEMIES, type MemoryViews, MYSTERY_Y, Phase, PLAYER_Y, Power,
-  RenderSlot, stageName, Weapons, WORLD_HEIGHT, WORLD_WIDTH,
+  AntarikshDefenders, Buttons, createMemoryViews, EnemyKind, Events, GROUND_Y, loadAntarikshEngine, MAX_ENEMIES, type MemoryViews, MYSTERY_Y, Phase, PLAYER_Y, Power,
+  Leg, LEG_NAMES, legOfStage, RenderSlot, stageName, stageTagline, subStageOf, Weapons, WORLD_HEIGHT, WORLD_WIDTH,
 } from './engine';
 import { createAntarikshSaveSlot } from './save';
 import { playLimited, playMarch, primeAudio, type SoundKind } from './sounds';
@@ -42,6 +42,7 @@ const EVENT_SOUNDS: [number, SoundKind][] = [
   [Events.mysteryDown, 'mysteryDown'], [Events.liftoff, 'liftoff'], [Events.countdownTick, 'countdownTick'], [Events.bubblePop, 'bubblePop'],
   [Events.enemyDown, 'enemyDown'], [Events.mysteryAppear, 'mysteryAppear'], [Events.waveStart, 'waveStart'], [Events.shoot, 'shoot'],
   [Events.enemyShoot, 'enemyShoot'], [Events.queenHit, 'queenHit'], [Events.queenDown, 'queenDown'], [Events.weaponUnlock, 'weaponUnlock'],
+  [Events.rescue, 'rescue'], [Events.armourHit, 'shieldHit'],
 ];
 
 /** Everything the renderer keeps between frames (sprites for the current size, cached HUD text). */
@@ -64,7 +65,10 @@ interface Renderer {
   waveText: string;
   waveTitle: string;
   stageTitle: string;
+  stageTagline: string;
   hudBar?: CanvasGradient;
+  shownRescued: number;
+  rescuedText: string;
   queenHitUntil: number;
   bannerUntil: number;
   bannerTitle: string;
@@ -106,7 +110,8 @@ function drawFrame(renderer: Renderer, views: MemoryViews, clock: number, bestSc
   const { render } = views;
   const phase = render[RenderSlot.phase] as Phase;
   const phaseSeconds = render[RenderSlot.phaseSeconds];
-  const backdropKind = render[RenderSlot.backdrop] as Backdrop;
+  const backdropKind = render[RenderSlot.backdrop];
+  const leg = legOfStage(backdropKind);
   const backdrop = renderer.backdrops[backdropKind] ??= createBackdrop(scale, backdropKind);
   const shake = render[RenderSlot.shake];
   const shakeX = shake > 0 ? (Math.random() - 0.5) * shake * 3 : 0;
@@ -124,9 +129,10 @@ function drawFrame(renderer: Renderer, views: MemoryViews, clock: number, bestSc
   context.drawImage(backdrop.sky, -2, -2, WORLD_WIDTH + 4, WORLD_HEIGHT + 4);
   drawScrolling(context, backdrop.farStars, travel * LAYER_SPEEDS.farStars);
   drawScrolling(context, backdrop.nebula, travel * LAYER_SPEEDS.nebula);
-  // the stage's planet drifts past and comes round again; Earth just falls away below as the ship climbs
+  // departing, the world left behind falls away below; in transit and on arrival the destination drifts past and comes round again
   const sceneryDistance = renderer.sceneryTravel * LAYER_SPEEDS.scenery;
-  const sceneryY = backdropKind === Backdrop.Earth ? Math.min(sceneryDistance, WORLD_HEIGHT)
+  const sceneryY = leg === Leg.Aranya && subStageOf(backdropKind) === 2 ? 0 // on Aranya's surface the jungle stays put
+    : subStageOf(backdropKind) === 0 ? Math.min(sceneryDistance, WORLD_HEIGHT)
     : ((sceneryDistance + WORLD_HEIGHT) % (WORLD_HEIGHT * 2)) - WORLD_HEIGHT;
   if (sceneryY < WORLD_HEIGHT) context.drawImage(backdrop.scenery, -2, sceneryY, WORLD_WIDTH + 4, WORLD_HEIGHT);
   drawScrolling(context, backdrop.midStars, travel * LAYER_SPEEDS.midStars);
@@ -161,9 +167,9 @@ function drawFrame(renderer: Renderer, views: MemoryViews, clock: number, bestSc
     // the queen: a pulsing aura, her sprite (flashing white when hit), and her armour pips
     const hurt = clock < renderer.queenHitUntil;
     context.globalCompositeOperation = 'lighter';
-    drawGlow(context, sprites, GlowColor.Magenta, queenX, queenY, 30 + Math.sin(clock * 4) * 3, hurt ? 0.9 : 0.45);
+    drawGlow(context, sprites, leg === Leg.Aranya ? GlowColor.Saffron : GlowColor.Magenta, queenX, queenY, 30 + Math.sin(clock * 4) * 3, hurt ? 0.9 : 0.45);
     context.globalCompositeOperation = 'source-over';
-    context.drawImage(sprites.enemies[EnemyKind.Queen * 2 + marchFrame], queenX - QUEEN_SPRITE_WIDTH / 2, queenY - QUEEN_SPRITE_HEIGHT / 2 - 1, QUEEN_SPRITE_WIDTH, QUEEN_SPRITE_HEIGHT);
+    context.drawImage(sprites.enemies[(leg === Leg.Aranya ? OVERSEER_SPRITE : EnemyKind.Queen * 2) + marchFrame], queenX - QUEEN_SPRITE_WIDTH / 2, queenY - QUEEN_SPRITE_HEIGHT / 2 - 1, QUEEN_SPRITE_WIDTH, QUEEN_SPRITE_HEIGHT);
     if (hurt) {
       context.globalCompositeOperation = 'lighter';
       drawGlow(context, sprites, GlowColor.White, queenX, queenY, 16, 0.8);
@@ -178,10 +184,10 @@ function drawFrame(renderer: Renderer, views: MemoryViews, clock: number, bestSc
   }
 
   if (render[RenderSlot.mysteryActive] === 1) {
-    const sprite = sprites.mystery[backdropKind <= Backdrop.Moon ? (render[RenderSlot.mysteryDirection] > 0 ? 0 : 1) : 2];
+    const sprite = sprites.mystery[leg === Leg.Mars ? (render[RenderSlot.mysteryDirection] > 0 ? 0 : 1) : 2];
     const mysteryX = render[RenderSlot.mysteryX], mysteryY = MYSTERY_Y + Math.sin(clock * 5) * 0.6;
     context.globalCompositeOperation = 'lighter';
-    drawGlow(context, sprites, backdropKind <= Backdrop.Moon ? GlowColor.Cyan : GlowColor.Magenta, mysteryX, mysteryY, 26, 0.35);
+    drawGlow(context, sprites, leg === Leg.Mars ? GlowColor.Cyan : GlowColor.Magenta, mysteryX, mysteryY, 26, 0.35);
     context.globalCompositeOperation = 'source-over';
     context.drawImage(sprite, mysteryX - MYSTERY_SPRITE_WIDTH / 2, mysteryY - MYSTERY_SPRITE_HEIGHT / 2, MYSTERY_SPRITE_WIDTH, MYSTERY_SPRITE_HEIGHT);
   }
@@ -189,12 +195,12 @@ function drawFrame(renderer: Renderer, views: MemoryViews, clock: number, bestSc
   const capsuleCount = render[RenderSlot.capsuleCount];
   for (let index = 0; index < capsuleCount; index++) {
     const offset = RenderSlot.capsules + index * RenderSlot.capsuleStride;
-    const isBubble = render[offset] === Power.Bubble;
+    const power = render[offset];
     const x = render[offset + 1] + Math.sin(clock * 6 + index) * 0.8, y = render[offset + 2];
     context.globalCompositeOperation = 'lighter';
-    drawGlow(context, sprites, isBubble ? GlowColor.Cyan : GlowColor.Saffron, x, y, 16 + Math.sin(clock * 8) * 2, 0.6);
+    drawGlow(context, sprites, power === Power.Bubble ? GlowColor.Cyan : power === Power.MachineGun ? GlowColor.Magenta : GlowColor.Saffron, x, y, 16 + Math.sin(clock * 8) * 2, 0.6);
     context.globalCompositeOperation = 'source-over';
-    context.drawImage(sprites.capsules[isBubble ? 1 : 0], x - 4.5, y - 4.5, 9, 9);
+    context.drawImage(sprites.capsules[capsuleSprite(power)], x - 4.5, y - 4.5, 9, 9);
   }
 
   // the launcher
@@ -275,10 +281,11 @@ function drawFrame(renderer: Renderer, views: MemoryViews, clock: number, bestSc
   if (best !== renderer.shownBest) { renderer.shownBest = best; renderer.bestText = String(best).padStart(6, '0'); }
   if (wave !== renderer.shownWave) {
     renderer.shownWave = wave;
-    const name = stageName(wave).toUpperCase();
-    renderer.waveText = `W${wave} · ${name}`;
-    renderer.waveTitle = `WAVE ${wave}`;
-    renderer.stageTitle = name;
+    const stage = render[RenderSlot.stage];
+    renderer.waveText = `W${wave} · ${stageName(wave).toUpperCase()}`;
+    renderer.waveTitle = LEG_NAMES[legOfStage(stage)].toUpperCase();
+    renderer.stageTitle = `WAVE ${wave} · ${stageName(wave).split(' · ')[1].toUpperCase()}`;
+    renderer.stageTagline = stageTagline(stage);
   }
   context.textBaseline = 'alphabetic';
   context.textAlign = 'left';
@@ -293,7 +300,7 @@ function drawFrame(renderer: Renderer, views: MemoryViews, clock: number, bestSc
   drawText(context, renderer.bestText, 104, 12, '#ffd9a8');
   context.textAlign = 'right';
   context.font = '700 3.6px system-ui, sans-serif';
-  drawText(context, 'SECTOR', WORLD_WIDTH - 5, 5.5, 'rgba(126,224,138,0.6)');
+  drawText(context, 'JOURNEY', WORLD_WIDTH - 5, 5.5, 'rgba(126,224,138,0.6)');
   context.font = '800 5.2px system-ui, sans-serif';
   drawText(context, renderer.waveText, WORLD_WIDTH - 5, 12, '#7ee08a');
   context.fillStyle = 'rgba(255,153,51,0.35)';
@@ -321,6 +328,11 @@ function drawFrame(renderer: Renderer, views: MemoryViews, clock: number, bestSc
     if (weapons & Weapons.rapid) chip('MACHINE GUN', '#4fc3f7');
     if (weapons & Weapons.triple) chip('TRIPLE SHOT', SAFFRON);
   }
+  if (leg === Leg.Aranya) {
+    const rescued = render[RenderSlot.rescued];
+    if (rescued !== renderer.shownRescued) { renderer.shownRescued = rescued; renderer.rescuedText = `NATIVES FREED ${rescued}`; }
+    chip(renderer.rescuedText, '#7dffc8');
+  }
   const power = render[RenderSlot.power] as Power;
   if (power === Power.Bubble) {
     const seconds = render[RenderSlot.powerSeconds];
@@ -345,17 +357,19 @@ function drawFrame(renderer: Renderer, views: MemoryViews, clock: number, bestSc
     drawText(context, renderer.waveText, WORLD_WIDTH / 2, 192, '#7ee08a');
   } else if (phase === Phase.WaveIntro) {
     context.globalAlpha = Math.min(1, phaseSeconds * 3, (1.8 - phaseSeconds) * 3);
-    drawPlate(context, 128, 40);
-    context.font = '900 20px system-ui, sans-serif';
-    drawText(context, renderer.waveTitle, WORLD_WIDTH / 2, 141, SAFFRON);
-    context.font = '800 7.5px system-ui, sans-serif';
-    drawText(context, renderer.stageTitle, WORLD_WIDTH / 2, 160, '#7ee08a');
+    drawPlate(context, 122, 54);
+    context.font = '800 6px system-ui, sans-serif';
+    drawText(context, renderer.stageTitle, WORLD_WIDTH / 2, 131, '#7ee08a');
+    context.font = '900 22px system-ui, sans-serif';
+    drawText(context, renderer.waveTitle, WORLD_WIDTH / 2, 150, leg === Leg.Aranya ? '#7dffc8' : SAFFRON);
+    context.font = '700 6.2px system-ui, sans-serif';
+    drawText(context, renderer.stageTagline, WORLD_WIDTH / 2, 168, 'rgba(255,255,255,0.88)');
     context.globalAlpha = 1;
   } else if (phase === Phase.WaveClear) {
     context.globalAlpha = Math.min(1, phaseSeconds * 4);
     drawPlate(context, 134, 24);
     context.font = '900 16px system-ui, sans-serif';
-    drawText(context, 'SECTOR CLEAR', WORLD_WIDTH / 2, 146, '#ffffff');
+    drawText(context, leg === Leg.Aranya && subStageOf(backdropKind) === 2 ? 'NATIVES FREED' : 'STAGE CLEAR', WORLD_WIDTH / 2, 146, '#ffffff');
     context.globalAlpha = 1;
   }
   const bannerLeft = renderer.bannerUntil - clock;
@@ -386,9 +400,9 @@ function drawPlate(context: CanvasRenderingContext2D, y: number, height: number)
 }
 
 /** What the unlock banner says for the weapon bits just reached. */
-function weaponBanner(weapons: number, queenDown: boolean): [string, string, string] {
+function weaponBanner(weapons: number): [string, string, string] {
   if (weapons === Weapons.both) return ['TRIPLE STREAM UNLOCKED', 'Triple shot + machine gun · hold fire for three streams', '#ffd23f'];
-  if (weapons & Weapons.rapid) return [queenDown ? 'QUEEN DOWN · MACHINE GUN' : 'MACHINE GUN', 'Hold fire for a continuous stream', '#4fc3f7'];
+  if (weapons & Weapons.rapid) return ['MACHINE GUN', 'Hold fire for a continuous stream', '#4fc3f7'];
   return ['TRIPLE SHOT', 'Three bolts per shot · kill the queen for the machine gun', SAFFRON];
 }
 
@@ -495,8 +509,8 @@ function AntarikshGame({ memory }: { memory: WebAssembly.Memory }) {
       if (!renderer || Math.abs(renderer.scale - scale) > 0.01) {
         renderer = {
           context, scale, backdrops: [], sprites: createSprites(scale), travel: 0, sceneryTravel: 0, speed: 1, lastClock: performance.now() / 1000, shownBackdrop: -1,
-          queenHitUntil: 0, bannerUntil: 0, bannerTitle: '', bannerSubtitle: '', bannerColor: '#ffffff',
-          shownScore: -1, scoreText: '', shownBest: -1, bestText: '', shownWave: -1, waveText: '', waveTitle: '', stageTitle: '',
+          queenHitUntil: 0, shownRescued: -1, rescuedText: '', bannerUntil: 0, bannerTitle: '', bannerSubtitle: '', bannerColor: '#ffffff',
+          shownScore: -1, scoreText: '', shownBest: -1, bestText: '', shownWave: -1, waveText: '', waveTitle: '', stageTitle: '', stageTagline: '',
         };
       }
       needsDrawRef.current = true;
@@ -513,8 +527,10 @@ function AntarikshGame({ memory }: { memory: WebAssembly.Memory }) {
       const muted = isMutedRef.current;
       if (events & Events.march) playMarch(views.render[RenderSlot.marchNote], muted);
       if (renderer && events & Events.queenHit) renderer.queenHitUntil = performance.now() / 1000 + 0.08;
-      if (renderer && events & Events.weaponUnlock) {
-        [renderer.bannerTitle, renderer.bannerSubtitle, renderer.bannerColor] = weaponBanner(views.render[RenderSlot.weapons], (events & Events.queenDown) !== 0);
+      if (renderer && events & (Events.weaponUnlock | Events.queenDown)) {
+        [renderer.bannerTitle, renderer.bannerSubtitle, renderer.bannerColor] = events & Events.weaponUnlock
+          ? weaponBanner(views.render[RenderSlot.weapons])
+          : ['QUEEN DOWN', 'Catch her M capsule for the machine gun', '#ff4fd8'];
         renderer.bannerUntil = performance.now() / 1000 + BANNER_SECONDS;
       }
       for (const [bit, sound] of EVENT_SOUNDS) if (events & bit) playLimited(sound, muted);
@@ -633,7 +649,7 @@ function AntarikshGame({ memory }: { memory: WebAssembly.Memory }) {
                 </>
                 : phase === Phase.Ready ? <>
                   <b className="antariksh__title">ANTARIKSH<small>DEFENDERS</small></b>
-                  <span className="antariksh__tagline">Defend the journey from Earth to deep space</span>
+                  <span className="antariksh__tagline">From Earth past Pluto to free Aranya</span>
                   <span>Wave {game.wave()} · {stageName(game.wave())} · {'🚀'.repeat(Math.min(game.lives(), 6))}{wasRestored ? ` · ${game.score()} pts` : ''}</span>
                   {wasRestored && <span className="antariksh__restored" data-testid="restored">💾 Saved mission restored</span>}
                   <ControlsPanel guide={CONTROLS_GUIDE} testId="antariksh-controls" />
@@ -653,8 +669,10 @@ function AntarikshGame({ memory }: { memory: WebAssembly.Memory }) {
         }} />
       </div>
       <p className="game-help">←→ or A/D move · Space, Z or ↑ fire (hold to keep firing) · P pause · M mute · Esc back to the hub.
-        Weapon bonuses: catch a T capsule (from the comet or mothership) for the triple shot; shoot down the crowned queen in the
-        centre of every formation (she takes several hits behind her guards) for the machine gun; hold both for the triple stream. Bonuses last until you lose a ship.</p>
+        The journey runs outward from Earth: Mars, Jupiter, Saturn, Uranus, Neptune and Pluto (departure, transit, arrival for each, every leg with
+        new enemies), then beyond Pluto to Aranya, where you free the natives from the Extraction Corp by shooting open their cages.
+        Bonuses: catch a T capsule (comet or mothership) for the triple shot; the crowned queen in the centre of every formation drops an M capsule
+        for the machine gun; hold both for the triple stream. Bonuses last until you lose a ship.</p>
     </div>
   );
 }
@@ -672,7 +690,7 @@ const CONTROLS_GUIDE: ControlsGuide = {
   weaponsLabel: 'Bonuses',
   weapons: [
     { letter: 'T', name: 'Triple shot', color: SAFFRON },
-    { letter: '♛', name: 'Queen → machine gun', color: '#ff4fd8' },
+    { letter: 'M', name: 'Queen drop → machine gun', color: '#ff4fd8' },
     { letter: '3', name: 'Both → 3 streams', color: '#ffd23f' },
     { letter: 'S', name: 'Shield', color: '#4fc3f7' },
   ],

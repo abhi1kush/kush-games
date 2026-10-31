@@ -30,6 +30,7 @@ export class AntarikshDefenders {
     queen_hits_left(): number;
     static render_length(): number;
     render_pointer(): number;
+    rescued(): number;
     restart(): void;
     restore(wave: number, score: number, lives: number): boolean;
     score(): number;
@@ -46,7 +47,7 @@ export class AntarikshDefenders {
     static shields_length(): number;
     shields_pointer(): number;
     /**
-     * The stage name for a wave ("Low Earth Orbit", "Lunar Orbit", "Mars Approach", ...).
+     * The stage name for a wave ("Mars · Departure", "Jupiter · Transit", … "Aranya · Rescue").
      */
     static stage_name(wave: number): string;
     start(): void;
@@ -79,6 +80,7 @@ export interface InitOutput {
     readonly antarikshdefenders_queen_hits_left: (a: number) => number;
     readonly antarikshdefenders_render_length: () => number;
     readonly antarikshdefenders_render_pointer: (a: number) => number;
+    readonly antarikshdefenders_rescued: (a: number) => number;
     readonly antarikshdefenders_restart: (a: number) => void;
     readonly antarikshdefenders_restore: (a: number, b: number, c: number, d: number) => number;
     readonly antarikshdefenders_score: (a: number) => number;

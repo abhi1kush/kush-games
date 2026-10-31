@@ -22,6 +22,7 @@ export const antarikshdefenders_power: (a: number) => number;
 export const antarikshdefenders_queen_hits_left: (a: number) => number;
 export const antarikshdefenders_render_length: () => number;
 export const antarikshdefenders_render_pointer: (a: number) => number;
+export const antarikshdefenders_rescued: (a: number) => number;
 export const antarikshdefenders_restart: (a: number) => void;
 export const antarikshdefenders_restore: (a: number, b: number, c: number, d: number) => number;
 export const antarikshdefenders_score: (a: number) => number;

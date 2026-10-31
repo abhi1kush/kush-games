@@ -111,7 +111,7 @@ fn shots_fly_up_at_the_allowed_rate_and_kill_enemies() {
     }
     assert!(shots >= 2 && shots <= 4, "held fire repeats at the cooldown: {shots}");
     assert!(kills >= 1);
-    assert_eq!(world.score, 10 * kills as u32, "bottom rows are asteroids");
+    assert_eq!(world.score, 20 * kills as u32, "leaving Earth, the bottom rows are orbital debris");
     assert_eq!(world.enemies_alive, world.enemies_at_start - kills as u32);
     assert!(world.player_bullets.iter().filter(|bullet| bullet.active).count() <= MAX_PLAYER_SHOTS_IN_FLIGHT);
 }
@@ -203,11 +203,16 @@ fn waves_get_genuinely_harder() {
     assert_ne!(waves::formation_for_wave(1), waves::formation_for_wave(2));
     assert_ne!(waves::formation_for_wave(3), waves::formation_for_wave(4));
     // the journey
-    assert_eq!(waves::STAGE_NAMES[waves::stage_index(1)], "Low Earth Orbit");
-    assert_eq!(waves::STAGE_NAMES[waves::stage_index(3)], "Lunar Orbit");
-    assert_eq!(waves::STAGE_NAMES[waves::stage_index(6)], "Mars Approach");
-    assert_eq!(waves::STAGE_NAMES[waves::stage_index(40)], "Deep Space");
-    assert_eq!((waves::backdrop_for_wave(1), waves::backdrop_for_wave(3), waves::backdrop_for_wave(5), waves::backdrop_for_wave(9)), (0, 1, 2, 3));
+    assert_eq!(waves::STAGE_NAMES[waves::stage_index(1)], "Mars · Departure");
+    assert_eq!(waves::STAGE_NAMES[waves::stage_index(2)], "Mars · Transit");
+    assert_eq!(waves::STAGE_NAMES[waves::stage_index(3)], "Mars · Arrival");
+    assert_eq!(waves::STAGE_NAMES[waves::stage_index(4)], "Jupiter · Departure");
+    assert_eq!(waves::STAGE_NAMES[waves::stage_index(18)], "Pluto · Arrival");
+    assert_eq!(waves::STAGE_NAMES[waves::stage_index(21)], "Aranya · Rescue");
+    assert_eq!(waves::STAGE_NAMES[waves::stage_index(40)], "Aranya · Rescue", "the rescue repeats");
+    assert_eq!((waves::leg_for_wave(1), waves::leg_for_wave(4), waves::leg_for_wave(19), waves::leg_for_wave(99)), (0, 1, 6, 6));
+    assert_eq!((waves::sub_stage_for_wave(4), waves::sub_stage_for_wave(5), waves::sub_stage_for_wave(6)), (0, 1, 2));
+    assert_eq!((waves::backdrop_for_wave(1), waves::backdrop_for_wave(5), waves::backdrop_for_wave(30)), (0, 4, 20));
 }
 
 #[test]
@@ -291,6 +296,59 @@ fn power_ups_triple_shot_and_bubble() {
 }
 
 #[test]
+fn a_missed_queen_capsule_is_lost_but_a_last_kill_capsule_survives_the_wave_change() {
+    let mut world = playing_world();
+    silence_enemies(&mut world);
+    world.debug_thin_formation(0);
+    world.force_capsule(120.0, 100.0, Power::MachineGun);
+    world.force_capsule(60.0, 90.0, Power::TripleShot);
+    world.force_capsule(30.0, 80.0, Power::Bubble);
+    assert_eq!(world.capsules.iter().filter(|capsule| capsule.active).count(), MAX_CAPSULES);
+    assert!(world.capsules.iter().any(|capsule| capsule.active && capsule.power == Power::Bubble), "a forced drop always lands");
+    world.setup_wave(2);
+    assert!(world.capsules.iter().any(|capsule| capsule.active), "falling capsules carry into the next wave");
+    world.restart();
+    assert!(world.capsules.iter().all(|capsule| !capsule.active), "a new game clears them");
+}
+
+#[test]
+fn each_leg_brings_a_new_enemy_kind_and_aranya_has_captives_to_free() {
+    let mut seen = Vec::new();
+    for leg in 0..waves::LEGS {
+        let wave = (leg * waves::STAGES_PER_LEG + 2) as u32;
+        let mut world = World::new();
+        world.setup_wave(wave);
+        let middle = world.enemies[1 * COLUMNS + 0].kind;
+        assert_eq!(middle, EnemyKind::introduced_on_leg(leg), "leg {leg}");
+        assert!(!seen.contains(&middle), "leg {leg} repeats {middle:?}");
+        seen.push(middle);
+    }
+    // armour: Saturn's ring shards take two hits
+    let mut world = playing_world();
+    world.setup_wave(8);
+    world.set_phase_for_test(Phase::Playing);
+    silence_enemies(&mut world);
+    world.march_timer = -1.0e9;
+    let index = 2 * COLUMNS + 1;
+    assert_eq!(world.enemies[index].kind, EnemyKind::RingShard);
+    assert_eq!(world.enemies[index].hits_left, 2);
+    // Aranya: the bottom rows hold caged natives; shooting a cage frees one (and they never shoot)
+    let mut world = playing_world();
+    world.setup_wave(21);
+    world.set_phase_for_test(Phase::Playing);
+    silence_enemies(&mut world);
+    world.march_timer = -1.0e9;
+    let captive = world.enemies.iter().position(|enemy| enemy.alive && enemy.kind == EnemyKind::Captive && enemy.row == 4).unwrap();
+    world.player_x = world.enemies[captive].x;
+    world.input = buttons::FIRE;
+    let mut all = 0;
+    for _ in 0..60 { all |= world.advance(FRAME); if world.rescued > 0 { break; } }
+    assert!(all & events::RESCUE != 0);
+    assert_eq!(world.rescued, 1);
+    assert!(!world.enemies[captive].alive);
+}
+
+#[test]
 fn queen_sits_in_the_centre_with_a_guard_ring_in_every_formation() {
     for wave in 1..=8 {
         let mut world = World::new();
@@ -328,7 +386,15 @@ fn killing_the_queen_unlocks_the_machine_gun_and_both_make_a_triple_stream() {
     world.input = 0;
     assert!(all & events::QUEEN_HIT != 0, "she soaks hits first ({hits})");
     assert!(all & events::QUEEN_DOWN != 0);
-    assert!(all & events::WEAPON_UNLOCK != 0);
+    assert_eq!(world.weapons, 0, "nothing is granted on the kill itself");
+    let capsule = world.capsules.iter().find(|capsule| capsule.active).copied().expect("the queen drops a capsule");
+    assert_eq!(capsule.power, Power::MachineGun);
+    // fly under it and catch it
+    world.input = 0;
+    world.player_x = capsule.x;
+    let mut caught = 0;
+    for _ in 0..(6.0 / FRAME) as usize { caught |= world.advance(FRAME); if world.weapons != 0 { break; } }
+    assert!(caught & events::WEAPON_UNLOCK != 0);
     assert_eq!(world.weapons, weapons::RAPID);
     // machine gun: a stream of single shots far faster than normal
     for bullet in world.player_bullets.iter_mut() { bullet.active = false; }
@@ -458,7 +524,7 @@ fn render_buffer_matches_the_world() {
     assert_eq!(render[crate::render_slot::WAVE], 1.0);
     assert_eq!(render[crate::render_slot::LIVES], STARTING_LIVES as f32);
     assert_eq!(render[crate::render_slot::ENEMIES_ALIVE], 45.0);
-    assert_eq!(AntarikshDefenders::stage_name(5), "Mars Transfer");
+    assert_eq!(AntarikshDefenders::stage_name(5), "Jupiter · Transit");
 }
 
 #[test]

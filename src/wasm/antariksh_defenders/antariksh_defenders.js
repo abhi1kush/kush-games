@@ -144,6 +144,13 @@ export class AntarikshDefenders {
         const ret = wasm.antarikshdefenders_render_pointer(this.__wbg_ptr);
         return ret >>> 0;
     }
+    /**
+     * @returns {number}
+     */
+    rescued() {
+        const ret = wasm.antarikshdefenders_rescued(this.__wbg_ptr);
+        return ret >>> 0;
+    }
     restart() {
         wasm.antarikshdefenders_restart(this.__wbg_ptr);
     }
@@ -206,7 +213,7 @@ export class AntarikshDefenders {
         return ret >>> 0;
     }
     /**
-     * The stage name for a wave ("Low Earth Orbit", "Lunar Orbit", "Mars Approach", ...).
+     * The stage name for a wave ("Mars · Departure", "Jupiter · Transit", … "Aranya · Rescue").
      * @param {number} wave
      * @returns {string}
      */

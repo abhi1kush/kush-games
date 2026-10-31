@@ -4,7 +4,7 @@
 //!   HITCH_GRACE_SECONDS afterwards nothing can hurt the player
 //! - a slow frame simulates at most MAX_FRAME_SECONDS
 //! Every pool (enemies, bullets, particles, capsules) is a fixed-size array; nothing is allocated after `World::new`.
-use crate::waves::{self, Difficulty, COLUMNS, ROWS};
+use crate::waves::{self, Difficulty, COLUMNS, FINAL_LEG, ROWS};
 
 pub const STEP_SECONDS: f32 = 1.0 / 120.0;
 pub const MAX_FRAME_SECONDS: f32 = 0.05;
@@ -110,36 +110,84 @@ pub mod events {
     pub const QUEEN_DOWN: u32 = 524288;
     /// A weapon bonus was gained (read `weapons` for which).
     pub const WEAPON_UNLOCK: u32 = 1048576;
+    /// A captive native was freed on Aranya.
+    pub const RESCUE: u32 = 2097152;
+    pub const ARMOUR_HIT: u32 = 4194304;
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Phase { Ready = 0, Countdown = 1, Playing = 2, Dying = 3, WaveClear = 4, WaveIntro = 5, GameOver = 6 }
 
-/// Bottom rows are asteroids, the middle rows debris clusters, the top row rogue drones; the queen sits in the centre.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Every enemy type. The first three are the classic ones; each leg of the journey brings a new kind with its own trick:
+/// - Crawler (Mars): red-sand crab bots that fire a split pair of shots
+/// - Jelly (Jupiter): storm floaters whose shots drift toward the ship
+/// - RingShard (Saturn): armoured ring ice, two hits
+/// - Spinner (Uranus): tilted tops that fire aimed diagonal shots
+/// - Wraith (Neptune): gale ghosts whose shots start slow and accelerate
+/// - CryoMine (Pluto): armoured frost mines that burst into shards when destroyed
+/// - Gunship, Mech (Aranya): the extraction corporation's homing gunships and armoured mechs firing split shots
+/// - Captive (Aranya): caged natives that never shoot; shoot the cage to free them
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 #[repr(u8)]
-pub enum EnemyKind { Asteroid = 0, Debris = 1, Drone = 2, Queen = 3 }
-
-impl EnemyKind {
-    pub fn for_row(row: usize) -> EnemyKind { match row { 0 => EnemyKind::Drone, 1 | 2 => EnemyKind::Debris, _ => EnemyKind::Asteroid } }
-    pub fn points(self) -> u32 { match self { EnemyKind::Asteroid => 10, EnemyKind::Debris => 20, EnemyKind::Drone => 30, EnemyKind::Queen => QUEEN_POINTS } }
+pub enum EnemyKind {
+    #[default]
+    Asteroid = 0, Debris = 1, Drone = 2, Queen = 3, Crawler = 4, Jelly = 5, RingShard = 6, Spinner = 7, Wraith = 8, CryoMine = 9,
+    Gunship = 10, Mech = 11, Captive = 12,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[repr(u8)]
-/// Capsule contents. `TripleShot` capsules grant the permanent triple-shot weapon bit; `Bubble` is a timed shield.
-pub enum Power { None = 0, TripleShot = 1, Bubble = 2 }
+impl EnemyKind {
+    /// The classic formation (top row drones, middle debris, bottom asteroids).
+    pub fn for_row(row: usize) -> EnemyKind { match row { 0 => EnemyKind::Drone, 1 | 2 => EnemyKind::Debris, _ => EnemyKind::Asteroid } }
+    pub fn points(self) -> u32 {
+        match self {
+            EnemyKind::Asteroid => 10, EnemyKind::Debris => 20, EnemyKind::Drone => 30, EnemyKind::Queen => QUEEN_POINTS,
+            EnemyKind::Crawler => 30, EnemyKind::Jelly => 35, EnemyKind::RingShard => 40, EnemyKind::Spinner => 40, EnemyKind::Wraith => 45,
+            EnemyKind::CryoMine => 50, EnemyKind::Gunship => 60, EnemyKind::Mech => 80, EnemyKind::Captive => RESCUE_POINTS,
+        }
+    }
+    /// Particle palette for its sparks (0-3 classic + queen, 6.. the newer kinds; 4 and 5 belong to the ship and power-ups).
+    pub fn palette(self) -> f32 { let kind = self as u8; if kind <= 3 { kind as f32 } else { (kind + 2) as f32 } }
+    /// Shots it takes (the queen's count is set per wave).
+    pub fn toughness(self) -> u8 { match self { EnemyKind::RingShard | EnemyKind::CryoMine | EnemyKind::Mech => 2, _ => 1 } }
+    /// The new kind each leg introduces (it fills the middle rows; the top row brings back the previous leg's).
+    pub fn introduced_on_leg(leg: usize) -> EnemyKind {
+        [EnemyKind::Crawler, EnemyKind::Jelly, EnemyKind::RingShard, EnemyKind::Spinner, EnemyKind::Wraith, EnemyKind::CryoMine, EnemyKind::Mech][leg.min(FINAL_LEG)]
+    }
+    /// Who sits at (row, column) on a leg / sub-stage.
+    pub fn for_slot(leg: usize, sub_stage: usize, row: usize, column: usize) -> EnemyKind {
+        if leg >= FINAL_LEG {
+            return match row {
+                0 => EnemyKind::Gunship,
+                1 | 2 => EnemyKind::Mech,
+                _ => if column % 2 == 0 { EnemyKind::Captive } else { EnemyKind::Gunship },
+            };
+        }
+        match row {
+            0 => if leg == 0 { EnemyKind::Drone } else { EnemyKind::introduced_on_leg(leg - 1) },
+            1 | 2 => EnemyKind::introduced_on_leg(leg),
+            _ => if sub_stage == 0 { EnemyKind::Debris } else { EnemyKind::Asteroid },
+        }
+    }
+}
+
+pub const RESCUE_POINTS: u32 = 100;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
-pub enum ParticleKind { Spark = 0, Ring = 1, Ember = 2, ScoreText = 3, Shard = 4 }
+/// Capsule contents. `TripleShot` / `MachineGun` capsules grant lasting weapon bits (the queen always drops `MachineGun`);
+/// `Bubble` is a timed shield.
+pub enum Power { None = 0, TripleShot = 1, Bubble = 2, MachineGun = 3 }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
+pub enum ParticleKind { Spark = 0, Ring = 1, Ember = 2, ScoreText = 3, Shard = 4, Native = 5, RescueText = 6 }
 
 #[derive(Clone, Copy, Debug, Default)]
-pub struct Enemy { pub alive: bool, pub row: u8, pub column: u8, pub x: f32, pub y: f32, pub queen: bool, pub hits_left: u8 }
+pub struct Enemy { pub alive: bool, pub row: u8, pub column: u8, pub x: f32, pub y: f32, pub queen: bool, pub hits_left: u8, pub kind: EnemyKind }
 
 impl Enemy {
-    pub fn kind(&self) -> EnemyKind { if self.queen { EnemyKind::Queen } else { EnemyKind::for_row(self.row as usize) } }
+    pub fn kind(&self) -> EnemyKind { if self.queen { EnemyKind::Queen } else { self.kind } }
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -176,6 +224,8 @@ pub struct World {
     /// Weapon bonus bits (`weapons::TRIPLE`, `weapons::RAPID`).
     pub weapons: u32,
     pub queen_hits_max: u32,
+    /// Natives freed on Aranya this run.
+    pub rescued: u32,
     pub input: u32,
     /// Where a finger wants the ship (world x), or negative for none; the ship flies there at its normal speed.
     pub target_x: f32,
@@ -216,7 +266,7 @@ impl World {
         let mut world = World {
             phase: Phase::Ready, phase_seconds: 0.0, wave: 1, difficulty: waves::difficulty_for_wave(1), score: 0, lives: STARTING_LIVES,
             next_extra_life: EXTRA_LIFE_EVERY, player_x: WORLD_WIDTH / 2.0, invulnerable_seconds: 0.0, fire_cooldown: 0.0,
-            power: Power::None, power_seconds: 0.0, weapons: 0, queen_hits_max: 0, input: 0, target_x: -1.0,
+            power: Power::None, power_seconds: 0.0, weapons: 0, queen_hits_max: 0, rescued: 0, input: 0, target_x: -1.0,
             enemies: [Enemy::default(); MAX_ENEMIES], enemies_at_start: 0, enemies_alive: 0, formation_x: 0.0, formation_y: 0.0,
             march_direction: 1.0, march_timer: 0.0, descend_next: false, march_note: 0, march_frame: 0, shot_timer: 0.0,
             mystery: Mystery::default(), mystery_timer: 0.0, mysteries_seen: 0,
@@ -244,6 +294,8 @@ impl World {
         self.wave = wave.max(1);
         self.difficulty = waves::difficulty_for_wave(self.wave);
         let formation = waves::formation_for_wave(self.wave);
+        let leg = waves::leg_for_wave(self.wave);
+        let sub_stage = waves::sub_stage_for_wave(self.wave);
         let mut alive = 0;
         for row in 0..ROWS {
             let pattern = formation[row].as_bytes();
@@ -254,7 +306,8 @@ impl World {
                 // the queen and her guard ring are in every formation
                 let guard = (QUEEN_ROW - 1..=QUEEN_ROW + 1).contains(&row) && (QUEEN_COLUMN - 1..=QUEEN_COLUMN + 1).contains(&column);
                 enemy.queen = row == QUEEN_ROW && column == QUEEN_COLUMN;
-                enemy.hits_left = if enemy.queen { World::queen_hits(wave) as u8 } else { 1 };
+                enemy.kind = EnemyKind::for_slot(leg, sub_stage, row, column);
+                enemy.hits_left = if enemy.queen { World::queen_hits(wave) as u8 } else { enemy.kind.toughness() };
                 enemy.alive = pattern[column] == b'X' || guard;
                 if enemy.alive { alive += 1; }
             }
@@ -273,7 +326,7 @@ impl World {
         self.place_enemies();
         self.clear_shields();
         self.clear_shots();
-        for capsule in self.capsules.iter_mut() { capsule.active = false; }
+        // capsules still falling (say the queen's drop when she was the last one down) carry over into the next wave
     }
 
     /// Shots it takes to bring the queen down: 4 on wave 1, one more every two waves, at most 8.
@@ -311,6 +364,8 @@ impl World {
         self.power = Power::None;
         self.power_seconds = 0.0;
         self.weapons = 0;
+        self.rescued = 0;
+        for capsule in self.capsules.iter_mut() { capsule.active = false; }
         self.player_x = WORLD_WIDTH / 2.0;
         self.invulnerable_seconds = 0.0;
         self.kills = 0;
@@ -325,6 +380,7 @@ impl World {
         self.score = score;
         self.lives = lives;
         self.next_extra_life = (score / EXTRA_LIFE_EVERY + 1) * EXTRA_LIFE_EVERY;
+        for capsule in self.capsules.iter_mut() { capsule.active = false; }
         self.setup_wave(wave);
         self.set_phase(Phase::Ready);
         true
@@ -384,6 +440,7 @@ impl World {
             }
             Phase::WaveIntro => {
                 self.move_player(dt);
+                self.update_capsules(dt);
                 if self.phase_seconds >= WAVE_INTRO_SECONDS { self.set_phase(Phase::Playing); self.events |= events::WAVE_START; }
             }
         }
@@ -512,9 +569,15 @@ impl World {
         let enemy = self.enemies[index];
         if enemy.hits_left > 1 {
             self.enemies[index].hits_left -= 1;
-            self.events |= events::QUEEN_HIT;
-            self.add_sparks(enemy.x, enemy.y + 3.0, 5, 3.0);
-            self.shake = self.shake.max(0.15);
+            if enemy.queen {
+                self.events |= events::QUEEN_HIT;
+                self.add_sparks(enemy.x, enemy.y + 3.0, 5, 3.0);
+                self.shake = self.shake.max(0.15);
+            } else {
+                // armour cracks: a spark burst, the next hit finishes it
+                self.events |= events::ARMOUR_HIT;
+                self.add_sparks(enemy.x, enemy.y + 3.0, 4, 5.0);
+            }
             return;
         }
         self.destroy_enemy(index);
@@ -527,19 +590,35 @@ impl World {
         self.kills += 1;
         self.add_score(enemy.kind().points());
         self.events |= events::ENEMY_DOWN;
-        self.add_sparks(enemy.x, enemy.y, 7, enemy.kind() as u8 as f32);
-        self.add_particle(ParticleKind::Ring, enemy.x, enemy.y, 0.0, 0.0, 0.28, enemy.kind() as u8 as f32);
+        self.add_sparks(enemy.x, enemy.y, 7, enemy.kind().palette());
+        self.add_particle(ParticleKind::Ring, enemy.x, enemy.y, 0.0, 0.0, 0.28, enemy.kind().palette());
         self.shake = self.shake.max(0.25);
         if enemy.queen {
-            // the predictable bonus: the queen always gives the machine gun
+            // the predictable bonus: the queen always drops a machine-gun capsule (catch it to arm it)
             self.events |= events::QUEEN_DOWN;
             self.shake = 0.8;
             self.flash = self.flash.max(0.3);
             self.add_sparks(enemy.x, enemy.y, 18, 3.0);
             self.add_particle(ParticleKind::Ring, enemy.x, enemy.y, 0.0, 0.0, 0.5, 3.0);
             self.add_particle(ParticleKind::ScoreText, enemy.x, enemy.y, 0.0, -10.0, 1.2, QUEEN_POINTS as f32);
-            self.grant_weapon(weapons::RAPID);
+            self.force_capsule(enemy.x, enemy.y + 6.0, Power::MachineGun);
             return;
+        }
+        if enemy.kind == EnemyKind::Captive {
+            // a freed native floats up out of the broken cage
+            self.rescued += 1;
+            self.events |= events::RESCUE;
+            self.add_particle(ParticleKind::Native, enemy.x, enemy.y, 0.0, -22.0, 1.4, 0.0);
+            self.add_particle(ParticleKind::RescueText, enemy.x, enemy.y - 6.0, 0.0, -12.0, 1.1, 0.0);
+            return;
+        }
+        if enemy.kind == EnemyKind::CryoMine && self.phase == Phase::Playing {
+            // it bursts into two slow frost shards
+            for direction in [-1.0f32, 1.0] {
+                if let Some(bullet) = self.enemy_bullets.iter_mut().find(|bullet| !bullet.active) {
+                    *bullet = Bullet { active: true, x: enemy.x, y: enemy.y + 3.0, velocity_x: direction * 28.0, velocity_y: 55.0, kind: EnemyKind::CryoMine as u8, age: 0.0 };
+                }
+            }
         }
         let capsule_falling = self.capsules.iter().any(|capsule| capsule.active);
         if !capsule_falling && self.enemies_alive > 3 && self.random() < 0.03 {
@@ -650,7 +729,7 @@ impl World {
         let mut skipped = 0;
         for row in (0..ROWS).rev() {
             let index = row * COLUMNS + column;
-            if self.enemies[index].alive {
+            if self.enemies[index].alive && self.enemies[index].kind != EnemyKind::Captive {
                 if skipped == skip { return Some(index); }
                 skipped += 1;
             }
@@ -696,10 +775,30 @@ impl World {
 
     fn enemy_shoots(&mut self, index: usize) {
         let enemy = self.enemies[index];
-        let kind = if enemy.queen { EnemyKind::Drone as u8 } else { enemy.kind() as u8 };
-        let speed = self.difficulty.enemy_bullet_speed * if kind == EnemyKind::Debris as u8 { 1.2 } else { 1.0 };
+        let kind = if enemy.queen { EnemyKind::Drone } else { enemy.kind() };
+        let base = self.difficulty.enemy_bullet_speed;
+        let x = enemy.x;
+        let y = enemy.y + ENEMY_HALF_HEIGHT + 2.0;
+        match kind {
+            EnemyKind::Captive => {}
+            EnemyKind::Crawler | EnemyKind::Mech => {
+                self.add_enemy_bullet(x - 2.0, y, -32.0, base * 0.95, kind);
+                self.add_enemy_bullet(x + 2.0, y, 32.0, base * 0.95, kind);
+            }
+            EnemyKind::Spinner => {
+                let aim = ((self.player_x - x) / (PLAYER_Y - y).max(40.0) * base).clamp(-55.0, 55.0);
+                self.add_enemy_bullet(x, y, aim, base, kind);
+            }
+            EnemyKind::Wraith => self.add_enemy_bullet(x, y, 0.0, base * 0.45, kind),
+            EnemyKind::Debris => self.add_enemy_bullet(x, y, 0.0, base * 1.2, kind),
+            EnemyKind::Gunship => self.add_enemy_bullet(x, y, 0.0, base * 1.1, kind),
+            _ => self.add_enemy_bullet(x, y, 0.0, base, kind),
+        }
+    }
+
+    fn add_enemy_bullet(&mut self, x: f32, y: f32, velocity_x: f32, velocity_y: f32, kind: EnemyKind) {
         if let Some(bullet) = self.enemy_bullets.iter_mut().find(|bullet| !bullet.active) {
-            *bullet = Bullet { active: true, x: enemy.x, y: enemy.y + ENEMY_HALF_HEIGHT + 2.0, velocity_x: 0.0, velocity_y: speed, kind, age: 0.0 };
+            *bullet = Bullet { active: true, x, y, velocity_x, velocity_y, kind: kind as u8, age: 0.0 };
             self.events |= events::ENEMY_SHOOT;
         }
     }
@@ -710,9 +809,20 @@ impl World {
             if !self.enemy_bullets[index].active { continue; }
             let bullet = &mut self.enemy_bullets[index];
             bullet.age += dt;
+            let kind = bullet.kind;
+            if kind == EnemyKind::Drone as u8 {
+                // drone plasma weaves side to side
+                bullet.velocity_x = (bullet.age * 14.0).cos() * 30.0;
+            } else if kind == EnemyKind::Jelly as u8 || kind == EnemyKind::Gunship as u8 {
+                // storm-jelly spores and gunship rounds drift toward the ship
+                let pull = if kind == EnemyKind::Gunship as u8 { 75.0 } else { 50.0 };
+                let toward = if self.player_x > bullet.x { 1.0 } else { -1.0 };
+                bullet.velocity_x = (bullet.velocity_x + toward * pull * dt).clamp(-38.0, 38.0);
+            } else if kind == EnemyKind::Wraith as u8 {
+                // gale wraith bolts start slow and accelerate
+                bullet.velocity_y = (bullet.velocity_y + 150.0 * dt).min(self.difficulty.enemy_bullet_speed * 1.7);
+            }
             bullet.y += bullet.velocity_y * dt;
-            // Drone plasma weaves side to side.
-            bullet.velocity_x = if bullet.kind == EnemyKind::Drone as u8 { (bullet.age * 14.0).cos() * 30.0 } else { 0.0 };
             bullet.x += bullet.velocity_x * dt;
             let (x, y) = (bullet.x, bullet.y + 3.0);
             if y > WORLD_HEIGHT - 8.0 { bullet.active = false; self.add_sparks(x, WORLD_HEIGHT - 9.0, 3, 0.0); continue; }
@@ -772,6 +882,15 @@ impl World {
         else { None }
     }
 
+    /// Drop a capsule that must not be lost: if both slots are busy, the lowest one makes room.
+    pub fn force_capsule(&mut self, x: f32, y: f32, power: Power) {
+        let x = x.clamp(12.0, WORLD_WIDTH - 12.0);
+        if !self.capsules.iter().all(|capsule| capsule.active) { self.drop_capsule(x, y, power); return; }
+        let mut slot = 0;
+        for index in 1..MAX_CAPSULES { if self.capsules[index].y > self.capsules[slot].y { slot = index; } }
+        self.capsules[slot] = Capsule { active: true, power, x, y };
+    }
+
     pub fn drop_capsule(&mut self, x: f32, y: f32, power: Power) {
         if let Some(capsule) = self.capsules.iter_mut().find(|capsule| !capsule.active) { *capsule = Capsule { active: true, power, x, y }; }
     }
@@ -786,7 +905,9 @@ impl World {
                 let power = capsule.power;
                 capsule.active = false;
                 self.events |= events::POWER_UP;
-                if power == Power::TripleShot { self.grant_weapon(weapons::TRIPLE); } else {
+                if power == Power::TripleShot { self.grant_weapon(weapons::TRIPLE); }
+                else if power == Power::MachineGun { self.grant_weapon(weapons::RAPID); }
+                else {
                     self.power = Power::Bubble;
                     self.power_seconds = SHIELD_BUBBLE_SECONDS;
                 }
@@ -832,6 +953,9 @@ impl World {
     }
 
     // ---------------------------------------------------------------- test hooks
+
+    /// Jump straight into a phase (tests only).
+    pub fn set_phase_for_test(&mut self, phase: Phase) { self.phase = phase; self.phase_seconds = 0.0; }
 
     /// Kill every enemy except the first `keep` still alive (no score).
     pub fn debug_thin_formation(&mut self, keep: u32) {

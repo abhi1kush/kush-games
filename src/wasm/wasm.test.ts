@@ -178,7 +178,7 @@ describe('wasm bindings', () => {
   it('Antariksh Defenders: the render layout matches, it counts down, moves, fires, kills and drops a hitch', () => {
     expect(antarikshModule.AntarikshDefenders.render_length()).toBe(AntarikshSlot.length);
     expect(antarikshModule.AntarikshDefenders.shields_length()).toBe(SHIELD_COUNT * SHIELD_WIDTH * SHIELD_HEIGHT);
-    expect(antarikshModule.AntarikshDefenders.stage_name(3)).toBe('Lunar Orbit');
+    expect(antarikshModule.AntarikshDefenders.stage_name(3)).toBe('Mars · Arrival');
     const game = new antarikshModule.AntarikshDefenders();
     const render = new Float32Array(antarikshMemory.buffer, game.render_pointer(), AntarikshSlot.length);
     expect(render[AntarikshSlot.enemiesAlive]).toBe(45);
