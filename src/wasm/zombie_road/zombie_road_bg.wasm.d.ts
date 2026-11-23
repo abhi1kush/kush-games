@@ -1,0 +1,34 @@
+/* tslint:disable */
+/* eslint-disable */
+export const memory: WebAssembly.Memory;
+export const __wbg_zombieroad_free: (a: number, b: number) => void;
+export const zombieroad_advance: (a: number, b: number) => number;
+export const zombieroad_auto_fire: (a: number) => number;
+export const zombieroad_cover_health: (a: number, b: number) => number;
+export const zombieroad_debug_clear_wave: (a: number) => void;
+export const zombieroad_debug_drop_pickup: (a: number, b: number) => void;
+export const zombieroad_debug_most_dangerous_zombie_x: (a: number) => number;
+export const zombieroad_debug_set_health: (a: number, b: number) => void;
+export const zombieroad_debug_set_invincible: (a: number, b: number) => void;
+export const zombieroad_debug_set_lives: (a: number, b: number) => void;
+export const zombieroad_debug_set_wave: (a: number, b: number) => void;
+export const zombieroad_debug_spawn_zombie: (a: number, b: number, c: number, d: number) => number;
+export const zombieroad_health: (a: number) => number;
+export const zombieroad_kills: (a: number) => number;
+export const zombieroad_lives: (a: number) => number;
+export const zombieroad_new: () => number;
+export const zombieroad_phase: (a: number) => number;
+export const zombieroad_player_x: (a: number) => number;
+export const zombieroad_render_length: () => number;
+export const zombieroad_render_pointer: (a: number) => number;
+export const zombieroad_restart: (a: number) => void;
+export const zombieroad_restore: (a: number, b: number, c: number, d: number) => number;
+export const zombieroad_score: (a: number) => number;
+export const zombieroad_seed: (a: number, b: number) => void;
+export const zombieroad_set_auto_fire: (a: number, b: number) => void;
+export const zombieroad_set_input: (a: number, b: number) => void;
+export const zombieroad_set_target_x: (a: number, b: number) => void;
+export const zombieroad_start: (a: number) => void;
+export const zombieroad_wave: (a: number) => number;
+export const zombieroad_zombies_alive: (a: number) => number;
+export const zombieroad_zombies_left: (a: number) => number;

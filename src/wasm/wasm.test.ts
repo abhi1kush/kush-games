@@ -17,6 +17,9 @@ import * as emberLaneModule from './ember_lane/ember_lane.js';
 import * as pralayModule from './pralay_run/pralay_run.js';
 import { Buttons as PralayButtons, createRenderView as createPralayView, Phase as PralayPhase, RenderSlot as PralaySlot } from '../games/pralayrun/engine';
 import * as ghatClimbModule from './ghat_climb/ghat_climb.js';
+import * as zombieRoadModule from './zombie_road/zombie_road.js';
+import { Buttons as ZombieButtons, createRenderView as createZombieView, Events as ZombieEvents, Phase as ZombiePhase, RenderSlot as ZombieSlot } from '../games/zombieroad/engine';
+import { parseZombieRoadSave } from '../games/zombieroad/save';
 import { decodeMoves } from '../games/checkers/engine';
 import { RenderSlot } from '../games/breakout/engine';
 import { Buttons, Phase as KushJumpPhase, RenderSlot as KushJumpSlot } from '../games/kushjump/engine';
@@ -43,6 +46,7 @@ let jalPathMemory: WebAssembly.Memory;
 let paaniPourMemory: WebAssembly.Memory;
 let emberLaneMemory: WebAssembly.Memory;
 let pralayMemory: WebAssembly.Memory;
+let zombieRoadMemory: WebAssembly.Memory;
 
 beforeAll(() => {
   breakoutMemory = breakoutModule.initSync({ module: wasmBytes('breakout') }).memory;
@@ -60,11 +64,12 @@ beforeAll(() => {
   emberLaneMemory = emberLaneModule.initSync({ module: wasmBytes('ember_lane') }).memory;
   pralayMemory = pralayModule.initSync({ module: wasmBytes('pralay_run') }).memory;
   ghatClimbModule.initSync({ module: wasmBytes('ghat_climb') });
+  zombieRoadMemory = zombieRoadModule.initSync({ module: wasmBytes('zombie_road') }).memory;
 });
 
 describe('wasm bindings', () => {
   it('every game .wasm stays small (< 40 KB raw)', () => {
-    for (const name of ['breakout', 'checkers', 'connect_four', 'kush_jump', 'antariksh_defenders', 'mithai_match', 'ludo', 'snakes_ladders', 'fleet_clash', 'carrom', 'jal_path', 'paani_pour', 'ember_lane', 'pralay_run', 'ghat_climb']) expect(wasmBytes(name).length, name).toBeLessThan(40 * 1024);
+    for (const name of ['breakout', 'checkers', 'connect_four', 'kush_jump', 'antariksh_defenders', 'mithai_match', 'ludo', 'snakes_ladders', 'fleet_clash', 'carrom', 'jal_path', 'paani_pour', 'ember_lane', 'pralay_run', 'ghat_climb', 'zombie_road']) expect(wasmBytes(name).length, name).toBeLessThan(40 * 1024);
   });
 
   it('Ghat Climb: gas rolls the jeep and burns fuel', () => {
@@ -420,5 +425,35 @@ describe('Pralay Run wasm', () => {
     expect(view()[PralaySlot.heroX]).toBe(40);
     game.free();
   });
-});
 
+  it('Zombie Road: the render layout matches, it starts, moves, shoots a zombie and saves are validated', () => {
+    expect(zombieRoadModule.ZombieRoad.render_length()).toBe(ZombieSlot.length);
+    const game = new zombieRoadModule.ZombieRoad();
+    const view = createZombieView(zombieRoadMemory, game);
+    expect(view()[ZombieSlot.phase]).toBe(ZombiePhase.Ready);
+    expect(view()[ZombieSlot.health]).toBe(100);
+    game.start();
+    for (let frame = 0; frame < 120; frame++) game.advance(1 / 60);
+    expect(view()[ZombieSlot.phase]).toBe(ZombiePhase.Playing);
+    const startX = view()[ZombieSlot.playerX];
+    game.set_input(ZombieButtons.right);
+    for (let frame = 0; frame < 30; frame++) game.advance(1 / 60);
+    expect(view()[ZombieSlot.playerX]).toBeGreaterThan(startX + 30);
+    expect(game.debug_spawn_zombie(0, game.player_x(), 120)).toBe(true);
+    game.set_input(ZombieButtons.fire);
+    let events = 0;
+    for (let frame = 0; frame < 120; frame++) events |= game.advance(1 / 60);
+    expect(events & ZombieEvents.shoot).toBeTruthy();
+    expect(events & ZombieEvents.zombieDown).toBeTruthy();
+    expect(game.kills()).toBeGreaterThanOrEqual(1);
+    expect(view()[ZombieSlot.score]).toBe(game.score());
+    // the cover line is in the buffer: car, barricade, barricade, car, all standing
+    expect([0, 1, 2, 3].map(index => view()[ZombieSlot.covers + index * ZombieSlot.coverStride])).toEqual([1, 0, 0, 1]);
+    expect(view()[ZombieSlot.covers + 3]).toBe(1);
+    game.free();
+    expect(parseZombieRoadSave({ wave: 4, score: 1200, lives: 2 })).toEqual({ wave: 4, score: 1200, lives: 2 });
+    expect(parseZombieRoadSave({ wave: 0, score: 0, lives: 3 })).toBeNull();
+    expect(parseZombieRoadSave({ wave: 2, score: 10, lives: 6 })).toBeNull();
+    expect(parseZombieRoadSave({ wave: 2, score: -1, lives: 3 })).toBeNull();
+  });
+});

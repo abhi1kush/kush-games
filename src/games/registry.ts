@@ -320,6 +320,18 @@ export const games: GameDefinition[] = [
     releaseYear: 2026,
     component: lazy(() => import('./ghatclimb/GhatClimb')),
   },
+  {
+    id: 'zombie-road',
+    title: 'Zombie Road',
+    tagline: 'Hold the road. Don’t let the horde through.',
+    description: 'A night-time road version of the classic invaders shooter: you stand at the bottom of a city street with a rifle, and waves of zombies shamble down out of the fog toward you. Walkers come first, then fast runners that dodge around your cover, spitters that stop to lob acid, brutes that soak up bullets and smash barricades, and a Tank leading the horde every fifth wave. Wrecked cars and barricades give cover: your shots fly over them, but claws and acid wear them down (they are patched between waves). Fallen zombies sometimes drop a spread shot, rapid fire or a medkit. A zombie that reaches you or the hazard line takes a chunk of your health; lose it all and you lose a life. Auto-fire for one-thumb play on phones, a saved high score, and a refresh resumes your wave. The game logic runs in Rust compiled to WebAssembly.',
+    categories: ['Arcade'],
+    status: 'playable',
+    artwork: { gradientFrom: '#0d0f12', gradientTo: '#4a6b2a', accentColor: '#9be36a', glyph: '🧟' },
+    controls: '←/→ or A/D move; Space, Z or ↑ fire (hold); F auto-fire; P pause; M mute; drag pad and FIRE button on phones (auto-fire on by default)',
+    releaseYear: 2026,
+    component: lazy(() => import('./zombieroad/ZombieRoad')),
+  },
 ];
 
 /** Genre filter chips on the home page, in this order (only genres that have a playable game are shown). */
