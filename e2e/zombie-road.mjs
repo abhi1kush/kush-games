@@ -265,7 +265,7 @@ try {
   await shot(mobile, 'kush-games-zombie-road-mobile.png');
   // the FIRE button fires with auto-fire off
   await mobile.getByTestId('zombie-auto-fire').tap();
-  await mobile.waitForTimeout(500);
+  await mobile.waitForTimeout(1300); // the last auto-fire shots leave the road (bullets cross it in under a second)
   const quiet = (await state(mobile)).bullets;
   const firePointer = { pointerId: 8, pointerType: 'touch', isPrimary: false, bubbles: true, clientX: fireBox.x + fireBox.width / 2, clientY: fireBox.y + fireBox.height / 2 };
   await mobile.getByTestId('touch-fire').dispatchEvent('pointerdown', firePointer);
