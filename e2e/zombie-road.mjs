@@ -1,6 +1,6 @@
 // Zombie Road smoke test: hub card (wasm not loaded on the hub), lazy wasm load, start, moving, firing, kills and score,
 // a wave cleared by actually shooting it, pause (with the controls card), mute and auto-fire toggles, a save restored through
-// a reload, game over and play again, a frame-time sample at 4× CPU slowdown, both hub themes, and the phone layouts
+// a reload, game over and play again, zombies only ever hurting up close (nothing thrown), a frame-time sample at 4× CPU slowdown, both hub themes, and the phone layouts
 // (portrait with drag pad + FIRE and auto-fire, landscape).
 // Usage: node e2e/zombie-road.mjs [siteUrl] [screenshotDirectory]
 import { chromium } from 'playwright-core';
@@ -211,6 +211,39 @@ try {
   console.log(`PERF ${JSON.stringify(perfReport)}`);
   check(perfReport.normal.work.p95 < 4, `simulate + draw p95 ${perfReport.normal.work.p95} ms per frame (desktop)`);
   check(perfReport.throttled4x.work.p95 < 12, `simulate + draw p95 ${perfReport.throttled4x.work.p95} ms per frame at 4× CPU slowdown (budget 16.7 ms)`);
+
+  // zombies never throw anything: no projectile API or render slots, and over a busy wave every hit the survivor takes
+  // comes from a zombie that reached them or the hazard line (and was used up doing it), never from up the road
+  const methods = await page.evaluate(() => Object.getOwnPropertyNames(Object.getPrototypeOf(window.__zombieTest.game)));
+  check(!methods.some(name => /spit|acid|projectile|throw/i.test(name)), `no zombie projectile API in the wasm (${methods.length} methods)`);
+  await game(page, 'game.debug_set_invincible(false); game.set_auto_fire(true); game.debug_set_lives(5); game.debug_set_wave(6)');
+  await waitFor(async () => await phaseOf(page) === Phase.playing, 5000);
+  await game(page, 'for (let i = 0; i < 4; i++) game.debug_spawn_zombie(3, 30 + i * 12, 20); game.debug_spawn_zombie(0, 200, 30); game.debug_spawn_zombie(2, 120, 10)');
+  const melee = await page.evaluate(() => new Promise(resolve => {
+    const { game, render } = window.__zombieTest;
+    // render slots (engine.ts RenderSlot): stainSerial 23, zombieCount 14, zombies at 48 with stride 7 (kind first)
+    const report = { frames: 0, hurts: 0, rangedHurts: 0, crawlersSeen: 0, kinds: new Set() };
+    let last = { health: game.health(), lives: game.lives(), kills: game.kills(), stains: render()[23] };
+    const end = performance.now() + 15000;
+    const step = () => {
+      const view = render();
+      const now = { health: game.health(), lives: game.lives(), kills: game.kills(), stains: view[23] };
+      for (let index = 0; index < view[14]; index++) report.kinds.add(view[48 + index * 7]);
+      if (now.health < last.health || now.lives < last.lives) {
+        report.hurts++;
+        if (now.stains - last.stains <= now.kills - last.kills) report.rangedHurts++;
+      }
+      last = now;
+      report.frames++;
+      if (performance.now() < end && game.phase() !== 5) requestAnimationFrame(step);
+      else resolve({ ...report, kinds: [...report.kinds].sort(), crawlersSeen: report.kinds.has(3) });
+    };
+    requestAnimationFrame(step);
+  }));
+  console.log(`MELEE ${JSON.stringify(melee)}`);
+  check(melee.crawlersSeen, `crawlers on the road in a wave-6 crowd (kinds seen ${melee.kinds.join(',')})`);
+  check(melee.hurts > 0 && melee.rangedHurts === 0, `every hit came from a zombie up close: ${melee.hurts} hits, ${melee.rangedHurts} from range, over ${melee.frames} frames`);
+  await game(page, 'game.debug_set_invincible(true)');
 
   // themes: the start pill and buttons follow the hub theme
   const pillColor = async () => {

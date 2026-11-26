@@ -159,38 +159,56 @@ fn zombies_chew_through_cover_and_runners_slip_around_it() {
 }
 
 #[test]
-fn spitters_spit_and_cover_soaks_the_acid() {
+fn crawlers_come_in_packs_and_squeeze_under_wrecked_cars_but_chew_barricades() {
     let mut world = playing_world();
     stop_spawning(&mut world);
     world.debug_invincible = true;
-    // the survivor behind the right car: acid splashes on the car
-    let car = world.covers[3];
-    world.player_x = car.x;
-    world.spawn_zombie(ZombieKind::Spitter, car.x, 60.0);
-    let mut spat = false;
-    for _ in 0..60 {
-        let events = run(&mut world, 0.25);
-        spat |= events & events::SPIT != 0;
-        if world.covers[3].health < car.max_health { break; }
+    let car = world.covers[0];
+    world.spawn_zombie(ZombieKind::Crawler, car.x, car.y - 20.0);
+    run(&mut world, 3.0);
+    assert_eq!(world.covers[0].health, car.max_health, "crawlers don't bite the cars");
+    let past_the_car = world.zombies.iter().all(|zombie| !zombie.active || zombie.y > car.y) || world.zombies_alive == 0;
+    assert!(past_the_car, "the crawler went under the car");
+
+    let mut world = playing_world();
+    stop_spawning(&mut world);
+    world.debug_invincible = true;
+    let barricade = world.covers[1];
+    world.spawn_zombie(ZombieKind::Crawler, barricade.x, barricade.y - 20.0);
+    run(&mut world, 4.0);
+    assert!(world.covers[1].health < barricade.max_health, "barricades stop crawlers");
+
+    // packs: from wave 3 on, crawlers turn up at least three at a time
+    let mut world = World::new();
+    world.seed(3);
+    world.start();
+    world.wave = 6;
+    world.plan = waves::plan(6);
+    world.debug_invincible = true;
+    let mut most_crawlers = 0;
+    for _ in 0..(40.0 / FRAME) as usize {
+        world.advance(FRAME);
+        let crawlers = world.zombies.iter().filter(|zombie| zombie.active && zombie.kind == ZombieKind::Crawler).count();
+        most_crawlers = most_crawlers.max(crawlers);
     }
-    assert!(spat);
-    assert!(world.covers[3].health < car.max_health);
+    assert!(most_crawlers >= 3, "a pack of crawlers ({most_crawlers})");
 }
 
 #[test]
-fn acid_hurts_in_the_open() {
+fn zombies_never_attack_from_range() {
+    // every kind standing still up the road for half a minute: the survivor is never hurt, in the open or not
     let mut world = playing_world();
     stop_spawning(&mut world);
-    world.player_x = 120.0; // the gap between the barricades
-    world.spawn_zombie(ZombieKind::Spitter, 120.0, 60.0);
-    world.zombies.iter_mut().for_each(|zombie| zombie.speed = 0.0);
-    let mut hurt = false;
-    for _ in 0..40 {
-        if run(&mut world, 0.25) & events::PLAYER_HURT != 0 { hurt = true; break; }
-        world.player_x = 120.0;
+    for (index, kind) in [ZombieKind::Walker, ZombieKind::Runner, ZombieKind::Brute, ZombieKind::Crawler, ZombieKind::Tank].into_iter().enumerate() {
+        world.spawn_zombie(kind, 30.0 + index as f32 * 45.0, 70.0);
     }
-    assert!(hurt);
-    assert_eq!(world.health, MAX_HEALTH - SPIT_DAMAGE);
+    world.zombies.iter_mut().for_each(|zombie| zombie.speed = 0.0);
+    for _ in 0..30 {
+        assert_eq!(run(&mut world, 1.0) & events::PLAYER_HURT, 0);
+        world.player_x = if world.player_x < 120.0 { 200.0 } else { 40.0 };
+    }
+    assert_eq!(world.health, MAX_HEALTH);
+    assert!(world.covers.iter().all(|cover| cover.health == cover.max_health), "nothing thrown at the cover either");
 }
 
 #[test]
@@ -302,7 +320,12 @@ fn a_long_random_session_never_breaks_the_pools() {
     let mut highest_wave = 0;
     for frame in 0..(600.0 / FRAME) as usize {
         world.input = match (frame / 50) % 3 { 0 => buttons::LEFT, 1 => buttons::RIGHT, _ => 0 };
-        world.advance(FRAME);
+        let (kills, stains) = (world.kills, world.stain_serial);
+        let events = world.advance(FRAME);
+        if events & events::PLAYER_HURT != 0 {
+            // only ever hurt up close: a zombie reached the survivor or the line (and was used up doing it)
+            assert!(world.stain_serial - stains > world.kills - kills, "hurt with no zombie at the survivor or the line");
+        }
         let alive = world.zombies.iter().filter(|zombie| zombie.active).count() as u32;
         assert_eq!(alive, world.zombies_alive);
         assert!(world.health >= 0.0 && world.health <= MAX_HEALTH);

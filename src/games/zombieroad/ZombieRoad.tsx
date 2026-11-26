@@ -48,7 +48,7 @@ function prefersAutoFire() {
 const EVENT_SOUNDS: [number, SoundKind][] = [
   [Events.gameOver, 'gameOver'], [Events.lifeLost, 'lifeLost'], [Events.waveClear, 'waveClear'], [Events.tankArrives, 'tankArrives'], [Events.tankDown, 'tankDown'],
   [Events.extraLife, 'extraLife'], [Events.pickup, 'pickup'], [Events.coverBroken, 'coverBroken'], [Events.breach, 'breach'], [Events.playerHurt, 'playerHurt'],
-  [Events.waveStart, 'waveStart'], [Events.zombieDown, 'zombieDown'], [Events.spit, 'spit'], [Events.coverHit, 'coverHit'], [Events.groan, 'groan'],
+  [Events.waveStart, 'waveStart'], [Events.zombieDown, 'zombieDown'], [Events.coverHit, 'coverHit'], [Events.groan, 'groan'],
   [Events.zombieHit, 'zombieHit'], [Events.shoot, 'shoot'],
 ];
 
@@ -122,6 +122,29 @@ function drawPlate(context: CanvasRenderingContext2D, top: number, height: numbe
 }
 
 /** Draw one frame from the wasm render buffer. */
+/** Draw the zombies: only the crawlers (they go under the cover) or everyone else. */
+function drawHorde(renderer: Renderer, render: Float32Array, clock: number, crawlers: boolean) {
+  const { context, sprites } = renderer;
+  const zombieCount = render[RenderSlot.zombieCount];
+  for (let index = 0; index < zombieCount; index++) {
+    const offset = RenderSlot.zombies + index * RenderSlot.zombieStride;
+    const kind = render[offset], x = render[offset + 1], y = render[offset + 2];
+    if (y < -30 || (kind === ZombieKind.Crawler) !== crawlers) continue;
+    const state = render[offset + 6] as ZombieState;
+    const frame = state === ZombieState.Biting ? Math.floor(clock * 9 + index) & 3 : Math.floor(render[offset + 3]) % ZOMBIE_FRAMES;
+    const size = zombieSpriteSize(kind);
+    const lunge = state === ZombieState.Biting ? Math.sin(clock * 18 + index) * 0.8 : 0;
+    context.drawImage(sprites.zombies[kind * ZOMBIE_FRAMES + frame], x - size / 2, y - size / 2 + lunge, size, size);
+    if (render[offset + 5] > 0) context.drawImage(sprites.zombieFlashes[kind], x - size / 2, y - size / 2 + lunge, size, size);
+    const radius = ZOMBIE_RADIUS[kind];
+    const health = render[offset + 4];
+    if (kind === ZombieKind.Brute && health < 1) {
+      context.fillStyle = 'rgba(0,0,0,0.6)'; context.fillRect(x - 8, y - radius - 4, 16, 1.8);
+      context.fillStyle = '#ef4d3c'; context.fillRect(x - 8, y - radius - 4, 16 * health, 1.8);
+    }
+  }
+}
+
 function drawFrame(renderer: Renderer, render: Float32Array, clock: number, bestScore: number) {
   const { context, scale, sprites } = renderer;
   const phase = render[RenderSlot.phase] as Phase;
@@ -153,6 +176,9 @@ function drawFrame(renderer: Renderer, render: Float32Array, clock: number, best
   context.drawImage(sprites.flickerPool, lampX - 36, lampY - 36, 72, 72);
   context.globalAlpha = 1;
 
+  // ---- crawlers go first so they slip under the wrecked cars
+  drawHorde(renderer, render, clock, true);
+
   // ---- cover
   for (let index = 0; index < 4; index++) {
     const offset = RenderSlot.covers + index * RenderSlot.coverStride;
@@ -167,44 +193,8 @@ function drawFrame(renderer: Renderer, render: Float32Array, clock: number, best
     context.drawImage(sprites.pickups[render[offset]], render[offset + 1] - 7, render[offset + 2] - 7 + bob, 14, 14);
   }
 
-  // ---- the horde
-  const zombieCount = render[RenderSlot.zombieCount];
-  for (let index = 0; index < zombieCount; index++) {
-    const offset = RenderSlot.zombies + index * RenderSlot.zombieStride;
-    const kind = render[offset], x = render[offset + 1], y = render[offset + 2];
-    if (y < -30) continue;
-    const state = render[offset + 6] as ZombieState;
-    const frame = state === ZombieState.Biting ? Math.floor(clock * 9 + index) & 3 : Math.floor(render[offset + 3]) % ZOMBIE_FRAMES;
-    const size = zombieSpriteSize(kind);
-    const lunge = state === ZombieState.Biting ? Math.sin(clock * 18 + index) * 0.8 : 0;
-    context.drawImage(sprites.zombies[kind * ZOMBIE_FRAMES + frame], x - size / 2, y - size / 2 + lunge, size, size);
-    if (render[offset + 5] > 0) context.drawImage(sprites.zombieFlashes[kind], x - size / 2, y - size / 2 + lunge, size, size);
-    const radius = ZOMBIE_RADIUS[kind];
-    if (state === ZombieState.Spitting) {
-      context.fillStyle = 'rgba(200,255,60,0.45)';
-      context.beginPath(); context.arc(x, y + radius * 0.6, 3.2 + Math.sin(clock * 30) * 0.6, 0, Math.PI * 2); context.fill();
-      context.fillStyle = '#d8ff4a';
-      context.beginPath(); context.arc(x, y + radius * 0.6, 1.4, 0, Math.PI * 2); context.fill();
-    }
-    const health = render[offset + 4];
-    if (kind === ZombieKind.Brute && health < 1) {
-      context.fillStyle = 'rgba(0,0,0,0.6)'; context.fillRect(x - 8, y - radius - 4, 16, 1.8);
-      context.fillStyle = '#ef4d3c'; context.fillRect(x - 8, y - radius - 4, 16 * health, 1.8);
-    }
-  }
-
-  // ---- acid spit
-  const spitCount = render[RenderSlot.spitCount];
-  for (let index = 0; index < spitCount; index++) {
-    const offset = RenderSlot.spits + index * RenderSlot.spitStride;
-    const x = render[offset], y = render[offset + 1], wobble = Math.sin(render[offset + 2] * 20) * 0.4;
-    context.fillStyle = 'rgba(170,230,40,0.35)';
-    context.beginPath(); context.arc(x, y - 3, 2.2, 0, Math.PI * 2); context.fill();
-    context.fillStyle = '#a8e22c';
-    context.beginPath(); context.arc(x, y, 2.6 + wobble, 0, Math.PI * 2); context.fill();
-    context.fillStyle = '#eaff9a';
-    context.beginPath(); context.arc(x - 0.7, y - 0.7, 0.9, 0, Math.PI * 2); context.fill();
-  }
+  // ---- the horde (crawlers were drawn under the cover)
+  drawHorde(renderer, render, clock, false);
 
   // ---- the survivor
   const playerX = render[RenderSlot.playerX];
@@ -265,10 +255,6 @@ function drawFrame(renderer: Renderer, render: Float32Array, clock: number, best
       case ParticleKind.Debris:
         context.fillStyle = value === 0 || value === 3 ? '#4a2a22' : '#8f8e86';
         context.fillRect(x - 0.9, y - 0.9, 1.8, 1.8);
-        break;
-      case ParticleKind.Acid:
-        context.fillStyle = '#c6f03a';
-        context.fillRect(x - 0.8, y - 0.8, 1.6, 1.6);
         break;
       case ParticleKind.ScoreText:
         context.font = '800 6px system-ui, sans-serif';
@@ -647,8 +633,8 @@ function ZombieRoadGame({ memory }: { memory: WebAssembly.Memory }) {
         }} />
       </div>
       <p className="game-help">←→ or A/D move · Space, Z or ↑ fire (hold) · F auto-fire · P pause · M mute · Esc back to the hub.
-        Zombies shamble down the road in waves: walkers first, then runners that dodge around cover, spitters that lob acid, brutes that smash
-        barricades, and a Tank every fifth wave. Stop them before they reach the hazard line or you. Shots fly over your cover; claws and acid wear it down.
+        Zombies shamble down the road in waves: walkers first, then runners that dodge around cover, packs of crawlers that slip under the
+        wrecked cars, brutes that smash barricades, and a Tank every fifth wave. Stop them before they reach the hazard line or you. Zombies only hurt up close: nothing is thrown at you. Shots fly over your cover; claws wear it down.
         Pickups: S spread shot, R rapid fire, + medkit (an extra life at full health).</p>
     </div>
   );

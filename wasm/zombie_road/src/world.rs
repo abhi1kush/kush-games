@@ -1,5 +1,5 @@
 //! The Zombie Road simulation: one survivor at the bottom of a road, waves of zombies shambling down from the top,
-//! cover the horde chews through, acid spit, pickups. Fixed 1/120 s steps; every pool is a fixed array (no allocation).
+//! cover the horde chews through, pickups. Zombies only ever attack up close: nothing is thrown or fired at the survivor. Fixed 1/120 s steps; every pool is a fixed array (no allocation).
 use crate::waves::{self, WavePlan};
 
 // ---------- the playfield (world units; JavaScript scales them to the canvas) ----------
@@ -39,11 +39,6 @@ pub const START_LIVES: u32 = 3;
 pub const MAX_LIVES: u32 = 5;
 pub const MEDKIT_HEALTH: f32 = 40.0;
 
-// ---------- zombie acid spit ----------
-const SPIT_SPEED: f32 = 78.0;
-pub const SPIT_DAMAGE: f32 = 12.0;
-const SPIT_RADIUS: f32 = 3.0;
-const SPIT_WINDUP_SECONDS: f32 = 0.55;
 /// Zombies stuck at cover take a bite this often.
 const CHEW_SECONDS: f32 = 0.5;
 
@@ -53,7 +48,6 @@ const PICKUP_CATCH_DISTANCE: f32 = 13.0;
 // ---------- pool sizes ----------
 pub const MAX_ZOMBIES: usize = 40;
 pub const MAX_BULLETS: usize = 36;
-pub const MAX_SPITS: usize = 12;
 pub const MAX_PARTICLES: usize = 120;
 pub const MAX_PICKUPS: usize = 3;
 pub const COVER_COUNT: usize = 4;
@@ -76,7 +70,6 @@ pub mod events {
     pub const GAME_OVER: u32 = 128;
     pub const PICKUP: u32 = 256;
     pub const COVER_HIT: u32 = 512;
-    pub const SPIT: u32 = 1024;
     pub const BREACH: u32 = 2048;
     pub const TANK_ARRIVES: u32 = 4096;
     pub const GROAN: u32 = 8192;
@@ -98,11 +91,11 @@ pub enum Phase { Ready = 0, Playing = 1, Dying = 2, WaveClear = 3, WaveIntro = 4
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ZombieKind { Walker = 0, Runner = 1, Brute = 2, Spitter = 3, Tank = 4 }
+pub enum ZombieKind { Walker = 0, Runner = 1, Brute = 2, Crawler = 3, Tank = 4 }
 
 impl ZombieKind {
     pub fn from_index(index: u32) -> ZombieKind {
-        match index { 1 => ZombieKind::Runner, 2 => ZombieKind::Brute, 3 => ZombieKind::Spitter, 4 => ZombieKind::Tank, _ => ZombieKind::Walker }
+        match index { 1 => ZombieKind::Runner, 2 => ZombieKind::Brute, 3 => ZombieKind::Crawler, 4 => ZombieKind::Tank, _ => ZombieKind::Walker }
     }
 }
 
@@ -126,7 +119,8 @@ pub fn stats(kind: ZombieKind) -> KindStats {
         ZombieKind::Walker => KindStats { health: 2.0, speed: 14.0, radius: 6.0, damage: 20.0, points: 10, drop_chance: 0.05, bite: 1.0, sway: 7.0 },
         ZombieKind::Runner => KindStats { health: 1.0, speed: 33.0, radius: 5.0, damage: 15.0, points: 20, drop_chance: 0.05, bite: 1.0, sway: 22.0 },
         ZombieKind::Brute => KindStats { health: 10.0, speed: 8.5, radius: 10.0, damage: 40.0, points: 60, drop_chance: 0.35, bite: 3.0, sway: 3.0 },
-        ZombieKind::Spitter => KindStats { health: 3.0, speed: 11.0, radius: 6.0, damage: 20.0, points: 30, drop_chance: 0.1, bite: 1.0, sway: 5.0 },
+        // legless, low to the ground, in packs; small enough to squeeze under the wrecked cars
+        ZombieKind::Crawler => KindStats { health: 2.0, speed: 19.0, radius: 5.0, damage: 15.0, points: 30, drop_chance: 0.08, bite: 1.0, sway: 10.0 },
         ZombieKind::Tank => KindStats { health: 45.0, speed: 5.5, radius: 16.0, damage: 100.0, points: 500, drop_chance: 1.0, bite: 8.0, sway: 2.0 },
     }
 }
@@ -147,12 +141,12 @@ impl PickupKind {
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ParticleKind { Splat = 0, Spark = 1, ScoreText = 2, Debris = 3, Acid = 4 }
+pub enum ParticleKind { Splat = 0, Spark = 1, ScoreText = 2, Debris = 3 }
 
 /// What a zombie is busy with (drawn differently).
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ZombieState { Walking = 0, Biting = 1, Spitting = 2 }
+pub enum ZombieState { Walking = 0, Biting = 1 }
 
 #[derive(Clone, Copy, Debug)]
 pub struct Zombie {
@@ -170,23 +164,19 @@ pub struct Zombie {
     /// Walk cycle for the legs, in steps.
     pub walk_cycle: f32,
     pub hit_flash: f32,
-    /// Bite timer at cover, or the countdown to the next spit.
+    /// Countdown to the next bite at cover.
     pub attack_timer: f32,
-    pub windup_seconds: f32,
 }
 
 impl Zombie {
     const EMPTY: Zombie = Zombie {
         active: false, kind: ZombieKind::Walker, state: ZombieState::Walking, x: 0.0, y: 0.0, health: 0.0, max_health: 1.0, speed: 0.0,
-        sway_phase: 0.0, sway_rate: 1.0, walk_cycle: 0.0, hit_flash: 0.0, attack_timer: 0.0, windup_seconds: 0.0,
+        sway_phase: 0.0, sway_rate: 1.0, walk_cycle: 0.0, hit_flash: 0.0, attack_timer: 0.0,
     };
 }
 
 #[derive(Clone, Copy, Debug)]
 pub struct Bullet { pub active: bool, pub x: f32, pub y: f32, pub velocity_x: f32 }
-
-#[derive(Clone, Copy, Debug)]
-pub struct Spit { pub active: bool, pub x: f32, pub y: f32, pub velocity_x: f32, pub velocity_y: f32, pub age: f32 }
 
 #[derive(Clone, Copy, Debug)]
 pub struct Particle {
@@ -254,7 +244,6 @@ pub struct World {
     pub zombies_alive: u32,
     pub zombies: [Zombie; MAX_ZOMBIES],
     pub bullets: [Bullet; MAX_BULLETS],
-    pub spits: [Spit; MAX_SPITS],
     pub particles: [Particle; MAX_PARTICLES],
     pub pickups: [Pickup; MAX_PICKUPS],
     pub covers: [Cover; COVER_COUNT],
@@ -278,7 +267,6 @@ impl World {
             plan: waves::plan(1), regular_spawned: 0, tank_spawned: false, spawn_timer: 0.0, zombies_alive: 0,
             zombies: [Zombie::EMPTY; MAX_ZOMBIES],
             bullets: [Bullet { active: false, x: 0.0, y: 0.0, velocity_x: 0.0 }; MAX_BULLETS],
-            spits: [Spit { active: false, x: 0.0, y: 0.0, velocity_x: 0.0, velocity_y: 0.0, age: 0.0 }; MAX_SPITS],
             particles: [Particle { active: false, kind: ParticleKind::Spark, x: 0.0, y: 0.0, velocity_x: 0.0, velocity_y: 0.0, age: 0.0, life: 1.0, value: 0.0 }; MAX_PARTICLES],
             pickups: [Pickup { active: false, kind: PickupKind::Spread, x: 0.0, y: 0.0, age: 0.0 }; MAX_PICKUPS],
             covers: cover_layout(),
@@ -351,7 +339,6 @@ impl World {
         self.zombies_alive = 0;
         for zombie in self.zombies.iter_mut() { zombie.active = false; }
         for bullet in self.bullets.iter_mut() { bullet.active = false; }
-        for spit in self.spits.iter_mut() { spit.active = false; }
         if (self.wave - 1) % 3 == 0 {
             self.covers = cover_layout();
         } else {
@@ -419,12 +406,9 @@ impl World {
         self.update_bullets(seconds);
         self.update_zombies(seconds);
         if self.phase != Phase::Playing { return; }
-        self.update_spits(seconds);
-        if self.phase != Phase::Playing { return; }
         self.update_pickups(seconds);
         if self.zombies_left() == 0 {
             self.score += 50 * self.wave + self.health as u32;
-            for spit in self.spits.iter_mut() { spit.active = false; }
             self.set_phase(Phase::WaveClear);
             self.events |= events::WAVE_CLEAR;
         }
@@ -483,9 +467,12 @@ impl World {
         let group = group.min(self.plan.max_group);
         // a group spreads out across one stretch of road
         let center = 24.0 + self.random() * (WORLD_WIDTH - 48.0);
+        // crawlers come as a pack: when one is picked, the whole group (at least three) are crawlers
+        let pack = self.pick_kind() == ZombieKind::Crawler;
+        let group = if pack { group.max(3) } else { group };
         for member in 0..group {
             if self.regular_spawned >= self.plan.regular_total { break; }
-            let kind = self.pick_kind();
+            let kind = if pack { ZombieKind::Crawler } else { self.pick_kind() };
             let x = limit(center + (member as f32 - (group - 1) as f32 / 2.0) * 22.0 + (self.random() - 0.5) * 8.0, 10.0, WORLD_WIDTH - 10.0);
             let y = -10.0 - self.random() * 16.0;
             if !self.spawn_zombie(kind, x, y) { self.spawn_timer = 0.2; break; }
@@ -513,10 +500,10 @@ impl World {
         let speed = kind_stats.speed * self.plan.speed_factor * (0.88 + self.random() * 0.24);
         let sway_phase = self.random() * 6.283;
         let sway_rate = 1.4 + self.random() * 1.6;
-        let first_spit = 1.0 + self.random() * 2.5;
+        let first_bite = self.random() * CHEW_SECONDS;
         self.zombies[slot] = Zombie {
             active: true, kind, state: ZombieState::Walking, x, y, health, max_health: health, speed, sway_phase, sway_rate,
-            walk_cycle: self.random() * 4.0, hit_flash: 0.0, attack_timer: first_spit, windup_seconds: 0.0,
+            walk_cycle: self.random() * 4.0, hit_flash: 0.0, attack_timer: first_bite,
         };
         self.zombies_alive += 1;
         true
@@ -537,24 +524,10 @@ impl World {
             let mut walks = true;
             zombie.state = ZombieState::Walking;
 
-            // spitters stop, rear back, and spit acid at the survivor
-            if zombie.kind == ZombieKind::Spitter {
-                if zombie.windup_seconds > 0.0 {
-                    zombie.windup_seconds -= seconds;
-                    zombie.state = ZombieState::Spitting;
-                    walks = false;
-                    if zombie.windup_seconds <= 0.0 {
-                        self.spit_at_player(zombie.x, zombie.y + 4.0);
-                        zombie.attack_timer = 2.4 + self.random() * 1.8;
-                    }
-                } else {
-                    zombie.attack_timer -= seconds;
-                    if zombie.attack_timer <= 0.0 && zombie.y > 20.0 && zombie.y < COVER_Y - 30.0 { zombie.windup_seconds = SPIT_WINDUP_SECONDS; }
-                }
-            }
-
-            // cover in the way: runners slip around it, everyone else chews through
-            if let Some(cover_index) = self.blocking_cover(zombie.x, zombie.y, kind_stats.radius) {
+            // cover in the way: runners slip around it, crawlers squeeze under wrecked cars, everyone else chews through
+            let blocking = self.blocking_cover(zombie.x, zombie.y, kind_stats.radius)
+                .filter(|cover_index| !(zombie.kind == ZombieKind::Crawler && self.covers[*cover_index].kind == CoverKind::WreckedCar));
+            if let Some(cover_index) = blocking {
                 walks = false;
                 if zombie.kind == ZombieKind::Runner {
                     let cover_x = self.covers[cover_index].x;
@@ -563,7 +536,6 @@ impl World {
                     zombie.walk_cycle += seconds * zombie.speed * 0.25;
                 } else {
                     zombie.state = ZombieState::Biting;
-                    zombie.windup_seconds = 0.0;
                     zombie.attack_timer -= seconds;
                     if zombie.attack_timer <= 0.0 {
                         zombie.attack_timer = CHEW_SECONDS;
@@ -603,16 +575,6 @@ impl World {
             }
             if self.phase != Phase::Playing { return; }
         }
-    }
-
-    fn spit_at_player(&mut self, x: f32, y: f32) {
-        let Some(slot) = self.spits.iter().position(|spit| !spit.active) else { return; };
-        let aim_x = self.player_x + (self.random() - 0.5) * 18.0;
-        let (dx, dy) = (aim_x - x, PLAYER_Y - y);
-        let length = (dx * dx + dy * dy).sqrt().max(1.0);
-        let speed = SPIT_SPEED * (1.0 + (self.wave.min(20) as f32) * 0.02);
-        self.spits[slot] = Spit { active: true, x, y, velocity_x: dx / length * speed, velocity_y: dy / length * speed, age: 0.0 };
-        self.events |= events::SPIT;
     }
 
     fn damage_cover(&mut self, cover_index: usize, amount: f32, x: f32, y: f32) {
@@ -679,7 +641,6 @@ impl World {
         for index in 0..MAX_ZOMBIES {
             if self.zombies[index].active && self.zombies[index].y > WORLD_HEIGHT * 0.5 && self.zombies[index].kind != ZombieKind::Tank { self.remove_zombie(index, false); }
         }
-        for spit in self.spits.iter_mut() { spit.active = false; }
         self.health = MAX_HEALTH;
         self.spread_seconds = 0.0;
         self.rapid_seconds = 0.0;
@@ -719,33 +680,6 @@ impl World {
         }
     }
 
-    fn update_spits(&mut self, seconds: f32) {
-        for index in 0..MAX_SPITS {
-            if !self.spits[index].active { continue; }
-            let mut spit = self.spits[index];
-            spit.x += spit.velocity_x * seconds;
-            spit.y += spit.velocity_y * seconds;
-            spit.age += seconds;
-            if spit.y > WORLD_HEIGHT + 4.0 || spit.x < -4.0 || spit.x > WORLD_WIDTH + 4.0 { self.spits[index].active = false; continue; }
-            if let Some(cover_index) = self.blocking_cover(spit.x, spit.y, SPIT_RADIUS) {
-                self.spits[index].active = false;
-                self.damage_cover(cover_index, 1.0, spit.x, spit.y);
-                for _ in 0..3 { self.add_particle(ParticleKind::Acid, spit.x, spit.y, 25.0, 0.0); }
-                continue;
-            }
-            let (dx, dy) = (spit.x - self.player_x, spit.y - PLAYER_Y);
-            let reach = SPIT_RADIUS + PLAYER_RADIUS - 1.0;
-            if dx * dx + dy * dy < reach * reach {
-                self.spits[index].active = false;
-                for _ in 0..4 { self.add_particle(ParticleKind::Acid, spit.x, spit.y, 30.0, 0.0); }
-                self.hurt(SPIT_DAMAGE);
-                if self.phase != Phase::Playing { return; }
-                continue;
-            }
-            self.spits[index] = spit;
-        }
-    }
-
     fn update_pickups(&mut self, seconds: f32) {
         for index in 0..MAX_PICKUPS {
             if !self.pickups[index].active { continue; }
@@ -780,7 +714,7 @@ impl World {
     fn add_particle(&mut self, kind: ParticleKind, x: f32, y: f32, speed: f32, value: f32) {
         let angle = self.random() * 6.283;
         let speed = speed * (0.3 + self.random() * 0.7);
-        let life = match kind { ParticleKind::Splat => 0.5 + self.random() * 0.4, ParticleKind::Debris => 0.6, ParticleKind::Spark => 0.18, ParticleKind::Acid => 0.4, ParticleKind::ScoreText => 0.8 };
+        let life = match kind { ParticleKind::Splat => 0.5 + self.random() * 0.4, ParticleKind::Debris => 0.6, ParticleKind::Spark => 0.18, ParticleKind::ScoreText => 0.8 };
         if let Some(particle) = self.particles.iter_mut().find(|particle| !particle.active) {
             *particle = Particle { active: true, kind, x, y, velocity_x: angle.cos() * speed, velocity_y: angle.sin() * speed, age: 0.0, life, value };
         }

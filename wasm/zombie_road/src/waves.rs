@@ -1,6 +1,6 @@
 //! How each wave of the horde is made up: how many zombies, how fast they come, which kinds, and when a Tank leads them.
 
-/// One wave's recipe. Kind weights are in `ZombieKind` order: walker, runner, brute, spitter.
+/// One wave's recipe. Kind weights are in `ZombieKind` order: walker, runner, brute, crawler (crawlers come in packs).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct WavePlan {
     /// Ordinary zombies to spawn (the Tank, when there is one, comes on top of these).
@@ -35,7 +35,7 @@ pub fn plan(wave: u32) -> WavePlan {
             10,
             if wave >= 2 { (2 + wave).min(12) } else { 0 },
             if wave >= 4 { (1 + wave / 3).min(6) } else { 0 },
-            if wave >= 3 { (1 + wave / 2).min(7) } else { 0 },
+            if wave >= 3 { (1 + wave / 3).min(5) } else { 0 },
         ],
     }
 }

@@ -10,7 +10,7 @@ pub use world::*;
 
 /// Layout of the render buffer (f32 slots). Mirrored in src/games/zombieroad/engine.ts (checked by a test).
 pub mod render_slot {
-    use crate::world::{COVER_COUNT, MAX_BULLETS, MAX_PARTICLES, MAX_PICKUPS, MAX_SPITS, MAX_ZOMBIES, STAIN_RING};
+    use crate::world::{COVER_COUNT, MAX_BULLETS, MAX_PARTICLES, MAX_PICKUPS, MAX_ZOMBIES, STAIN_RING};
     pub const PHASE: usize = 0;
     pub const PHASE_SECONDS: usize = 1;
     pub const WAVE: usize = 2;
@@ -27,17 +27,16 @@ pub mod render_slot {
     pub const ZOMBIES_LEFT: usize = 13;
     pub const ZOMBIE_COUNT: usize = 14;
     pub const BULLET_COUNT: usize = 15;
-    pub const SPIT_COUNT: usize = 16;
-    pub const PARTICLE_COUNT: usize = 17;
-    pub const PICKUP_COUNT: usize = 18;
-    pub const KILLS: usize = 19;
-    pub const WAVE_TOTAL: usize = 20;
+    pub const PARTICLE_COUNT: usize = 16;
+    pub const PICKUP_COUNT: usize = 17;
+    pub const KILLS: usize = 18;
+    pub const WAVE_TOTAL: usize = 19;
     /// health fraction of the Tank on the road, or -1 when there is none
-    pub const TANK_HEALTH: usize = 21;
-    pub const AUTO_FIRE: usize = 22;
-    pub const SINCE_SHOT: usize = 23;
+    pub const TANK_HEALTH: usize = 20;
+    pub const AUTO_FIRE: usize = 21;
+    pub const SINCE_SHOT: usize = 22;
     /// how many stains have ever been made; the newest STAIN_RING sit in STAINS (serial % STAIN_RING)
-    pub const STAIN_SERIAL: usize = 24;
+    pub const STAIN_SERIAL: usize = 23;
     /// kind, x, y, health fraction for every cover (fixed order)
     pub const COVERS: usize = 32;
     pub const COVER_STRIDE: usize = 4;
@@ -47,11 +46,8 @@ pub mod render_slot {
     /// x, y per bullet
     pub const BULLETS: usize = ZOMBIES + MAX_ZOMBIES * ZOMBIE_STRIDE;
     pub const BULLET_STRIDE: usize = 2;
-    /// x, y, age per acid glob
-    pub const SPITS: usize = BULLETS + MAX_BULLETS * BULLET_STRIDE;
-    pub const SPIT_STRIDE: usize = 3;
     /// kind, x, y, progress (0..1), value per particle
-    pub const PARTICLES: usize = SPITS + MAX_SPITS * SPIT_STRIDE;
+    pub const PARTICLES: usize = BULLETS + MAX_BULLETS * BULLET_STRIDE;
     pub const PARTICLE_STRIDE: usize = 5;
     /// kind, x, y, age per falling pickup
     pub const PICKUPS: usize = PARTICLES + MAX_PARTICLES * PARTICLE_STRIDE;
@@ -157,15 +153,6 @@ impl ZombieRoad {
             count += 1;
         }
         render[BULLET_COUNT] = count as f32;
-        count = 0;
-        for spit in world.spits.iter().filter(|spit| spit.active) {
-            let offset = SPITS + count * SPIT_STRIDE;
-            render[offset] = spit.x;
-            render[offset + 1] = spit.y;
-            render[offset + 2] = spit.age;
-            count += 1;
-        }
-        render[SPIT_COUNT] = count as f32;
         count = 0;
         for particle in world.particles.iter().filter(|particle| particle.active) {
             let offset = PARTICLES + count * PARTICLE_STRIDE;

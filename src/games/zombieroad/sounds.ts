@@ -2,7 +2,7 @@
 import { playSound, unlockAudio } from '../sharedSound';
 
 export type SoundKind = 'shoot' | 'zombieHit' | 'zombieDown' | 'playerHurt' | 'lifeLost' | 'waveClear' | 'waveStart' | 'gameOver' | 'pickup'
-  | 'coverHit' | 'coverBroken' | 'spit' | 'breach' | 'tankArrives' | 'tankDown' | 'groan' | 'extraLife';
+  | 'coverHit' | 'coverBroken' | 'breach' | 'tankArrives' | 'tankDown' | 'groan' | 'extraLife';
 
 const arpeggio = (frequencies: number[], gapSeconds: number, durationSeconds: number, volume: number, type: OscillatorType = 'triangle') =>
   frequencies.map((frequency, index) => ({ frequency, durationSeconds, startSeconds: index * gapSeconds, volume, type }));
@@ -19,7 +19,6 @@ const SOUNDS: Record<SoundKind, { play: (muted: boolean) => void; milliseconds: 
   pickup: { milliseconds: 420, play: muted => playSound({ tones: arpeggio([523, 659, 784, 1047], 0.06, 0.12, 0.045, 'triangle') }, muted) },
   coverHit: { milliseconds: 90, play: muted => playSound({ noises: [{ durationSeconds: 0.07, volume: 0.08, filterFrequency: 400 }], tones: [{ frequency: 140, endFrequency: 100, durationSeconds: 0.06, volume: 0.03, type: 'triangle' }] }, muted) },
   coverBroken: { milliseconds: 600, play: muted => playSound({ noises: [{ durationSeconds: 0.5, volume: 0.22, filterFrequency: 900 }], tones: [{ frequency: 120, endFrequency: 40, durationSeconds: 0.4, volume: 0.05, type: 'square' }] }, muted) },
-  spit: { milliseconds: 160, play: muted => playSound({ noises: [{ durationSeconds: 0.12, volume: 0.07, filterFrequency: 1800, filterType: 'bandpass' }], tones: [{ frequency: 520, endFrequency: 240, durationSeconds: 0.12, volume: 0.025, type: 'sine' }] }, muted) },
   breach: { milliseconds: 500, play: muted => playSound({ tones: [{ frequency: 660, durationSeconds: 0.14, volume: 0.04, type: 'square' }, { frequency: 520, durationSeconds: 0.14, startSeconds: 0.16, volume: 0.04, type: 'square' }] }, muted) },
   tankArrives: { milliseconds: 1300, play: muted => playSound({ tones: [{ frequency: 70, endFrequency: 45, durationSeconds: 1.2, volume: 0.09, type: 'sawtooth' }, { frequency: 105, endFrequency: 60, durationSeconds: 1.0, volume: 0.05, type: 'square' }], noises: [{ durationSeconds: 1.0, volume: 0.12, filterFrequency: 300 }] }, muted) },
   tankDown: { milliseconds: 1100, play: muted => playSound({ noises: [{ durationSeconds: 0.9, volume: 0.26, filterFrequency: 700 }], tones: [...arpeggio([523, 659, 784, 1047, 1319], 0.08, 0.14, 0.04, 'square')] }, muted) },

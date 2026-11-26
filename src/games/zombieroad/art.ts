@@ -210,7 +210,7 @@ const ZOMBIE_LOOKS: ZombieLook[] = [
   { skin: '#8fae6b', shirt: '#4f6286', pants: '#33363f', dark: '#2a3320' }, // walker: faded office shirt
   { skin: '#b7c792', shirt: '#a3352c', pants: '#2b2b33', dark: '#3a1410' }, // runner: red hoodie
   { skin: '#76875a', shirt: '#4b3a2b', pants: '#2a241e', dark: '#1d1a12' }, // brute: torn work vest
-  { skin: '#b9c94c', shirt: '#6f7d2a', pants: '#3a3a20', dark: '#4a5a10' }, // spitter: bloated, yellow-green
+  { skin: '#a9b8a4', shirt: '#5b5f6b', pants: '#3b2a26', dark: '#24262c' }, // crawler: pale, legless, dragging itself
   { skin: '#6c7b52', shirt: '#3a3f2c', pants: '#22251a', dark: '#161a10' }, // tank
 ];
 /** Each sprite is a square this many world units across, centred on the zombie. */
@@ -221,6 +221,7 @@ export const ZOMBIE_FRAMES = 4;
 function paintZombie(context: CanvasRenderingContext2D, kind: number, step: number) {
   const radius = ZOMBIE_RADIUS[kind];
   const look = ZOMBIE_LOOKS[kind];
+  if (kind === ZombieKind.Crawler) { paintCrawler(context, radius, look, step); return; }
   const isRunner = kind === ZombieKind.Runner;
   ellipse(context, 0, radius * 0.35, radius * 1.05, radius * 0.6, 'rgba(0,0,0,0.38)');
   // feet
@@ -239,16 +240,13 @@ function paintZombie(context: CanvasRenderingContext2D, kind: number, step: numb
     circle(context, shoulderX * (isRunner ? 1.05 : 0.8), reach, armWidth * 0.62, look.skin);
   }
   // torso (shoulders seen from above)
-  const torsoWidth = radius * (kind === ZombieKind.Spitter ? 1.0 : 0.95), torsoDepth = radius * (kind === ZombieKind.Spitter ? 0.8 : 0.58);
+  const torsoWidth = radius * 0.95, torsoDepth = radius * 0.58;
   ellipse(context, 0, -radius * 0.05, torsoWidth, torsoDepth, look.shirt);
   // rips and stains
   context.fillStyle = look.dark;
   context.fillRect(-torsoWidth * 0.5, -torsoDepth * 0.3, torsoWidth * 0.3, torsoDepth * 0.25);
   context.fillStyle = 'rgba(90,10,10,0.55)';
   context.fillRect(torsoWidth * 0.2, torsoDepth * 0.05, torsoWidth * 0.35, torsoDepth * 0.3);
-  if (kind === ZombieKind.Spitter) {
-    for (const [x, y, size] of [[-3.4, -1.5, 1.1], [2.8, -2.6, 0.9], [3.6, 1.2, 1.2], [-1.2, 2.6, 0.8]]) circle(context, x, y, size, '#dcf06a');
-  }
   if (kind === ZombieKind.Tank || kind === ZombieKind.Brute) {
     // bone spurs on the shoulders
     const spurs = kind === ZombieKind.Tank ? 4 : 2;
@@ -264,9 +262,38 @@ function paintZombie(context: CanvasRenderingContext2D, kind: number, step: numb
   circle(context, 0, headY, headRadius, look.skin);
   context.fillStyle = look.dark;
   context.beginPath(); context.arc(0, headY - headRadius * 0.15, headRadius * 0.9, Math.PI * 1.05, Math.PI * 1.95); context.fill();
-  const eyeColor = kind === ZombieKind.Tank ? '#ff3b2f' : kind === ZombieKind.Spitter ? '#e9ff5a' : '#ffdf6b';
+  const eyeColor = kind === ZombieKind.Tank ? '#ff3b2f' : '#ffdf6b';
   circle(context, -headRadius * 0.38, headY + headRadius * 0.45, Math.max(0.45, headRadius * 0.17), eyeColor);
   circle(context, headRadius * 0.38, headY + headRadius * 0.45, Math.max(0.45, headRadius * 0.17), eyeColor);
+}
+
+/** A legless crawler dragging itself down the road on its arms, a dark smear trailing behind it. */
+function paintCrawler(context: CanvasRenderingContext2D, radius: number, look: ZombieLook, step: number) {
+  ellipse(context, 0, radius * 0.2, radius * 0.9, radius * 0.75, 'rgba(0,0,0,0.38)');
+  // the smear it leaves (up the road, behind it)
+  ellipse(context, 0, -radius * 1.05, radius * 0.45, radius * 0.75, 'rgba(70,16,14,0.55)');
+  // torso stretched long and low, the torn waist trailing
+  ellipse(context, 0, -radius * 0.25, radius * 0.72, radius * 0.85, look.shirt);
+  ellipse(context, 0, -radius * 0.95, radius * 0.5, radius * 0.25, look.pants);
+  context.fillStyle = look.dark;
+  context.fillRect(-radius * 0.45, -radius * 0.5, radius * 0.35, radius * 0.3);
+  // arms clawing forward in turn
+  context.lineWidth = Math.max(1.5, radius * 0.28); context.lineCap = 'round';
+  for (const side of [-1, 1]) {
+    const shoulderX = side * radius * 0.62;
+    const reach = radius * (0.95 + side * step * 0.45);
+    const handX = side * radius * (0.95 - side * step * 0.15);
+    context.strokeStyle = look.skin;
+    context.beginPath(); context.moveTo(shoulderX, radius * 0.05); context.lineTo(handX, reach * 0.55); context.lineTo(handX * 0.85, reach); context.stroke();
+    circle(context, handX * 0.85, reach, radius * 0.2, look.skin);
+  }
+  // head low between the shoulders, glaring up the road at the survivor
+  const headRadius = radius * 0.46, headY = radius * 0.42;
+  circle(context, 0, headY, headRadius, look.skin);
+  context.fillStyle = look.dark;
+  context.beginPath(); context.arc(0, headY - headRadius * 0.15, headRadius * 0.9, Math.PI * 1.05, Math.PI * 1.95); context.fill();
+  circle(context, -headRadius * 0.38, headY + headRadius * 0.45, Math.max(0.45, headRadius * 0.17), '#ffdf6b');
+  circle(context, headRadius * 0.38, headY + headRadius * 0.45, Math.max(0.45, headRadius * 0.17), '#ffdf6b');
 }
 
 /** The survivor seen from above, rifle pointing up the road. */
@@ -429,10 +456,10 @@ export function drawCover(context: CanvasRenderingContext2D, kind: number, x: nu
   }
 }
 
-/** Stain colour per zombie kind (dark ichor; spitters leave acid). */
-export const STAIN_COLORS = ['rgba(52,70,30,0.5)', 'rgba(80,20,16,0.5)', 'rgba(40,52,26,0.55)', 'rgba(150,180,30,0.35)', 'rgba(36,46,22,0.6)'] as const;
+/** Stain colour per zombie kind (dark ichor; crawlers leave a dragged smear). */
+export const STAIN_COLORS = ['rgba(52,70,30,0.5)', 'rgba(80,20,16,0.5)', 'rgba(40,52,26,0.55)', 'rgba(70,18,16,0.5)', 'rgba(36,46,22,0.6)'] as const;
 /** Splat particle colours per zombie kind. */
-export const SPLAT_COLORS = ['#5f7d3a', '#8a2a20', '#55663a', '#c6e046', '#4a5a30'] as const;
+export const SPLAT_COLORS = ['#5f7d3a', '#8a2a20', '#55663a', '#6e2a22', '#4a5a30'] as const;
 
 /** Paint a lasting stain on the stains layer where a zombie fell. */
 export function stampStain(context: CanvasRenderingContext2D, x: number, y: number, kind: number, random: () => number) {
