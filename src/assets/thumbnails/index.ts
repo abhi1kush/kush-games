@@ -26,6 +26,7 @@ import thumbAntarikshDefenders from './antariksh-defenders.svg';
 import thumbMithaiMatch from './mithai-match.svg';
 import thumbPralayRun from './pralay-run.svg';
 import thumbZombieRoad from './zombie-road.svg';
+import thumbLittlePainter from './little-painter.svg';
 
 export const THUMBNAILS: Record<string, string> = {
   'power-of-2': thumbPowerOf2,
@@ -55,4 +56,5 @@ export const THUMBNAILS: Record<string, string> = {
   'pralay-run': thumbPralayRun,
   'mountain-climb': thumbMountainClimb,
   'zombie-road': thumbZombieRoad,
+  'little-painter': thumbLittlePainter,
 };

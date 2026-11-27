@@ -1,0 +1,108 @@
+/* Little Painter: soft, rounded, easy on the eyes. Chrome colours come from the hub theme (Lagoon / Netflix Red). */
+.little-painter { gap: 8px; padding: 10px 10px 18px; user-select: none; -webkit-user-select: none; position: relative; }
+.little-painter__layout { --board: clamp(240px, min(calc(100vw - 24px), calc(100svh - 372px)), 640px);
+  width: 100%; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.little-painter__board-column { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.little-painter__board { position: relative; width: var(--board); height: var(--board); border-radius: 18px; overflow: hidden; background: #fff;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.28), 0 0 0 4px color-mix(in srgb, var(--surface) 70%, #fff 30%); touch-action: manipulation; contain: layout paint; }
+.little-painter__art { display: block; width: 100%; height: 100%; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.little-painter__art [data-region] { transition: fill 160ms ease-out; }
+.little-painter__art [data-region].is-hinted { animation: little-painter-hint 0.7s ease-in-out infinite alternate; }
+@keyframes little-painter-hint { from { fill: #ffffff; } to { fill: #ffe9a8; } }
+
+.little-painter__progress { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--muted); flex-wrap: wrap; justify-content: center; }
+.little-painter__progress-bar { width: 110px; height: 8px; border-radius: 99px; background: rgba(255,255,255,0.14); overflow: hidden; }
+.little-painter__progress-bar > span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #f7d661, #5cb88a); transition: width 200ms ease-out; }
+.little-painter__restored { color: var(--text); font-weight: 600; animation: little-painter-pop 0.4s ease-out; }
+
+.little-painter__side { width: min(100%, max(var(--board), 340px), 640px); display: flex; flex-direction: column; gap: 10px; }
+.little-painter__tools { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
+.little-painter__tool { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 58px; padding: 6px 8px 4px; border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 80%, transparent); border: 1px solid rgba(255,255,255,0.14); color: var(--text); cursor: pointer; font: inherit; }
+.little-painter__tool > span[aria-hidden] { font-size: 24px; line-height: 1.1; }
+.little-painter__tool small { font-size: 11px; font-weight: 700; color: var(--muted); }
+.little-painter__tool:hover:not(:disabled) { background: color-mix(in srgb, var(--surface) 60%, #fff 12%); }
+.little-painter__tool:active:not(:disabled) { transform: scale(0.94); }
+.little-painter__tool:disabled { opacity: 0.4; cursor: default; }
+
+.little-painter__palette { display: grid; grid-template-columns: repeat(9, 1fr); gap: 7px; padding: 10px; border-radius: 16px;
+  background: color-mix(in srgb, var(--surface) 75%, transparent); border: 1px solid rgba(255,255,255,0.12); }
+.little-painter__swatch { aspect-ratio: 1; width: 100%; min-width: 0; max-width: 52px; justify-self: center; border-radius: 50%; cursor: pointer; padding: 0;
+  background: var(--swatch); border: 3px solid rgba(255,255,255,0.85); box-shadow: 0 2px 5px rgba(0,0,0,0.25), inset 0 -3px 0 rgba(0,0,0,0.08);
+  transition: transform 120ms ease-out, box-shadow 120ms; position: relative; }
+.little-painter__swatch:hover { transform: scale(1.06); }
+.little-painter__swatch.is-selected { transform: scale(1.14); border-color: #fff; box-shadow: 0 0 0 3px var(--primary), 0 4px 10px rgba(0,0,0,0.3); z-index: 1; }
+.little-painter__swatch.is-selected::after { content: '✓'; position: absolute; inset: 0; display: grid; place-items: center; font-weight: 900; font-size: 15px;
+  color: rgba(255,255,255,0.95); text-shadow: 0 1px 2px rgba(0,0,0,0.45); }
+.little-painter__swatch--eraser { background: repeating-linear-gradient(45deg, #ffffff 0 6px, #eef0f3 6px 12px); display: grid; place-items: center; }
+.little-painter__eraser-icon { width: 70%; height: 70%; }
+.little-painter__swatch--eraser.is-selected::after { content: none; }
+
+.little-painter__pictures { display: flex; justify-content: safe center; gap: 8px; overflow-x: auto; padding: 4px 2px 6px; scroll-snap-type: x proximity; scrollbar-width: thin; }
+.little-painter__picture { position: relative; flex: 0 0 auto; width: 64px; height: 64px; padding: 0; border-radius: 12px; overflow: visible; cursor: pointer; background: #fff;
+  border: 3px solid transparent; box-shadow: 0 2px 6px rgba(0,0,0,0.25); scroll-snap-align: start; transition: transform 120ms; }
+.little-painter__picture:hover { transform: translateY(-2px); }
+.little-painter__picture.is-active { border-color: var(--primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 40%, transparent), 0 3px 8px rgba(0,0,0,0.3); }
+.little-painter__thumb { display: block; width: 100%; height: 100%; border-radius: 9px; pointer-events: none; }
+.little-painter__done { position: absolute; top: -8px; right: -8px; font-size: 18px; filter: drop-shadow(0 1px 1px rgba(0,0,0,0.4)); animation: little-painter-pop 0.4s ease-out; }
+.little-painter__footer { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; }
+
+/* celebration: gentle confetti and a cheer card over the picture */
+.little-painter__celebration { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.18); cursor: pointer; }
+.little-painter__confetti { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.little-painter__confetti i { position: absolute; top: -14px; width: 10px; height: 14px; opacity: 0.95; animation: little-painter-confetti linear forwards; }
+@keyframes little-painter-confetti { to { transform: translate(var(--drift), calc(var(--board) + 30px)) rotate(var(--spin)); opacity: 0.85; } }
+.little-painter__cheer { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 18px; margin: 12px; border-radius: 18px; text-align: center;
+  background: color-mix(in srgb, var(--surface) 92%, transparent); color: var(--text); box-shadow: 0 10px 30px rgba(0,0,0,0.35); animation: little-painter-pop 0.45s cubic-bezier(.2,1.4,.4,1); }
+.little-painter__cheer b { font-size: clamp(20px, 5vw, 28px); color: var(--text-strong); }
+.little-painter__cheer span { font-size: 14px; }
+.little-painter__cheer-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 4px; }
+@keyframes little-painter-pop { from { transform: scale(0.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .little-painter__confetti { display: none; }
+  .little-painter__art [data-region].is-hinted { animation: none; fill: #ffe9a8; }
+}
+
+/* clear confirmation */
+.little-painter__dialog-backdrop { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; background: rgba(0,0,0,0.45); padding: 16px; }
+.little-painter__dialog { display: flex; flex-direction: column; gap: 10px; align-items: center; text-align: center; max-width: 340px; padding: 18px; border-radius: 18px;
+  background: var(--surface); color: var(--text); box-shadow: 0 16px 40px rgba(0,0,0,0.5); animation: little-painter-pop 0.25s ease-out; }
+.little-painter__dialog b { font-size: 18px; color: var(--text-strong); }
+.little-painter__dialog span { font-size: 14px; color: var(--muted); }
+.little-painter__dialog-actions { display: flex; gap: 10px; }
+.little-painter__dialog-actions .game-button, .little-painter__cheer-actions .game-button { padding: 9px 14px; border-radius: 12px; font-weight: 800; font-size: 14px; }
+
+/* wide screens and phones held sideways: picture on the left, tools on the right */
+@media (min-aspect-ratio: 5/4) and (min-width: 560px) {
+  .little-painter__layout { --side: clamp(260px, 30vw, 340px); --board: clamp(220px, min(calc(100svh - 96px), calc(100vw - var(--side) - 48px)), 780px);
+    flex-direction: row; justify-content: center; align-items: flex-start; gap: 18px; }
+  .little-painter__side { width: var(--side); max-height: calc(var(--board) + 30px); overflow-y: auto; padding: 2px; }
+  .little-painter__palette { grid-template-columns: repeat(6, 1fr); }
+  .little-painter__pictures { flex-wrap: wrap; overflow: visible; justify-content: center; }
+}
+/* short landscape phones: tighter tools, palette in more columns, no footer text */
+@media (min-aspect-ratio: 5/4) and (max-height: 520px) {
+  .little-painter { padding-top: 6px; padding-bottom: 6px; }
+  .little-painter__layout { --board: clamp(200px, calc(100svh - 108px), 780px); --side: clamp(260px, calc(100vw - 100svh + 38px), 420px); }
+  .little-painter__tools { gap: 6px; }
+  .little-painter__side { gap: 6px; }
+  .little-painter__tool { min-width: 44px; padding: 3px 5px 2px; }
+  .little-painter__tool > span[aria-hidden] { font-size: 19px; }
+  .little-painter__tool small { font-size: 10px; }
+  .little-painter__palette { grid-template-columns: repeat(9, 1fr); gap: 5px; padding: 6px; }
+  .little-painter__swatch { border-width: 2px; }
+  .little-painter__picture { width: 46px; height: 46px; border-radius: 10px; }
+  .little-painter__footer .game-help { display: none; }
+  .little-painter__progress { font-size: 12px; }
+}
+/* short phones held upright: a slightly smaller picture, compact tools, no help text */
+@media (max-aspect-ratio: 5/4) and (max-height: 700px) {
+  .little-painter { padding-top: 8px; gap: 6px; }
+  .little-painter__layout { --board: clamp(220px, min(calc(100vw - 24px), calc(100svh - 396px)), 640px); gap: 8px; }
+  .little-painter__side { gap: 8px; }
+  .little-painter__tool { min-width: 52px; padding: 4px 6px 3px; }
+  .little-painter__tool > span[aria-hidden] { font-size: 20px; }
+  .little-painter__palette { gap: 6px; padding: 8px; }
+  .little-painter__picture { width: 52px; height: 52px; }
+  .little-painter__footer .game-help { display: none; }
+}

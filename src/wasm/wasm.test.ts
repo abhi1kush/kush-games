@@ -20,6 +20,10 @@ import * as ghatClimbModule from './ghat_climb/ghat_climb.js';
 import * as zombieRoadModule from './zombie_road/zombie_road.js';
 import { Buttons as ZombieButtons, createRenderView as createZombieView, Events as ZombieEvents, Phase as ZombiePhase, RenderSlot as ZombieSlot } from '../games/zombieroad/engine';
 import { parseZombieRoadSave } from '../games/zombieroad/save';
+import * as littlePainterModule from './little_painter/little_painter.js';
+import { PAINT_NAMES, PICTURES } from '../games/littlepainter/pictures';
+import { parseLittlePainterSave } from '../games/littlepainter/save';
+import { pictureMarkup } from '../games/littlepainter/svg';
 import { decodeMoves } from '../games/checkers/engine';
 import { RenderSlot } from '../games/breakout/engine';
 import { Buttons, Phase as KushJumpPhase, RenderSlot as KushJumpSlot } from '../games/kushjump/engine';
@@ -65,11 +69,12 @@ beforeAll(() => {
   pralayMemory = pralayModule.initSync({ module: wasmBytes('pralay_run') }).memory;
   ghatClimbModule.initSync({ module: wasmBytes('ghat_climb') });
   zombieRoadMemory = zombieRoadModule.initSync({ module: wasmBytes('zombie_road') }).memory;
+  littlePainterModule.initSync({ module: wasmBytes('little_painter') });
 });
 
 describe('wasm bindings', () => {
   it('every game .wasm stays small (< 40 KB raw)', () => {
-    for (const name of ['breakout', 'checkers', 'connect_four', 'kush_jump', 'antariksh_defenders', 'mithai_match', 'ludo', 'snakes_ladders', 'fleet_clash', 'carrom', 'jal_path', 'paani_pour', 'ember_lane', 'pralay_run', 'ghat_climb', 'zombie_road']) expect(wasmBytes(name).length, name).toBeLessThan(40 * 1024);
+    for (const name of ['breakout', 'checkers', 'connect_four', 'kush_jump', 'antariksh_defenders', 'mithai_match', 'ludo', 'snakes_ladders', 'fleet_clash', 'carrom', 'jal_path', 'paani_pour', 'ember_lane', 'pralay_run', 'ghat_climb', 'zombie_road', 'little_painter']) expect(wasmBytes(name).length, name).toBeLessThan(40 * 1024);
   });
 
   it('Ghat Climb: gas rolls the jeep and burns fuel', () => {
@@ -455,5 +460,54 @@ describe('Pralay Run wasm', () => {
     expect(parseZombieRoadSave({ wave: 0, score: 0, lives: 3 })).toBeNull();
     expect(parseZombieRoadSave({ wave: 2, score: 10, lives: 6 })).toBeNull();
     expect(parseZombieRoadSave({ wave: 2, score: -1, lives: 3 })).toBeNull();
+  });
+});
+
+describe('Little Painter wasm', () => {
+  const { LittlePainter } = littlePainterModule;
+
+  it('agrees with pictures.ts: the Peacock first, the same region count for every picture, one name per paint', () => {
+    expect(LittlePainter.picture_count()).toBe(PICTURES.length);
+    expect(PICTURES[0].id).toBe('peacock');
+    PICTURES.forEach((picture, index) => expect(LittlePainter.region_count(index), picture.id).toBe(picture.regions.length));
+    expect(LittlePainter.palette_size()).toBe(PAINT_NAMES.length);
+    expect(new Set(PICTURES.map(picture => picture.id)).size).toBe(PICTURES.length);
+    for (const picture of PICTURES) {
+      expect(picture.regions.length, picture.id).toBeGreaterThanOrEqual(12);
+      const markup = pictureMarkup(picture, picture.regions.map(() => '#ffffff'));
+      expect(markup.match(/<g fill=/g)?.length, picture.id).toBe(picture.regions.length);
+      expect(markup).not.toContain('NaN');
+    }
+  });
+
+  it('fills, undoes, clears, completes and saves/loads through the bindings', () => {
+    const painter = new LittlePainter();
+    expect(painter.active_picture()).toBe(0);
+    expect(painter.select_color(3)).toBe(true);
+    expect(painter.fill(5)).toBe(true);
+    expect(painter.colors(0)[5]).toBe(3);
+    expect(painter.undo()).toBe(true);
+    expect(painter.colors(0)[5]).toBe(0);
+    const regions = LittlePainter.region_count(0);
+    for (let region = 0; region < regions; region++) painter.fill(region);
+    expect(painter.is_complete(0)).toBe(true);
+    expect(painter.completed_mask()).toBe(1);
+    expect(painter.clear()).toBe(true);
+    expect(painter.colored_count(0)).toBe(0);
+    expect(painter.undo()).toBe(true);
+    expect(painter.is_complete(0)).toBe(true);
+    painter.set_active_picture(2);
+    const saved = painter.save();
+    const restored = new LittlePainter();
+    expect(restored.load(saved)).toBe(true);
+    expect(restored.active_picture()).toBe(2);
+    expect(Array.from(restored.colors(0))).toEqual(Array.from(painter.colors(0)));
+    expect(restored.load(new Uint8Array([9, 9]))).toBe(false);
+    expect(LittlePainter.palette_rgb(0)).toBe(0xffffff);
+    expect(parseLittlePainterSave({ bytes: Array.from(saved) })).toEqual({ bytes: Array.from(saved) });
+    expect(parseLittlePainterSave({ bytes: [1, 2, 300, 4] })).toBeNull();
+    expect(parseLittlePainterSave({ bytes: 'nope' })).toBeNull();
+    painter.free();
+    restored.free();
   });
 });

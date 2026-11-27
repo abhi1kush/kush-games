@@ -332,10 +332,22 @@ export const games: GameDefinition[] = [
     releaseYear: 2026,
     component: lazy(() => import('./zombieroad/ZombieRoad')),
   },
+  {
+    id: 'little-painter',
+    title: 'Little Painter',
+    tagline: 'Pick a color, tap a part, watch it bloom.',
+    description: 'A gentle coloring book for children. Pick one of 16 soft, cheerful paints and tap any part of the picture to fill it neatly inside the lines — no mess, no bleeding over the edges. Start with a proud Peacock with a fanned tail full of eyespots, then color a Butterfly, a Rocket, a friendly Dinosaur, a Cozy House, a Happy Whale and an Elephant. Undo any tap, clear a picture (with a check first, and Undo still brings it back), tap ✨ Find to see the parts still white, and save your picture as a PNG. Finish every part for a sparkle of confetti, a soft chime and a ⭐ on the picture. Your colors are saved, so a refresh opens right where you left off. The coloring book logic runs in Rust compiled to WebAssembly.',
+    categories: ['Kids'],
+    status: 'playable',
+    artwork: { gradientFrom: '#fdf6e3', gradientTo: '#7cc6c0', accentColor: '#f29bc0', glyph: '🎨' },
+    controls: 'Tap or click a paint, then tap a part of the picture; Ctrl+Z or U undo; M mute',
+    releaseYear: 2026,
+    component: lazy(() => import('./littlepainter/LittlePainter')),
+  },
 ];
 
 /** Genre filter chips on the home page, in this order (only genres that have a playable game are shown). */
-export const GENRE_FILTERS: GameCategory[] = ['Puzzle', 'Arcade', 'Strategy', 'Classic Board'];
+export const GENRE_FILTERS: GameCategory[] = ['Puzzle', 'Arcade', 'Strategy', 'Classic Board', 'Kids'];
 
 export const genreSlug = (genre: GameCategory) => genre.toLowerCase().replace(/\s+/g, '-');
 

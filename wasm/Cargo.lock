@@ -85,6 +85,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "little_painter"
+version = "0.1.0"
+dependencies = [
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "ludo"
 version = "0.1.0"
 dependencies = [

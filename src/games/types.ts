@@ -1,6 +1,6 @@
 import type { ComponentType, LazyExoticComponent } from 'react';
 
-export type GameCategory = 'Puzzle' | 'Arcade' | 'Strategy' | 'Classic Board';
+export type GameCategory = 'Puzzle' | 'Arcade' | 'Strategy' | 'Classic Board' | 'Kids';
 export type GameStatus = 'playable' | 'coming-soon';
 
 /** Generated card art: a gradient, an accent colour and a big glyph. No images needed. */
