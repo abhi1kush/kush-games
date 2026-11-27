@@ -344,6 +344,18 @@ export const games: GameDefinition[] = [
     releaseYear: 2026,
     component: lazy(() => import('./littlepainter/LittlePainter')),
   },
+  {
+    id: 'alpine-sled',
+    title: 'Alpine Sled',
+    tagline: 'Glide a snowy mountain trail in 3D. Dodge, jump, fly.',
+    description: 'A 3D downhill sled run on an endless mountain trail. From just behind your wooden sled you glide down a snowy path that curves left and right and rolls over crests and dips, with snow-capped peaks, a soft sunrise sky, pines lining the slopes and snow falling. The sled goes downhill on its own and speeds up the further you get. Steer between pine trees, boulders, snowmen and fallen logs, hop the low ones, and hit the wooden ramps to fly over everything in a long arc, grabbing the golden stars that hang in the air. Gifts and stars add to your score, and a shield takes one hit for you. Your best score is saved, and a refresh brings your run back, paused, right where you left it. The trail, the sled, jumps, obstacles and scoring run in Rust compiled to WebAssembly.',
+    categories: ['Arcade'],
+    status: 'playable',
+    artwork: { gradientFrom: '#93b2d8', gradientTo: '#f3d9c9', accentColor: '#e48a72', glyph: '🛷' },
+    controls: '←/→ or A/D steer; Space, ↑ or W jump; P pause; M mute; Enter start; on phones drag the pad or the slope to steer, tap JUMP (or swipe up) to jump',
+    releaseYear: 2026,
+    component: lazy(() => import('./alpinesled/AlpineSled')),
+  },
 ];
 
 /** Genre filter chips on the home page, in this order (only genres that have a playable game are shown). */

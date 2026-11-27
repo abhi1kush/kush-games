@@ -24,6 +24,9 @@ import * as littlePainterModule from './little_painter/little_painter.js';
 import { PAINT_NAMES, PICTURES } from '../games/littlepainter/pictures';
 import { parseLittlePainterSave } from '../games/littlepainter/save';
 import { pictureMarkup } from '../games/littlepainter/svg';
+import * as alpineSledModule from './alpine_sled/alpine_sled.js';
+import { createRenderView as createSledView, EntityKind as SledKind, Events as SledEvents, Phase as SledPhase, RenderSlot as SledSlot } from '../games/alpinesled/engine';
+import { parseAlpineSledSave } from '../games/alpinesled/save';
 import { decodeMoves } from '../games/checkers/engine';
 import { RenderSlot } from '../games/breakout/engine';
 import { Buttons, Phase as KushJumpPhase, RenderSlot as KushJumpSlot } from '../games/kushjump/engine';
@@ -51,6 +54,7 @@ let paaniPourMemory: WebAssembly.Memory;
 let emberLaneMemory: WebAssembly.Memory;
 let pralayMemory: WebAssembly.Memory;
 let zombieRoadMemory: WebAssembly.Memory;
+let alpineSledMemory: WebAssembly.Memory;
 
 beforeAll(() => {
   breakoutMemory = breakoutModule.initSync({ module: wasmBytes('breakout') }).memory;
@@ -70,11 +74,12 @@ beforeAll(() => {
   ghatClimbModule.initSync({ module: wasmBytes('ghat_climb') });
   zombieRoadMemory = zombieRoadModule.initSync({ module: wasmBytes('zombie_road') }).memory;
   littlePainterModule.initSync({ module: wasmBytes('little_painter') });
+  alpineSledMemory = alpineSledModule.initSync({ module: wasmBytes('alpine_sled') }).memory;
 });
 
 describe('wasm bindings', () => {
   it('every game .wasm stays small (< 40 KB raw)', () => {
-    for (const name of ['breakout', 'checkers', 'connect_four', 'kush_jump', 'antariksh_defenders', 'mithai_match', 'ludo', 'snakes_ladders', 'fleet_clash', 'carrom', 'jal_path', 'paani_pour', 'ember_lane', 'pralay_run', 'ghat_climb', 'zombie_road', 'little_painter']) expect(wasmBytes(name).length, name).toBeLessThan(40 * 1024);
+    for (const name of ['breakout', 'checkers', 'connect_four', 'kush_jump', 'antariksh_defenders', 'mithai_match', 'ludo', 'snakes_ladders', 'fleet_clash', 'carrom', 'jal_path', 'paani_pour', 'ember_lane', 'pralay_run', 'ghat_climb', 'zombie_road', 'little_painter', 'alpine_sled']) expect(wasmBytes(name).length, name).toBeLessThan(40 * 1024);
   });
 
   it('Ghat Climb: gas rolls the jeep and burns fuel', () => {
@@ -508,6 +513,63 @@ describe('Little Painter wasm', () => {
     expect(parseLittlePainterSave({ bytes: [1, 2, 300, 4] })).toBeNull();
     expect(parseLittlePainterSave({ bytes: 'nope' })).toBeNull();
     painter.free();
+    restored.free();
+  });
+});
+
+describe('Alpine Sled wasm', () => {
+  it('the render layout matches, the sled steers, jumps, collects, crashes, and saves round-trip', () => {
+    expect(alpineSledModule.AlpineSled.render_length()).toBe(SledSlot.length);
+    const game = new alpineSledModule.AlpineSled(1234);
+    const view = createSledView(alpineSledMemory, game);
+    expect(view()[SledSlot.phase]).toBe(SledPhase.Ready);
+    game.start();
+    game.debug_clear_trail();
+    expect(view()[SledSlot.phase]).toBe(SledPhase.Playing);
+    expect(view()[SledSlot.segmentCount]).toBe(100);
+    expect(view()[SledSlot.playerRelativeZ]).toBeCloseTo(6, 3);
+    // steering right
+    game.set_input(2);
+    for (let frame = 0; frame < 30; frame++) game.advance(1 / 60);
+    game.set_input(0);
+    expect(view()[SledSlot.playerX]).toBeGreaterThan(2);
+    expect(view()[SledSlot.lean]).toBeGreaterThan(0.5);
+    // jumping lifts the sled
+    game.press_jump();
+    let events = 0;
+    for (let frame = 0; frame < 12; frame++) events |= game.advance(1 / 60);
+    expect(events & SledEvents.jump).toBeTruthy();
+    expect(view()[SledSlot.altitude]).toBeGreaterThan(0.5);
+    for (let frame = 0; frame < 60; frame++) game.advance(1 / 60);
+    expect(view()[SledSlot.altitude]).toBe(0);
+    // a gift right ahead
+    expect(game.debug_spawn(SledKind.Gift, 6, game.player_x(), 0)).toBe(true);
+    events = 0;
+    for (let frame = 0; frame < 60; frame++) events |= game.advance(1 / 60);
+    expect(events & SledEvents.gift).toBeTruthy();
+    expect(view()[SledSlot.gifts]).toBe(1);
+    expect(view()[SledSlot.score]).toBe(game.score());
+    expect(game.score()).toBeGreaterThan(Math.floor(game.distance()));
+    // save, restore elsewhere, identical
+    const bytes = game.save();
+    expect(parseAlpineSledSave({ bytes: Array.from(bytes) })).toEqual({ bytes: Array.from(bytes) });
+    const restored = new alpineSledModule.AlpineSled(1);
+    expect(restored.restore(bytes)).toBe(true);
+    expect([restored.distance(), restored.player_x(), restored.score(), restored.gifts(), restored.phase()]).toEqual([game.distance(), game.player_x(), game.score(), game.gifts(), game.phase()]);
+    expect(restored.restore(bytes.slice(0, 20))).toBe(false);
+    expect(parseAlpineSledSave({ bytes: [1, 2, 300, 4, 5, 6, 7, 8] })).toBeNull();
+    expect(parseAlpineSledSave({ bytes: 'nope' })).toBeNull();
+    // a pine dead ahead ends the run
+    expect(game.debug_spawn(SledKind.Pine, 8, game.player_x(), 0)).toBe(true);
+    events = 0;
+    for (let frame = 0; frame < 180; frame++) events |= game.advance(1 / 60);
+    expect(events & SledEvents.crash).toBeTruthy();
+    expect(events & SledEvents.gameOver).toBeTruthy();
+    expect(game.phase()).toBe(SledPhase.GameOver);
+    game.restart(99);
+    expect(game.phase()).toBe(SledPhase.Playing);
+    expect(game.distance()).toBe(0);
+    game.free();
     restored.free();
   });
 });

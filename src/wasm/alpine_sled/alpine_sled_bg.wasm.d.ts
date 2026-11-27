@@ -1,0 +1,35 @@
+/* tslint:disable */
+/* eslint-disable */
+export const memory: WebAssembly.Memory;
+export const __wbg_alpinesled_free: (a: number, b: number) => void;
+export const alpinesled_advance: (a: number, b: number) => number;
+export const alpinesled_altitude: (a: number) => number;
+export const alpinesled_collectibles: (a: number) => number;
+export const alpinesled_debug_clear_trail: (a: number) => void;
+export const alpinesled_debug_obstacles_ahead: (a: number, b: number) => number;
+export const alpinesled_debug_set_invincible: (a: number, b: number) => void;
+export const alpinesled_debug_spawn: (a: number, b: number, c: number, d: number, e: number) => number;
+export const alpinesled_debug_teleport: (a: number, b: number) => void;
+export const alpinesled_distance: (a: number) => number;
+export const alpinesled_gifts: (a: number) => number;
+export const alpinesled_has_shield: (a: number) => number;
+export const alpinesled_motion: (a: number) => number;
+export const alpinesled_new: (a: number) => number;
+export const alpinesled_phase: (a: number) => number;
+export const alpinesled_player_x: (a: number) => number;
+export const alpinesled_press_jump: (a: number) => void;
+export const alpinesled_render_length: () => number;
+export const alpinesled_render_pointer: (a: number) => number;
+export const alpinesled_restart: (a: number, b: number) => void;
+export const alpinesled_restore: (a: number, b: number, c: number) => number;
+export const alpinesled_save: (a: number, b: number) => void;
+export const alpinesled_score: (a: number) => number;
+export const alpinesled_seed: (a: number) => number;
+export const alpinesled_set_input: (a: number, b: number) => void;
+export const alpinesled_set_steer_axis: (a: number, b: number) => void;
+export const alpinesled_speed: (a: number) => number;
+export const alpinesled_stars: (a: number) => number;
+export const alpinesled_start: (a: number) => void;
+export const __wbindgen_export: (a: number, b: number) => number;
+export const __wbindgen_add_to_stack_pointer: (a: number) => number;
+export const __wbindgen_export2: (a: number, b: number, c: number) => void;
