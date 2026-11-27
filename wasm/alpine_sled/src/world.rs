@@ -38,6 +38,20 @@ pub const MILESTONE_METRES: f32 = 500.0;
 pub const CAMERA_BACK: f32 = 6.0;
 pub const CAMERA_HEIGHT: f32 = 2.5;
 pub const CRASH_PULLBACK: f32 = 5.0;
+/// The camera swings this share of the sled's sideways offset from the trail centre (the rest shows as the sled moving
+/// across the screen, which is what makes steering feel alive).
+pub const LATERAL_FOLLOW: f32 = 0.75;
+/// How quickly (per second) the camera eases toward that position.
+pub const LATERAL_FOLLOW_RATE: f32 = 9.0;
+/// The sled's centre is held within this share of half the screen on wide layouts.
+pub const SLED_SCREEN_COMFORT: f32 = 0.55;
+/// How far the drawn sled reaches sideways from its centre (metres): runners, rider, scarf and the shield bubble.
+pub const SLED_DRAWN_HALF_WIDTH: f32 = 1.05;
+/// The sled's drawn edges are held within this share of half the screen. On an upright phone the sled is big on
+/// screen, so this (not the comfort share above) is what holds it, and it sits a little closer to the middle there.
+pub const SLED_EDGE_KEEP: f32 = 0.88;
+/// Half the screen width ÷ the focal length for the narrowest layout (an upright phone); the page reports the real one.
+pub const NARROWEST_VIEW_HALF_WIDTH: f32 = 1.0 / 3.0;
 
 // ---------- the trail ahead ----------
 pub const RAMP_LENGTH: f32 = 4.5;
@@ -184,6 +198,8 @@ pub struct World {
     pub camera_lift: f32,
     /// After a wipeout the camera eases back and up so the sled and what it hit are both in view.
     pub camera_pullback: f32,
+    /// Half the screen width ÷ the focal length of the page's current layout (not saved: it belongs to the screen).
+    pub view_half_width: f32,
     pub accumulated_seconds: f32,
     pub debug_invincible: bool,
 }
@@ -223,6 +239,7 @@ impl World {
             camera_offset: 0.0,
             camera_lift: 0.0,
             camera_pullback: 0.0,
+            view_half_width: NARROWEST_VIEW_HALF_WIDTH,
             accumulated_seconds: 0.0,
             debug_invincible: false,
         };
@@ -433,14 +450,40 @@ impl World {
     }
 
     fn step_camera(&mut self, seconds: f32) {
-        let follow = (8.0 * seconds).min(1.0);
-        self.camera_offset += (self.player_x * 0.8 - self.camera_offset) * follow;
+        let follow = (LATERAL_FOLLOW_RATE * seconds).min(1.0);
+        self.camera_offset += (self.player_x * LATERAL_FOLLOW - self.camera_offset) * follow;
         self.camera_lift += (self.altitude * 0.45 - self.camera_lift) * (6.0 * seconds).min(1.0);
         let pullback = if matches!(self.phase, Phase::Crashing | Phase::GameOver) { CRASH_PULLBACK } else { 0.0 };
         self.camera_pullback += (pullback - self.camera_pullback) * (3.0 * seconds).min(1.0);
+        self.camera_offset = self.held_camera_offset();
     }
 
-    pub fn camera_x(&self) -> f64 { self.track.center_x(self.camera_z()) + self.camera_offset as f64 }
+    /// Tell the world how wide the screen is (half width ÷ focal length) so the camera can keep the sled inside it.
+    pub fn set_view_half_width(&mut self, view_half_width: f32) {
+        self.view_half_width = if view_half_width.is_finite() { limit(view_half_width, 0.12, 3.0) } else { NARROWEST_VIEW_HALF_WIDTH };
+    }
+
+    /// How far (metres) the sled may sit sideways from the camera before it would leave the comfortable middle of the screen.
+    pub fn sled_reach(&self) -> f32 {
+        let half_view_metres = self.view_half_width * (CAMERA_BACK + self.camera_pullback); // half the screen, at the sled
+        (half_view_metres * SLED_SCREEN_COMFORT).min(half_view_metres * SLED_EDGE_KEEP - SLED_DRAWN_HALF_WIDTH).max(0.0)
+    }
+
+    /// The camera's sideways offset from the trail centre under the sled, held close enough to the sled to keep it on screen.
+    fn held_camera_offset(&self) -> f32 {
+        let reach = self.sled_reach();
+        limit(self.camera_offset, self.player_x - reach, self.player_x + reach)
+    }
+
+    /// The sled's sideways screen position as a share of half the screen (0 = centre, ±1 = an edge).
+    pub fn sled_screen_share(&self) -> f32 {
+        let relative_x = self.track.center_x(self.player_z) + self.player_x as f64 - self.camera_x();
+        (relative_x / (self.player_z - self.camera_z())) as f32 / self.view_half_width
+    }
+
+    /// The camera sits behind the sled but measures its sideways position from the trail centre *under the sled*, so a
+    /// curve never drags the sled toward the edge of the screen; only steering moves it, and that is held in check.
+    pub fn camera_x(&self) -> f64 { self.track.center_x(self.player_z) + self.held_camera_offset() as f64 }
     /// The camera rides a fixed height above the snow under the sled (so the sled stays put on screen over crests and dips).
     pub fn camera_y(&self) -> f64 { self.track.height(self.player_z) + (CAMERA_HEIGHT + self.camera_lift + self.camera_pullback * 0.35) as f64 }
 
@@ -626,7 +669,7 @@ impl World {
     /// Rebuild a run from `save()` bytes. The world is unchanged if the bytes are not a valid save.
     /// A restored run is in the Playing phase (the screen shows it paused until the player resumes).
     pub fn restore(&mut self, bytes: &[u8]) -> bool {
-        match World::parse(bytes) { Some(world) => { *self = world; true } None => false }
+        match World::parse(bytes) { Some(mut world) => { world.view_half_width = self.view_half_width; *self = world; true } None => false }
     }
 
     fn parse(bytes: &[u8]) -> Option<World> {

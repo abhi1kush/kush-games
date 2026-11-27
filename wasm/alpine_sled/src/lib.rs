@@ -86,7 +86,9 @@ impl AlpineSled {
     pub fn start(&mut self) { self.world.start(); self.fill_render(); }
     /// A brand-new run on a new trail, straight into play.
     pub fn restart(&mut self, seed: u32) {
+        let view_half_width = self.world.view_half_width;
         self.world = World::new(seed);
+        self.world.set_view_half_width(view_half_width);
         self.world.start();
         self.fill_render();
     }
@@ -157,6 +159,10 @@ impl AlpineSled {
         render[ENTITY_COUNT] = count as f32;
     }
 
+    /// The page's layout: half the screen width ÷ the focal length, so the camera keeps the sled on screen.
+    pub fn set_view_half_width(&mut self, view_half_width: f32) { self.world.set_view_half_width(view_half_width); self.fill_render(); }
+    /// The sled's sideways screen position as a share of half the screen (0 = centre, ±1 = an edge).
+    pub fn sled_screen_share(&self) -> f32 { self.world.sled_screen_share() }
     pub fn render_pointer(&self) -> *const f32 { self.render.as_ptr() }
     pub fn render_length() -> u32 { render_slot::LENGTH as u32 }
 

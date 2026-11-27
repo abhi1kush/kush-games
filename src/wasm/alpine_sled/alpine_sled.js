@@ -200,6 +200,21 @@ export class AlpineSled {
         wasm.alpinesled_set_steer_axis(this.__wbg_ptr, axis);
     }
     /**
+     * The page's layout: half the screen width ÷ the focal length, so the camera keeps the sled on screen.
+     * @param {number} view_half_width
+     */
+    set_view_half_width(view_half_width) {
+        wasm.alpinesled_set_view_half_width(this.__wbg_ptr, view_half_width);
+    }
+    /**
+     * The sled's sideways screen position as a share of half the screen (0 = centre, ±1 = an edge).
+     * @returns {number}
+     */
+    sled_screen_share() {
+        const ret = wasm.alpinesled_sled_screen_share(this.__wbg_ptr);
+        return ret;
+    }
+    /**
      * @returns {number}
      */
     speed() {

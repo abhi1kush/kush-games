@@ -47,15 +47,25 @@ export interface Scene {
   flakes: Float32Array; // x (0..1), y (0..1), depth, phase per flake
   lastPhase: number;
   shake: number;
+  /** screen x range (pixels) covered by the sled and rider in the last frame drawn */
+  sledLeft: number;
+  sledRight: number;
 }
 
 const SPRAY_STRIDE = 7;
 
-export function createScene(context: CanvasRenderingContext2D, width: number, height: number, sprites: Sprites): Scene {
+/** The view for a canvas size: horizon line, focal length (pixels per metre at 1 m), and half the width ÷ the focal
+ *  length, which the wasm camera uses to keep the sled inside the screen. */
+export function viewGeometry(width: number, height: number) {
   const isPortrait = height > width * 1.05;
   // upright phones look down a narrower, closer view so the sled sits low on the screen like it does on a computer
   const horizonY = Math.round(height * (isPortrait ? 0.36 : 0.35));
   const focal = isPortrait ? Math.min(width * 1.5, height * 0.95) : Math.min(width * 0.9, height * 1.05);
+  return { horizonY, focal, viewHalfWidth: width / 2 / focal };
+}
+
+export function createScene(context: CanvasRenderingContext2D, width: number, height: number, sprites: Sprites): Scene {
+  const { horizonY, focal } = viewGeometry(width, height);
   const flakes = new Float32Array(FLAKE_COUNT * 4);
   let seed = 99;
   const random = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
@@ -86,6 +96,8 @@ export function createScene(context: CanvasRenderingContext2D, width: number, he
     flakes,
     lastPhase: -1,
     shake: 0,
+    sledLeft: 0,
+    sledRight: 0,
   };
 }
 
@@ -293,6 +305,8 @@ function sledPoint(scene: Scene, pose: SledPose, modelX: number, modelY: number,
   const rolledX = modelX * cosine + modelY * sine;
   const rolledY = -modelX * sine + modelY * cosine;
   project(scene, pose.baseX + rolledX + modelZ * pose.yaw, pose.baseY + rolledY + modelZ * pose.slope, pose.baseZ + modelZ, sledPoints, 0);
+  if (sledPoints[0] < scene.sledLeft) scene.sledLeft = sledPoints[0];
+  if (sledPoints[0] > scene.sledRight) scene.sledRight = sledPoints[0];
   return sledPoints;
 }
 
@@ -314,6 +328,8 @@ const TORSO_RIGHT = [[0, 0.3, -0.42], [0.3, 0.3, -0.4], [0.24, 0.84, -0.18], [0,
 
 function drawSled(scene: Scene, render: Float32Array, clock: number) {
   const { context } = scene;
+  scene.sledLeft = Infinity;
+  scene.sledRight = -Infinity;
   const phase = render[RenderSlot.phase] as Phase;
   const phaseSeconds = render[RenderSlot.phaseSeconds];
   const lean = render[RenderSlot.lean];
@@ -413,8 +429,10 @@ function drawSled(scene: Scene, render: Float32Array, clock: number) {
     context.lineWidth = Math.max(1, 0.035 * scale);
     context.stroke();
   } else {
-    // wiped out: the rider sits up in the snow beside the sled
-    const seat = sledPoint(scene, { ...pose, roll: 0 }, 1.3, 0, 0.2);
+    // wiped out: the rider sits up in the snow beside the sled, on the side toward the middle of the screen
+    const seat = sledPoint(scene, { ...pose, roll: 0 }, pose.baseX > 0 ? -1.3 : 1.3, 0, 0.2);
+    scene.sledLeft = Math.min(scene.sledLeft, seat[0] - 0.3 * scale);
+    scene.sledRight = Math.max(scene.sledRight, seat[0] + 0.3 * scale);
     context.fillStyle = PALETTE.coat;
     context.beginPath(); context.ellipse(seat[0], seat[1] - 0.35 * scale, 0.3 * scale, 0.38 * scale, 0.2, 0, Math.PI * 2); context.fill();
     context.fillStyle = PALETTE.hat;
@@ -426,11 +444,13 @@ function drawSled(scene: Scene, render: Float32Array, clock: number) {
   }
   context.globalAlpha = 1;
   if (render[RenderSlot.shield] > 0) {
-    const center = sledPoint(scene, pose, 0, 0.62, 0);
+    const center = sledPoint(scene, { ...pose, roll: 0 }, 0, 0.62, 0); // the bubble stays upright around the leaning rider
     const shimmer = 1 + Math.sin(clock * 5) * 0.04;
     context.fillStyle = `${PALETTE.shield}0.16)`;
     context.strokeStyle = `${PALETTE.shield}0.75)`;
     context.lineWidth = Math.max(1.5, 0.04 * scale);
+    scene.sledLeft = Math.min(scene.sledLeft, center[0] - 0.95 * scale * shimmer);
+    scene.sledRight = Math.max(scene.sledRight, center[0] + 0.95 * scale * shimmer);
     context.beginPath(); context.ellipse(center[0], center[1], 0.95 * scale * shimmer, 0.85 * scale * shimmer, 0, 0, Math.PI * 2); context.fill(); context.stroke();
   }
 }

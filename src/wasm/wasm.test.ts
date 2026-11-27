@@ -27,6 +27,7 @@ import { pictureMarkup } from '../games/littlepainter/svg';
 import * as alpineSledModule from './alpine_sled/alpine_sled.js';
 import { createRenderView as createSledView, EntityKind as SledKind, Events as SledEvents, Phase as SledPhase, RenderSlot as SledSlot } from '../games/alpinesled/engine';
 import { parseAlpineSledSave } from '../games/alpinesled/save';
+import { viewGeometry as sledViewGeometry } from '../games/alpinesled/scene';
 import { decodeMoves } from '../games/checkers/engine';
 import { RenderSlot } from '../games/breakout/engine';
 import { Buttons, Phase as KushJumpPhase, RenderSlot as KushJumpSlot } from '../games/kushjump/engine';
@@ -518,6 +519,34 @@ describe('Little Painter wasm', () => {
 });
 
 describe('Alpine Sled wasm', () => {
+  it('keeps the drawn sled inside the screen on every frame in every layout, through hard swerves, jumps and ramps', () => {
+    // canvas sizes the page really uses: desktop 16:10, square, phone landscape, phone portrait, small phone portrait
+    for (const [width, height] of [[1512, 945], [900, 900], [1266, 400], [567, 891], [450, 588]]) {
+      const { focal, viewHalfWidth } = sledViewGeometry(width, height);
+      const game = new alpineSledModule.AlpineSled(4242);
+      const view = createSledView(alpineSledMemory, game);
+      game.set_view_half_width(viewHalfWidth);
+      game.start();
+      game.debug_set_invincible(true);
+      game.debug_teleport(600); // well into the curves
+      let widest = 0;
+      for (let frame = 0; frame < 60 * 40; frame++) {
+        game.set_steer_axis(Math.floor(frame / 45) % 3 === 0 ? -1 : 1); // flick hard both ways, with long holds against the banks
+        if (frame % 150 === 0) game.press_jump();
+        if (frame % 600 === 300) game.debug_spawn(SledKind.Ramp, 18, game.player_x(), 0);
+        game.advance(1 / 60);
+        const render = view();
+        const scale = focal / render[SledSlot.playerRelativeZ];
+        const centre = width / 2 + render[SledSlot.playerRelativeX] * scale;
+        const drawnHalfWidth = 1.05 * scale; // runners, rider, scarf and the shield bubble (SLED_DRAWN_HALF_WIDTH)
+        expect(centre - drawnHalfWidth, `${width}×${height} frame ${frame}`).toBeGreaterThan(width * 0.03);
+        expect(centre + drawnHalfWidth, `${width}×${height} frame ${frame}`).toBeLessThan(width * 0.97);
+        widest = Math.max(widest, Math.abs(centre - width / 2) / (width / 2));
+      }
+      expect(widest, `${width}×${height}: the sled still moves across the screen`).toBeGreaterThan(0.15);
+      game.free();
+    }
+  });
   it('the render layout matches, the sled steers, jumps, collects, crashes, and saves round-trip', () => {
     expect(alpineSledModule.AlpineSled.render_length()).toBe(SledSlot.length);
     const game = new alpineSledModule.AlpineSled(1234);

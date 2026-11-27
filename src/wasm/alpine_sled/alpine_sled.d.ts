@@ -47,6 +47,14 @@ export class AlpineSled {
      * Analog steering from a drag (-1 … 1), added to the buttons.
      */
     set_steer_axis(axis: number): void;
+    /**
+     * The page's layout: half the screen width ÷ the focal length, so the camera keeps the sled on screen.
+     */
+    set_view_half_width(view_half_width: number): void;
+    /**
+     * The sled's sideways screen position as a share of half the screen (0 = centre, ±1 = an edge).
+     */
+    sled_screen_share(): number;
     speed(): number;
     stars(): number;
     start(): void;
@@ -82,6 +90,8 @@ export interface InitOutput {
     readonly alpinesled_seed: (a: number) => number;
     readonly alpinesled_set_input: (a: number, b: number) => void;
     readonly alpinesled_set_steer_axis: (a: number, b: number) => void;
+    readonly alpinesled_set_view_half_width: (a: number, b: number) => void;
+    readonly alpinesled_sled_screen_share: (a: number) => number;
     readonly alpinesled_speed: (a: number) => number;
     readonly alpinesled_stars: (a: number) => number;
     readonly alpinesled_start: (a: number) => void;

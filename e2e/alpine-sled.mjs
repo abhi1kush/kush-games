@@ -2,7 +2,9 @@
 // sky over snow, the sled in front), start, steering both ways, jumping off the snow, a ramp launch over obstacles with the
 // air stars, gifts and the shield, distance and score rising, pause (with the controls card), mute, a run restored paused
 // through a reload, a crash into a pine ending the run and Play again starting clean, frame times (also at 4× CPU slowdown),
-// both hub themes, and the phone layouts (portrait with drag pad + JUMP, swipe-up and drag on the slope; landscape).
+// both hub themes, the phone layouts (portrait with drag pad + JUMP, swipe-up and drag on the slope; landscape), and a
+// camera stress test in every layout (hard left/right swerves through curves, jumps, a ramp, pause, turning the phone,
+// a wipeout at the bank and a restart) checking the sled is drawn inside the screen on every frame.
 // Usage: node e2e/alpine-sled.mjs [siteUrl] [screenshotDirectory]
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
@@ -86,6 +88,58 @@ const sceneColors = page => page.evaluate(() => {
   }
   return { distinct: colors.size, blankShare: blank / samples, sky: band(0.02, 0.12), snow: band(0.85, 0.98), woodShare: wood / samples, width, height };
 });
+/** Where the sled was drawn over the frames since resetPerf (shares of the screen width: 0 = left edge, 1 = right edge). */
+const sledBounds = page => page.evaluate(() => {
+  const { perf } = window.__sledTest;
+  const frames = Math.min(perf.count, perf.sledLeft.length);
+  let left = 1, right = 0, share = 0, widest = 0;
+  for (let index = 0; index < frames; index++) {
+    left = Math.min(left, perf.sledLeft[index]); right = Math.max(right, perf.sledRight[index]);
+    share = Math.max(share, Math.abs(perf.sledShare[index])); widest = Math.max(widest, perf.sledRight[index] - perf.sledLeft[index]);
+  }
+  return { frames, left, right, share, widest };
+});
+/** Every frame must draw the whole sled (and rider, shield bubble) inside the screen with room to spare. */
+const SLED_EDGE_MARGIN = 0.03;
+const checkSledInside = async (page, label) => {
+  const bounds = await sledBounds(page);
+  check(bounds.frames >= 20 && bounds.left >= SLED_EDGE_MARGIN && bounds.right <= 1 - SLED_EDGE_MARGIN,
+    `${label}: the sled stays inside the screen on all ${bounds.frames} frames (drawn between ${(bounds.left * 100).toFixed(1)}% and ${(bounds.right * 100).toFixed(1)}% of the width; centre at most ${(bounds.share * 100).toFixed(0)}% of half the screen off-centre, sled ${(bounds.widest * 100).toFixed(0)}% of the width)`);
+  return bounds;
+};
+/** Hard left/right steering through the curves (flicks and long holds against both banks), jumps, a ramp and a pause,
+ *  with real key presses, checking where the sled is drawn on every frame. */
+const cameraStress = async (page, label, startMetres) => {
+  await game(page, `game.debug_set_invincible(true); game.debug_teleport(${startMetres})`);
+  await page.waitForTimeout(250);
+  await resetPerf(page);
+  let widest = 0;
+  const swings = [['ArrowRight', 1400], ['ArrowLeft', 2000], ['ArrowRight', 220], ['ArrowLeft', 220], ['ArrowRight', 260], ['ArrowLeft', 1600], ['d', 1900], ['a', 400]];
+  for (const [index, [key, milliseconds]] of swings.entries()) {
+    if (index === 2) await game(page, 'game.debug_spawn(4, 16, game.player_x(), 0)'); // a ramp straight ahead mid-swerve
+    await page.keyboard.down(key);
+    if (index % 2 === 1) { await page.waitForTimeout(milliseconds / 2); await page.keyboard.press(' '); await page.waitForTimeout(milliseconds / 2); }
+    else await page.waitForTimeout(milliseconds);
+    await page.keyboard.up(key);
+    widest = Math.max(widest, Math.abs((await state(page)).x));
+  }
+  // pause mid-swerve and resume: nothing jumps, and the camera carries on
+  await page.keyboard.down('ArrowRight');
+  await page.waitForTimeout(500);
+  await page.keyboard.press('p');
+  await page.keyboard.up('ArrowRight');
+  const pausedShare = await game(page, 'return game.sled_screen_share()');
+  await page.waitForTimeout(400);
+  check(await game(page, 'return game.sled_screen_share()') === pausedShare && Math.abs(pausedShare) <= 0.6, `${label}: paused mid-swerve, the sled holds still on screen (${pausedShare.toFixed(2)})`);
+  await page.keyboard.press('p');
+  await page.keyboard.down('ArrowLeft');
+  await page.waitForTimeout(900);
+  await page.keyboard.up('ArrowLeft');
+  await page.waitForTimeout(500);
+  check(widest > 5, `${label}: steering reached the banks (|x| ${widest.toFixed(1)} m)`);
+  return checkSledInside(page, label);
+};
+
 const shot = async (page, name) => {
   const path = `${screenshotDirectory}/${name}`;
   await page.screenshot({ path });
@@ -172,17 +226,21 @@ try {
   await game(page, 'game.debug_clear_trail(); game.debug_spawn(5, 12, game.player_x(), 0)');
   check(await waitFor(async () => await page.getByTestId('sled-gifts').textContent() === '1', 3000), 'riding over a gift collects it (HUD 🎁 1)');
 
-  // a ramp: a long high arc over a pine, collecting the stars hanging in the air
-  await game(page, 'game.debug_clear_trail(); const x = game.player_x(); game.debug_spawn(4, 22, x, 0); game.debug_spawn(0, 32.5, x, 0); for (const ahead of [29.5, 33.5, 37.5]) game.debug_spawn(6, ahead, x, 3);');
+  // a ramp: a long high arc over a pine, collecting the stars hanging in the air (spawned once the sled is settled on the snow)
+  check(await waitFor(async () => { const now = await state(page); return now.motion === 0 && now.altitude === 0; }, 3000), 'the sled is sliding before the ramp');
+  await page.waitForTimeout(300);
+  // (back near the top, where the trail is still straight: on a bend the sled drifts sideways and could miss the ramp)
+  await game(page, 'game.debug_teleport(5); game.debug_clear_trail(); const x = game.player_x(); game.debug_spawn(4, 22, x, 0); game.debug_spawn(0, 32.5, x, 0); for (const ahead of [29.5, 33.5, 37.5]) game.debug_spawn(6, ahead, x, 3);');
+  const rampPeakSoFar = peak(page, 'game.altitude()', 4000); // sampled from the spawn on, while the screenshot is taken
   await page.waitForTimeout(250);
   await shot(page, 'ramp-ahead-desktop.png');
-  const rampPeak = await peak(page, 'game.altitude()', 3000);
+  const rampPeak = await rampPeakSoFar;
   const afterRamp = await state(page);
   check(rampPeak > 3.2, `the ramp launches the sled high (peak ${rampPeak.toFixed(2)} m, higher than a pine)`);
   check(afterRamp.stars === 3 && String(afterRamp.phase) === Phase.playing, `flies over the pine and grabs all 3 air stars (stars ${afterRamp.stars})`);
 
   // the shield: picked up, then absorbs one real hit
-  await game(page, 'game.debug_set_invincible(false); game.debug_clear_trail(); game.debug_spawn(7, 10, game.player_x(), 0)');
+  await game(page, 'game.debug_set_invincible(false); game.debug_teleport(5); game.debug_clear_trail(); game.debug_spawn(7, 10, game.player_x(), 0)');
   check(await waitFor(async () => (await state(page)).shield && await page.getByTestId('sled-shield').isVisible(), 3000), 'a shield is picked up (HUD 🛡️)');
   await game(page, 'game.debug_clear_trail(); game.debug_spawn(1, 10, game.player_x(), 0)');
   check(await waitFor(async () => !(await state(page)).shield, 3000) && String((await state(page)).phase) === Phase.playing, 'the shield takes the boulder hit and the run goes on');
@@ -201,6 +259,8 @@ try {
   const normalPerf = await readPerf(page);
   perfReport.desktop = { work: summarize(normalPerf.work), frame: summarize(normalPerf.frame) };
   check(perfReport.desktop.work.p95 < 8, `desktop frame work p95 ${perfReport.desktop.work.p95} ms (avg ${perfReport.desktop.work.average})`);
+  await cameraStress(page, 'desktop camera stress', 1400); // further than the scenic stretch, so the best score still comes from the final run
+  await game(page, 'game.debug_teleport(game.distance() + 20)'); // a clear stretch just ahead for the pause and reload checks (the reloaded run is not invincible)
   const cdp = await desktop.newCDPSession(page);
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
   await resetPerf(page);
@@ -249,7 +309,8 @@ try {
   check((await state(page)).distance > restored.distance + 5, 'Enter carries on from there');
 
   // crash into a pine: game over, then Play again starts clean
-  await game(page, 'game.debug_set_invincible(false); game.debug_clear_trail(); game.debug_spawn(0, 14, game.player_x(), 0)');
+  // (a short wall of pines across the sled's path, so a bend's sideways drift cannot carry it past)
+  await game(page, 'game.debug_set_invincible(false); game.debug_clear_trail(); const x = game.player_x(); for (const offset of [-2.4, -1.2, 0, 1.2, 2.4]) game.debug_spawn(0, 14, x + offset, 0)');
   check(await waitFor(async () => await phaseOf(page) === Phase.crashing, 3000), 'hitting a pine wipes out');
   await page.waitForTimeout(250);
   await shot(page, 'crash-desktop.png');
@@ -348,6 +409,14 @@ try {
   const phonePerf = await readPerf(mobile);
   perfReport.phone = { work: summarize(phonePerf.work), frame: summarize(phonePerf.frame) };
   check(perfReport.phone.work.p95 < 8, `phone frame work p95 ${perfReport.phone.work.p95} ms`);
+  await cameraStress(mobile, 'phone portrait camera stress', 700);
+  // turn the phone sideways and back mid-run: the camera adapts to each layout at once
+  await mobile.setViewportSize({ width: 844, height: 390 });
+  await mobile.waitForTimeout(300);
+  await cameraStress(mobile, 'phone turned sideways camera stress', 1300);
+  await mobile.setViewportSize({ width: 390, height: 844 });
+  await mobile.waitForTimeout(300);
+  await cameraStress(mobile, 'phone turned back upright camera stress', 1900);
   await mobile.getByTestId('sled-pause').tap();
   await mobile.getByTestId('sled-controls-toggle').tap();
   check(await mobile.getByTestId('sled-pause-controls').isVisible() && await mobile.getByTestId('alpine-sled').getAttribute('data-paused') === 'true' && await noOverflow(mobile),
@@ -376,7 +445,42 @@ try {
     && landscapePad.x >= landscapeStage.x - 1 && await noOverflow(landscape),
     `phone landscape: ${Math.round(landscapeStage.width)}×${Math.round(landscapeStage.height)} view fills the screen, pad and JUMP on its corners`);
   await shot(landscape, 'mobile-landscape-run.png');
+  await cameraStress(landscape, 'phone landscape camera stress', 800);
   await sideways.close();
+
+  // ---------- a small, narrow phone (portrait), with a shield bubble on, through a wipeout and a restart ----------
+  const small = await browser.newContext({ viewport: { width: 320, height: 568 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+  const narrow = await small.newPage();
+  watchErrors(narrow);
+  await narrow.goto(gameUrl, { waitUntil: 'networkidle' });
+  await narrow.evaluate(() => localStorage.clear());
+  await narrow.reload({ waitUntil: 'networkidle' });
+  await narrow.getByTestId('sled-canvas').waitFor();
+  await narrow.getByTestId('touch-jump').dispatchEvent('pointerdown', tapPointer);
+  check(await waitFor(async () => await phaseOf(narrow) === Phase.playing, 1500), 'small phone: the run starts');
+  await game(narrow, 'game.debug_set_invincible(true); game.debug_clear_trail(); game.debug_spawn(7, 8, game.player_x(), 0)');
+  check(await waitFor(async () => (await state(narrow)).shield, 3000), 'small phone: shield on');
+  await cameraStress(narrow, 'small phone (320 px) camera stress with the shield bubble', 1500);
+  await shot(narrow, 'camera-stress-small-phone.png');
+  // hold against the right bank on a curve, then wipe out there: the pulled-back camera keeps sled and rider in view
+  await game(narrow, 'game.debug_teleport(2100)');
+  await narrow.keyboard.down('ArrowRight');
+  await narrow.waitForTimeout(1500);
+  await resetPerf(narrow);
+  await game(narrow, 'game.debug_set_invincible(false); game.debug_clear_trail(); const x = game.player_x(); for (const ahead of [9, 30, 50, 70]) game.debug_spawn(1, ahead, x, 0)'); // the shield takes the first
+  check(await waitFor(async () => await phaseOf(narrow) === Phase.gameOver, 6000), 'small phone: wiping out against the bank ends the run');
+  await narrow.keyboard.up('ArrowRight');
+  await narrow.waitForTimeout(300);
+  await checkSledInside(narrow, 'small phone wipeout at the bank');
+  await shot(narrow, 'camera-wipeout-small-phone.png');
+  await narrow.getByTestId('sled-new-game').click();
+  check(await waitFor(async () => await phaseOf(narrow) === Phase.playing, 1500), 'small phone: Play again');
+  await resetPerf(narrow);
+  await narrow.waitForTimeout(600);
+  const restartShare = await game(narrow, 'return game.sled_screen_share()');
+  const restartBounds = await checkSledInside(narrow, 'small phone after restart');
+  check(Math.abs(restartShare) < 0.05 && Math.abs((restartBounds.left + restartBounds.right) / 2 - 0.5) < 0.08, `small phone: a restart starts with the sled centred (${restartShare.toFixed(2)})`);
+  await small.close();
 } finally {
   await browser.close();
 }

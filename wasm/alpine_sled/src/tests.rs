@@ -459,3 +459,130 @@ fn hitches_are_dropped_and_slow_frames_capped() {
     assert!(world.player_z - before < (MAX_FRAME_SECONDS_FOR_TEST * world.speed + 0.2) as f64, "a slow frame is capped");
 }
 const MAX_FRAME_SECONDS_FOR_TEST: f32 = 0.05;
+
+// ---------- the chase camera keeps the sled on screen ----------
+/// The sled's sideways screen position as a share of half the screen (0 = centre, ±1 = the left/right edge) for a
+/// view whose half width is `view_half_width` × the focal length (1/3 is an upright phone, the narrowest layout).
+fn sled_screen_share(world: &World, view_half_width: f32) -> f32 {
+    let relative_x = world.track.center_x(world.player_z) + world.player_x as f64 - world.camera_x();
+    let relative_z = world.player_z - world.camera_z();
+    (relative_x / relative_z) as f32 / view_half_width
+}
+
+/// Hard left/right steering on the sharpest curves, with jumps, ramps and edge scraping, in every layout:
+/// the sled must stay well inside the screen on every single step.
+#[test]
+fn the_camera_keeps_the_sled_well_inside_the_screen_on_every_step() {
+    // desktop widescreen, square, phone landscape, phone portrait (half width / focal)
+    for view_half_width in [0.56_f32, 0.48, 0.56, 1.0 / 3.0] {
+        for seed in [3_u32, 11, 29, 47, 90] {
+            let mut world = World::new(seed);
+            world.set_view_half_width(view_half_width);
+            world.start();
+            world.debug_invincible = true;
+            let mut worst: f32 = 0.0;
+            let mut clock = 0.0_f32;
+            let mut steps = 0_u32;
+            while world.distance() < 2500.0 {
+                // swing hard from one bank to the other, sometimes holding against the edge, sometimes flicking fast
+                let pattern = (clock * 0.37).sin() * 3.0 + (clock * 2.9).sin();
+                world.steer_axis = if pattern > 0.4 { 1.0 } else if pattern < -0.4 { -1.0 } else { 0.0 };
+                if steps % 290 == 0 { world.press_jump(); }
+                if steps % 1700 == 0 {
+                    let ahead = world.player_z + 25.0;
+                    world.spawn(EntityKind::Ramp, ahead, world.player_x, 0.0);
+                }
+                world.step(STEP_SECONDS);
+                clock += STEP_SECONDS;
+                steps += 1;
+                let share = sled_screen_share(&world, view_half_width).abs();
+                worst = worst.max(share);
+                // the drawn sled's outer edge, as a share of half the screen
+                let half_view_metres = view_half_width * (world.player_z - world.camera_z()) as f32;
+                let edge = share + SLED_DRAWN_HALF_WIDTH / half_view_metres;
+                assert!(edge <= 0.9, "seed {seed}, view {view_half_width}: the sled's edge reached {edge:.2} of half the screen");
+            }
+            assert!(worst <= 0.6, "seed {seed}, view {view_half_width}: the sled reached {worst:.2} of half the screen");
+            assert!(worst > 0.15, "the camera should not glue the sled dead centre ({worst:.2})");
+        }
+    }
+}
+
+/// The camera catches up promptly after a swerve (no stuck offset), through a crash, a pause, a reload and a restart.
+#[test]
+fn the_camera_recentres_after_swerves_crashes_reloads_and_restarts() {
+    let view = 1.0 / 3.0;
+    let mut world = open_trail(17);
+    world.set_view_half_width(view);
+    world.teleport(400.0);
+    world.clear_entities();
+    world.steer_axis = 1.0;
+    run(&mut world, 2.0);
+    world.steer_axis = 0.0;
+    run(&mut world, 1.0);
+    let settled = world.camera_offset;
+    let reach = world.sled_reach();
+    let target = limit(world.player_x * LATERAL_FOLLOW, world.player_x - reach, world.player_x + reach);
+    assert!((settled - target).abs() < 0.1, "the camera settles behind the sled ({settled} vs {target})");
+    // swerve back across: within half a second the camera has turned with it (not stuck on the old side)
+    world.steer_axis = -1.0;
+    run(&mut world, 1.6);
+    world.steer_axis = 0.0;
+    run(&mut world, 0.5);
+    assert!(world.player_x < -3.0 && world.camera_offset < -2.0, "the camera followed the swerve ({} / {})", world.player_x, world.camera_offset);
+    assert!(world.sled_screen_share().abs() <= 0.6);
+    // a pause is just no steps: the picture is unchanged, and resuming continues smoothly
+    let before = sled_screen_share(&world, view);
+    assert_eq!(before, sled_screen_share(&world, view));
+    // reload: the camera comes back where it was and stays inside the screen
+    let bytes = world.save();
+    let mut restored = World::new(1);
+    restored.set_view_half_width(view);
+    assert!(restored.restore(&bytes));
+    assert!((sled_screen_share(&restored, view) - before).abs() < 1e-4);
+    // a save from a wider screen, opened on a phone, still shows the sled inside (clamped at once, before any step)
+    let mut wide = open_trail(18);
+    wide.set_view_half_width(0.56);
+    wide.teleport(400.0);
+    wide.clear_entities();
+    wide.camera_offset = -6.0; // worst possible stale offset
+    wide.player_x = SIDE_LIMIT;
+    wide.set_view_half_width(view);
+    assert!(sled_screen_share(&wide, view).abs() <= 0.6);
+    // a crash pulls the camera back but keeps the sled in view
+    let ahead = world.player_z + 8.0;
+    world.spawn(EntityKind::Pine, ahead, world.player_x, 0.0);
+    let (_, _) = run_until(&mut world, 4.0, |world, _| { assert!(sled_screen_share(world, view).abs() <= 0.6); world.phase == Phase::GameOver });
+    assert_eq!(world.phase, Phase::GameOver);
+    // a restart starts centred
+    let fresh = World::new(5);
+    assert_eq!(sled_screen_share(&fresh, view), 0.0);
+}
+
+/// The same promise as the page sees it: the render buffer's sled position, projected for an upright phone, every frame.
+#[test]
+fn the_render_buffer_keeps_the_sled_inside_a_phone_screen_every_frame() {
+    let view = 1.0 / 3.0;
+    let mut game = AlpineSled::new(61);
+    game.set_view_half_width(view);
+    game.start();
+    game.debug_set_invincible(true);
+    let length = AlpineSled::render_length() as usize;
+    let mut worst: f32 = 0.0;
+    for frame in 0..60 * 90 {
+        let axis = if (frame / 50) % 2 == 0 { 1.0 } else { -1.0 }; // flick hard left and right
+        game.set_steer_axis(axis);
+        if frame % 170 == 0 { game.press_jump(); }
+        game.advance(1.0 / 60.0);
+        let render = unsafe { std::slice::from_raw_parts(game.render_pointer(), length) };
+        let share = render[render_slot::PLAYER_RELATIVE_X] / render[render_slot::PLAYER_RELATIVE_Z] / view;
+        assert!((share - game.sled_screen_share()).abs() < 1e-3);
+        worst = worst.max(share.abs());
+    }
+    assert!(worst <= 0.6, "the sled reached {worst:.2} of half the screen");
+    // restart keeps the layout and starts centred
+    game.restart(62);
+    let render = unsafe { std::slice::from_raw_parts(game.render_pointer(), length) };
+    assert!(render[render_slot::PLAYER_RELATIVE_X].abs() < 1e-3);
+    assert_eq!(game.sled_screen_share(), 0.0);
+}

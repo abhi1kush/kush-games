@@ -7,7 +7,7 @@ import { ShareGameButton } from '../ShareGameButton';
 import { createSprites, type Sprites } from './art';
 import { AlpineSled, Buttons, createRenderView, Events, loadAlpineSledEngine, Phase, RenderSlot } from './engine';
 import { createAlpineSledSaveSlot } from './save';
-import { createScene, drawScene, type Scene } from './scene';
+import { createScene, drawScene, type Scene, viewGeometry } from './scene';
 import { playLimited, primeAudio, type SoundKind } from './sounds';
 import '../shared.css';
 import '../online/online.css';
@@ -72,7 +72,8 @@ function AlpineSledGame({ memory }: { memory: WebAssembly.Memory }) {
   const keyButtonsRef = useRef(0);
   const steerAxisRef = useRef({ pad: 0, canvas: 0 });
   const needsDrawRef = useRef(true);
-  const perfRef = useRef<{ workMilliseconds: Float64Array; frameMilliseconds: Float64Array; count: number } | null>(null);
+  /** test-only frame log: work and frame times, and where the sled was drawn (share of the screen width, 0 = left edge, 1 = right) */
+  const perfRef = useRef<{ workMilliseconds: Float64Array; frameMilliseconds: Float64Array; sledLeft: Float64Array; sledRight: Float64Array; sledShare: Float64Array; count: number } | null>(null);
   const hud = {
     distance: useRef<HTMLElement>(null), score: useRef<HTMLElement>(null), gifts: useRef<HTMLElement>(null), stars: useRef<HTMLElement>(null),
     shield: useRef<HTMLElement>(null), toast: useRef<HTMLDivElement>(null),
@@ -95,7 +96,7 @@ function AlpineSledGame({ memory }: { memory: WebAssembly.Memory }) {
   // Test hook for e2e/alpine-sled.mjs (only with ?sledTest in the URL).
   useEffect(() => {
     if (!new URLSearchParams(window.location.search).has('sledTest')) return;
-    perfRef.current = { workMilliseconds: new Float64Array(1200), frameMilliseconds: new Float64Array(1200), count: 0 };
+    perfRef.current = { workMilliseconds: new Float64Array(1200), frameMilliseconds: new Float64Array(1200), sledLeft: new Float64Array(1200), sledRight: new Float64Array(1200), sledShare: new Float64Array(1200), count: 0 };
     const testWindow = window as unknown as { __sledTest?: unknown };
     testWindow.__sledTest = { game: gameRef.current, render: readRender, perf: perfRef.current };
     return () => { delete testWindow.__sledTest; };
@@ -172,6 +173,8 @@ function AlpineSledGame({ memory }: { memory: WebAssembly.Memory }) {
       canvas.height = height;
       sprites ??= createSprites();
       scene = createScene(context, width, height, sprites);
+      // the camera keeps the sled inside this layout's view (an upright phone sees a much narrower slice of the trail)
+      gameRef.current.set_view_half_width(viewGeometry(width, height).viewHalfWidth);
       needsDrawRef.current = true;
     };
     resize();
@@ -243,6 +246,9 @@ function AlpineSledGame({ memory }: { memory: WebAssembly.Memory }) {
           const slot = perf.count % perf.workMilliseconds.length;
           perf.workMilliseconds[slot] = performance.now() - workStart;
           perf.frameMilliseconds[slot] = seconds * 1000;
+          perf.sledLeft[slot] = scene ? scene.sledLeft / scene.width : 0.5;
+          perf.sledRight[slot] = scene ? scene.sledRight / scene.width : 0.5;
+          perf.sledShare[slot] = game.sled_screen_share();
           perf.count++;
         }
       } catch (error) {
