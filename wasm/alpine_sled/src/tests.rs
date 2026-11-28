@@ -300,6 +300,31 @@ fn a_shield_absorbs_one_hit() {
     assert_eq!(world.bonus_points, SPARE_SHIELD_POINTS);
 }
 
+#[test]
+fn prepare_crash_drops_protection_and_lands_so_a_wall_is_a_sure_hit() {
+    let mut world = open_trail(14);
+    world.teleport(800.0);
+    world.has_shield = true;
+    world.debug_invincible = true;
+    world.grace_seconds = 1.0;
+    world.altitude = 4.0;
+    world.vertical_speed = 2.0;
+    world.motion = Motion::Airborne;
+    world.heading = 0.4;
+    world.prepare_crash();
+    world.clear_entities();
+    assert!(!world.has_shield && !world.debug_invincible && world.grace_seconds == 0.0);
+    assert_eq!(world.motion, Motion::Sliding);
+    assert_eq!(world.altitude, 0.0);
+    assert_eq!(world.heading, 0.0);
+    let x = world.player_x;
+    for offset in [-2.4, -1.2, 0.0, 1.2, 2.4] {
+        world.spawn(EntityKind::Pine, world.player_z + 10.0, x + offset, 0.0);
+    }
+    let (happened, _) = run_until(&mut world, 2.0, |world, _| world.phase != Phase::Playing);
+    assert!(happened & events::CRASH != 0 && world.phase == Phase::Crashing);
+}
+
 // ---------- the generated trail is always passable ----------
 #[test]
 fn every_row_leaves_a_way_through_and_items_never_sit_on_obstacles() {

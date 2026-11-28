@@ -209,6 +209,7 @@ impl AlpineSled {
 
     // ---- test hooks (used by e2e/alpine-sled.mjs through ?sledTest; harmless in normal play) ----
     pub fn debug_set_invincible(&mut self, invincible: bool) { self.world.debug_invincible = invincible; }
+    pub fn debug_prepare_crash(&mut self) { self.world.prepare_crash(); self.fill_render(); }
     pub fn debug_clear_trail(&mut self) { self.world.clear_entities(); self.fill_render(); }
     pub fn debug_teleport(&mut self, distance: f64) { self.world.teleport(distance); self.fill_render(); }
     /// Put something `ahead` metres in front of the car at sideways offset `x`.

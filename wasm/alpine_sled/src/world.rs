@@ -724,6 +724,21 @@ impl World {
     pub fn debug_spawn_row(&mut self, row: u32) { self.spawn_row(row); }
     pub fn clear_entities(&mut self) { for entity in self.entities.iter_mut() { entity.active = false; } }
 
+    /// Drop invincibility and the shield, plant the car on the road, and point it down the trail
+    /// so a test can spawn a wall and be sure of a hit.
+    pub fn prepare_crash(&mut self) {
+        self.debug_invincible = false;
+        self.has_shield = false;
+        self.grace_seconds = 0.0;
+        self.altitude = 0.0;
+        self.vertical_speed = 0.0;
+        self.motion = Motion::Sliding;
+        self.heading = 0.0;
+        self.steer_axis = 0.0;
+        self.input &= !(buttons::LEFT | buttons::RIGHT);
+        self.sideways_speed = 0.0;
+    }
+
     /// Jump straight to `distance` metres; the trail ahead is generated afresh from 40 m in front of the car.
     pub fn teleport(&mut self, distance: f64) {
         self.player_z = distance.max(0.0);

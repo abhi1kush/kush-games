@@ -16,6 +16,7 @@ export class AlpineSled {
      * Count of obstacles (kind < 4) within `ahead` metres of the car.
      */
     debug_obstacles_ahead(ahead: number): number;
+    debug_prepare_crash(): void;
     debug_set_invincible(invincible: boolean): void;
     /**
      * Put something `ahead` metres in front of the car at sideways offset `x`.
@@ -76,6 +77,7 @@ export interface InitOutput {
     readonly alpinesled_collectibles: (a: number) => number;
     readonly alpinesled_debug_clear_trail: (a: number) => void;
     readonly alpinesled_debug_obstacles_ahead: (a: number, b: number) => number;
+    readonly alpinesled_debug_prepare_crash: (a: number) => void;
     readonly alpinesled_debug_set_invincible: (a: number, b: number) => void;
     readonly alpinesled_debug_spawn: (a: number, b: number, c: number, d: number, e: number) => number;
     readonly alpinesled_debug_teleport: (a: number, b: number) => void;

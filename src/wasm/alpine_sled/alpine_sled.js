@@ -53,6 +53,9 @@ export class AlpineSled {
         const ret = wasm.alpinesled_debug_obstacles_ahead(this.__wbg_ptr, ahead);
         return ret >>> 0;
     }
+    debug_prepare_crash() {
+        wasm.alpinesled_debug_prepare_crash(this.__wbg_ptr);
+    }
     /**
      * @param {boolean} invincible
      */

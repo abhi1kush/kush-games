@@ -343,8 +343,9 @@ try {
 
   // crash into a pine: game over, then Play again starts clean
   // (a short wall of pines across the sled's path, so a bend's sideways drift cannot carry it past)
-  await game(page, 'game.debug_set_invincible(false); game.debug_clear_trail(); const x = game.player_x(); for (const offset of [-2.4, -1.2, 0, 1.2, 2.4]) game.debug_spawn(0, 14, x + offset, 0)');
-  check(await waitFor(async () => await phaseOf(page) === Phase.crashing, 3000), 'hitting a pine wipes out');
+  // land, drop the shield, and point the nose down the road so the wall cannot be hopped or steered around
+  await game(page, 'game.debug_prepare_crash(); game.debug_clear_trail(); const x = game.player_x(); for (const offset of [-2.4, -1.2, 0, 1.2, 2.4]) game.debug_spawn(0, 10, x + offset, 0)');
+  check(await waitFor(async () => await phaseOf(page) === Phase.crashing, 4000), 'hitting a pine wipes out');
   await page.waitForTimeout(250);
   await shot(page, 'crash-desktop.png');
   check(await waitFor(async () => await phaseOf(page) === Phase.gameOver, 3000), 'then the game-over screen');

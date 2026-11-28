@@ -8,6 +8,7 @@ export const alpinesled_camera_yaw: (a: number) => number;
 export const alpinesled_collectibles: (a: number) => number;
 export const alpinesled_debug_clear_trail: (a: number) => void;
 export const alpinesled_debug_obstacles_ahead: (a: number, b: number) => number;
+export const alpinesled_debug_prepare_crash: (a: number) => void;
 export const alpinesled_debug_set_invincible: (a: number, b: number) => void;
 export const alpinesled_debug_spawn: (a: number, b: number, c: number, d: number, e: number) => number;
 export const alpinesled_debug_teleport: (a: number, b: number) => void;
