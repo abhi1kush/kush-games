@@ -28,6 +28,9 @@ import * as alpineSledModule from './alpine_sled/alpine_sled.js';
 import { createRenderView as createSledView, EntityKind as SledKind, Events as SledEvents, Phase as SledPhase, RenderSlot as SledSlot } from '../games/alpinesled/engine';
 import { parseAlpineSledSave } from '../games/alpinesled/save';
 import { viewGeometry as sledViewGeometry } from '../games/alpinesled/scene';
+import * as metroDashModule from './metro_dash/metro_dash.js';
+import { createRenderView as createMetroView, EntityKind as MetroKind, Events as MetroEvents, Phase as MetroPhase, RenderSlot as MetroSlot } from '../games/metrodash/engine';
+import { parseMetroDashSave } from '../games/metrodash/save';
 import { decodeMoves } from '../games/checkers/engine';
 import { RenderSlot } from '../games/breakout/engine';
 import { Buttons, Phase as KushJumpPhase, RenderSlot as KushJumpSlot } from '../games/kushjump/engine';
@@ -56,6 +59,7 @@ let emberLaneMemory: WebAssembly.Memory;
 let pralayMemory: WebAssembly.Memory;
 let zombieRoadMemory: WebAssembly.Memory;
 let alpineSledMemory: WebAssembly.Memory;
+let metroDashMemory: WebAssembly.Memory;
 
 beforeAll(() => {
   breakoutMemory = breakoutModule.initSync({ module: wasmBytes('breakout') }).memory;
@@ -76,11 +80,12 @@ beforeAll(() => {
   zombieRoadMemory = zombieRoadModule.initSync({ module: wasmBytes('zombie_road') }).memory;
   littlePainterModule.initSync({ module: wasmBytes('little_painter') });
   alpineSledMemory = alpineSledModule.initSync({ module: wasmBytes('alpine_sled') }).memory;
+  metroDashMemory = metroDashModule.initSync({ module: wasmBytes('metro_dash') }).memory;
 });
 
 describe('wasm bindings', () => {
   it('every game .wasm stays small (< 40 KB raw)', () => {
-    for (const name of ['breakout', 'checkers', 'connect_four', 'kush_jump', 'antariksh_defenders', 'mithai_match', 'ludo', 'snakes_ladders', 'fleet_clash', 'carrom', 'jal_path', 'paani_pour', 'ember_lane', 'pralay_run', 'ghat_climb', 'zombie_road', 'little_painter', 'alpine_sled']) expect(wasmBytes(name).length, name).toBeLessThan(40 * 1024);
+    for (const name of ['breakout', 'checkers', 'connect_four', 'kush_jump', 'antariksh_defenders', 'mithai_match', 'ludo', 'snakes_ladders', 'fleet_clash', 'carrom', 'jal_path', 'paani_pour', 'ember_lane', 'pralay_run', 'ghat_climb', 'zombie_road', 'little_painter', 'alpine_sled', 'metro_dash']) expect(wasmBytes(name).length, name).toBeLessThan(40 * 1024);
   });
 
   it('Ghat Climb: gas rolls the jeep and burns fuel', () => {
@@ -600,6 +605,76 @@ describe('Alpine Drive wasm', () => {
     expect(game.phase()).toBe(SledPhase.GameOver);
     game.restart(99);
     expect(game.phase()).toBe(SledPhase.Playing);
+    expect(game.distance()).toBe(0);
+    game.free();
+    restored.free();
+  });
+});
+
+describe('Metro Dash wasm', () => {
+  it('the render layout matches; lanes, jumps, rolls, coins, power-ups, crashes and saves work', () => {
+    expect(metroDashModule.MetroDash.render_length()).toBe(MetroSlot.length);
+    const game = new metroDashModule.MetroDash(2024);
+    const view = createMetroView(metroDashMemory, game);
+    expect(view()[MetroSlot.phase]).toBe(MetroPhase.Ready);
+    game.start();
+    game.debug_clear_track();
+    expect(view()[MetroSlot.phase]).toBe(MetroPhase.Playing);
+    const run = (seconds: number) => { let events = 0; for (let frame = 0; frame < Math.round(seconds * 60); frame++) events |= game.advance(1 / 60); return events; };
+    // one press moves exactly one lane, snapped in about 0.13 s
+    expect(game.lane()).toBe(1);
+    game.press_lane(1);
+    let events = run(0.2);
+    expect(events & MetroEvents.lane).toBeTruthy();
+    expect(game.lane()).toBe(2);
+    expect(view()[MetroSlot.playerX]).toBeCloseTo(2.5, 3);
+    game.press_lane(-1);
+    run(0.2);
+    expect(game.lane()).toBe(1);
+    // jump over a low barrier
+    expect(game.debug_spawn(MetroKind.LowBarrier, 1, game.speed() * 0.35, 0, 0)).toBe(true);
+    game.press_jump();
+    events = run(1);
+    expect(events & MetroEvents.jump).toBeTruthy();
+    expect(events & MetroEvents.land).toBeTruthy();
+    expect(game.phase()).toBe(MetroPhase.Playing);
+    expect(game.stumbles()).toBe(0);
+    // roll under a high barrier
+    expect(game.debug_spawn(MetroKind.HighBarrier, 1, game.speed() * 0.3, 0, 0)).toBe(true);
+    game.press_roll();
+    game.advance(1 / 60);
+    expect(game.is_rolling()).toBe(true);
+    run(1);
+    expect(game.phase()).toBe(MetroPhase.Playing);
+    // coins
+    for (let index = 0; index < 4; index++) game.debug_spawn(MetroKind.Coin, 1, 4 + index * 2, 0.7, 0);
+    events = run(1.2);
+    expect(events & MetroEvents.coin).toBeTruthy();
+    expect(game.coins()).toBe(4);
+    expect(view()[MetroSlot.score]).toBe(game.score());
+    // a power-up
+    game.debug_spawn(MetroKind.Magnet, 1, 5, 1, 0);
+    events = run(1);
+    expect(events & MetroEvents.powerUp).toBeTruthy();
+    expect(game.magnet_seconds()).toBeGreaterThan(8);
+    // save, restore elsewhere, identical, and it carries on identically
+    const bytes = game.save();
+    expect(parseMetroDashSave({ bytes: Array.from(bytes) })).toEqual({ bytes: Array.from(bytes) });
+    const restored = new metroDashModule.MetroDash(1);
+    expect(restored.restore(bytes)).toBe(true);
+    const snapshot = (target: metroDashModule.MetroDash) => [target.distance(), target.player_x(), target.score(), target.coins(), target.phase(), target.lane()];
+    expect(snapshot(restored)).toEqual(snapshot(game));
+    expect(restored.restore(bytes.slice(0, 20))).toBe(false);
+    expect(parseMetroDashSave({ bytes: [1, 2, 300, 4] })).toBeNull();
+    expect(parseMetroDashSave({ bytes: 'nope' })).toBeNull();
+    // a train head-on ends the run
+    expect(game.debug_spawn(MetroKind.Train, 1, 12, 0, 26)).toBe(true);
+    events = run(3);
+    expect(events & MetroEvents.crash).toBeTruthy();
+    expect(events & MetroEvents.gameOver).toBeTruthy();
+    expect(game.phase()).toBe(MetroPhase.GameOver);
+    game.restart(99);
+    expect(game.phase()).toBe(MetroPhase.Playing);
     expect(game.distance()).toBe(0);
     game.free();
     restored.free();

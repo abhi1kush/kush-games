@@ -23,6 +23,13 @@
 .controls-panel__drag { display: flex; align-items: center; gap: 2px; height: 24px; padding: 0 5px; border-radius: 12px;
   border: 1.5px solid color-mix(in srgb, var(--text) 55%, transparent); font-size: 9px; }
 .controls-panel__drag span { width: 30px; height: 2px; border-radius: 1px; background: color-mix(in srgb, var(--text) 55%, transparent); }
+.controls-panel__swipe { display: grid; grid-template-columns: repeat(3, 11px); grid-template-rows: repeat(3, 11px); place-items: center; font-size: 10px; font-weight: 800;
+  color: color-mix(in srgb, var(--text) 80%, transparent); }
+.controls-panel__swipe b:nth-child(1) { grid-column: 2; grid-row: 1; }
+.controls-panel__swipe b:nth-child(2) { grid-column: 1; grid-row: 2; }
+.controls-panel__swipe span { grid-column: 2; grid-row: 2; width: 7px; height: 7px; border-radius: 50%; background: color-mix(in srgb, var(--text) 60%, transparent); }
+.controls-panel__swipe b:nth-child(4) { grid-column: 3; grid-row: 2; }
+.controls-panel__swipe b:nth-child(5) { grid-column: 2; grid-row: 3; }
 .controls-panel__button { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font: 800 8.5px/1 system-ui, sans-serif;
   color: #fff; border: 1.5px solid rgba(255,255,255,0.5); }
 .controls-panel__where { flex: 1; text-align: center; font-size: 10px; color: var(--muted); }

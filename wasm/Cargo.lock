@@ -106,6 +106,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "metro_dash"
+version = "0.1.0"
+dependencies = [
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "mithai_match"
 version = "0.1.0"
 dependencies = [

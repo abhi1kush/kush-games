@@ -27,6 +27,7 @@ import thumbMithaiMatch from './mithai-match.svg';
 import thumbPralayRun from './pralay-run.svg';
 import thumbZombieRoad from './zombie-road.svg';
 import thumbAlpineDrive from './alpine-drive.svg';
+import thumbMetroDash from './metro-dash.svg';
 import thumbLittlePainter from './little-painter.svg';
 
 export const THUMBNAILS: Record<string, string> = {
@@ -58,5 +59,6 @@ export const THUMBNAILS: Record<string, string> = {
   'mountain-climb': thumbMountainClimb,
   'zombie-road': thumbZombieRoad,
   'alpine-drive': thumbAlpineDrive,
+  'metro-dash': thumbMetroDash,
   'little-painter': thumbLittlePainter,
 };

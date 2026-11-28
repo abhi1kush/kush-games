@@ -356,6 +356,18 @@ export const games: GameDefinition[] = [
     releaseYear: 2026,
     component: lazy(() => import('./alpinesled/AlpineSled')),
   },
+  {
+    id: 'metro-dash',
+    title: 'Metro Dash',
+    tagline: 'Dash the rails. Dodge the trains. Grab the coins.',
+    description: 'An endless runner along a sunny city railway. Seen from just behind your runner, you dash down three tracks between pastel shops and station platforms, switching lanes in a snap, jumping low barriers, rolling under high ones and hanging signs, and running up ramps to race along the roofs of parked trains. Watch out for trains rolling toward you with their headlights on: running into the front of anything ends the run, and clipping the side of a train makes you stumble — stumble twice in a row and the station guard and his dog catch you. Grab coins in lines and arcs, and power-ups: a coin magnet, super sneakers for giant jumps, double score, and a hoverboard that takes one crash for you. It gets faster the further you go, and there is always a way through. Your best score is saved, and a refresh brings your run back, paused, right where you left it. The lanes, jumps, trains and scoring run in Rust compiled to WebAssembly.',
+    categories: ['Arcade'],
+    status: 'playable',
+    artwork: { gradientFrom: '#9cc8ee', gradientTo: '#fae3d3', accentColor: '#4fb3a9', glyph: '🚇' },
+    controls: '←/→ or A/D switch lanes; ↑, W or Space jump; ↓ or S roll; P pause; M mute; Enter start; on phones swipe anywhere (left/right lanes, up jump, down roll)',
+    releaseYear: 2026,
+    component: lazy(() => import('./metrodash/MetroDash')),
+  },
 ];
 
 /** Genre filter chips on the home page, in this order (only genres that have a playable game are shown). */
