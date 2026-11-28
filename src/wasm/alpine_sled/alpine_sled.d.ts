@@ -9,21 +9,24 @@ export class AlpineSled {
      */
     advance(seconds: number): number;
     altitude(): number;
+    camera_yaw(): number;
     collectibles(): number;
     debug_clear_trail(): void;
     /**
-     * Count of obstacles (kind < 4) within `ahead` metres of the sled.
+     * Count of obstacles (kind < 4) within `ahead` metres of the car.
      */
     debug_obstacles_ahead(ahead: number): number;
     debug_set_invincible(invincible: boolean): void;
     /**
-     * Put something `ahead` metres in front of the sled at sideways offset `x`.
+     * Put something `ahead` metres in front of the car at sideways offset `x`.
      */
     debug_spawn(kind: number, ahead: number, x: number, altitude: number): boolean;
     debug_teleport(distance: number): void;
     distance(): number;
     gifts(): number;
     has_shield(): boolean;
+    heading(): number;
+    is_bumper_view(): boolean;
     motion(): number;
     constructor(seed: number);
     phase(): number;
@@ -39,6 +42,7 @@ export class AlpineSled {
     save(): Uint8Array;
     score(): number;
     seed(): number;
+    set_bumper_view(bumper: boolean): void;
     /**
      * Held buttons: 1 left, 2 right.
      */
@@ -52,12 +56,13 @@ export class AlpineSled {
      */
     set_view_half_width(view_half_width: number): void;
     /**
-     * The sled's sideways screen position as a share of half the screen (0 = centre, ±1 = an edge).
+     * The car's sideways screen position as a share of half the screen (0 = centre, ±1 = an edge).
      */
     sled_screen_share(): number;
     speed(): number;
     stars(): number;
     start(): void;
+    toggle_view(): void;
 }
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
@@ -67,6 +72,7 @@ export interface InitOutput {
     readonly __wbg_alpinesled_free: (a: number, b: number) => void;
     readonly alpinesled_advance: (a: number, b: number) => number;
     readonly alpinesled_altitude: (a: number) => number;
+    readonly alpinesled_camera_yaw: (a: number) => number;
     readonly alpinesled_collectibles: (a: number) => number;
     readonly alpinesled_debug_clear_trail: (a: number) => void;
     readonly alpinesled_debug_obstacles_ahead: (a: number, b: number) => number;
@@ -76,6 +82,8 @@ export interface InitOutput {
     readonly alpinesled_distance: (a: number) => number;
     readonly alpinesled_gifts: (a: number) => number;
     readonly alpinesled_has_shield: (a: number) => number;
+    readonly alpinesled_heading: (a: number) => number;
+    readonly alpinesled_is_bumper_view: (a: number) => number;
     readonly alpinesled_motion: (a: number) => number;
     readonly alpinesled_new: (a: number) => number;
     readonly alpinesled_phase: (a: number) => number;
@@ -88,6 +96,7 @@ export interface InitOutput {
     readonly alpinesled_save: (a: number, b: number) => void;
     readonly alpinesled_score: (a: number) => number;
     readonly alpinesled_seed: (a: number) => number;
+    readonly alpinesled_set_bumper_view: (a: number, b: number) => void;
     readonly alpinesled_set_input: (a: number, b: number) => void;
     readonly alpinesled_set_steer_axis: (a: number, b: number) => void;
     readonly alpinesled_set_view_half_width: (a: number, b: number) => void;
@@ -95,6 +104,7 @@ export interface InitOutput {
     readonly alpinesled_speed: (a: number) => number;
     readonly alpinesled_stars: (a: number) => number;
     readonly alpinesled_start: (a: number) => void;
+    readonly alpinesled_toggle_view: (a: number) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_add_to_stack_pointer: (a: number) => number;
     readonly __wbindgen_export2: (a: number, b: number, c: number) => void;

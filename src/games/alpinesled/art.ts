@@ -1,6 +1,6 @@
 /**
- * Alpine Sled art: a soft alpine winter palette, the sky and the layered mountain backdrop (pre-drawn once per
- * canvas size), and the trail-side sprites (pines, boulders, snowmen, logs, gifts, stars, the shield), all drawn in
+ * Alpine Drive art: a soft alpine winter palette, the sky and the layered mountain backdrop (pre-drawn once per
+ * canvas size), and the roadside sprites (pines, boulders, snowmen, logs, gifts, stars, the shield), all drawn in
  * code with canvas paths. Nothing is loaded from files.
  */
 
@@ -13,6 +13,7 @@ export const PALETTE = {
   snowField: [[229, 236, 246], [222, 231, 242]] as const,
   trail: [[251, 252, 254], [243, 247, 252]] as const,
   groove: [214, 224, 238] as const,
+  laneMark: [236, 232, 220] as const,
   bankTop: [255, 255, 255] as const,
   bankFace: [214, 225, 238] as const,
   pineLit: '#6f9a86', pineShade: '#557d6c', pineDeep: '#466c5e',
@@ -25,6 +26,14 @@ export const PALETTE = {
   star: '#f4cd6e', starLight: '#fbe9ad', starEdge: '#d6a84a',
   shield: 'rgba(150,205,235,', shieldEdge: '#7fbfe0',
   flags: ['#e28f84', '#7fa8d6', '#f2c879'] as const,
+  // a soft terracotta mountain car: easy on the eyes against the snow
+  carBody: '#c97b6a', carBodyShade: '#b2685c', carBodyDeep: '#9a574e', carBodyLit: '#d89284',
+  carCabin: '#efe8de', carCabinShade: '#d9d0c6',
+  carGlass: '#7d9ab3', carGlassDark: '#5e7c94', carGlassLit: '#a8c3d4',
+  carTrim: '#d8d0c6', carBumper: '#c4bdb4',
+  tyre: '#4a4e56', tyreShade: '#35383e', hub: '#e6ddd1', hubShade: '#c9c0b4',
+  headlight: '#f7efc8', headlightGlow: 'rgba(255,244,214,',
+  taillight: '#d46a6a', taillightGlow: 'rgba(210,100,100,',
 } as const;
 
 export type RGB = readonly [number, number, number];

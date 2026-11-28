@@ -518,7 +518,7 @@ describe('Little Painter wasm', () => {
   });
 });
 
-describe('Alpine Sled wasm', () => {
+describe('Alpine Drive wasm', () => {
   it('keeps the drawn sled inside the screen on every frame in every layout, through hard swerves, jumps and ramps', () => {
     // canvas sizes the page really uses: desktop 16:10, square, phone landscape, phone portrait, small phone portrait
     for (const [width, height] of [[1512, 945], [900, 900], [1266, 400], [567, 891], [450, 588]]) {
@@ -530,24 +530,26 @@ describe('Alpine Sled wasm', () => {
       game.debug_set_invincible(true);
       game.debug_teleport(600); // well into the curves
       let widest = 0;
+      let yawSwing = 0;
       for (let frame = 0; frame < 60 * 40; frame++) {
         game.set_steer_axis(Math.floor(frame / 45) % 3 === 0 ? -1 : 1); // flick hard both ways, with long holds against the banks
         if (frame % 150 === 0) game.press_jump();
         if (frame % 600 === 300) game.debug_spawn(SledKind.Ramp, 18, game.player_x(), 0);
         game.advance(1 / 60);
+        yawSwing = Math.max(yawSwing, Math.abs(game.camera_yaw()));
         const render = view();
         const scale = focal / render[SledSlot.playerRelativeZ];
         const centre = width / 2 + render[SledSlot.playerRelativeX] * scale;
-        const drawnHalfWidth = 1.05 * scale; // runners, rider, scarf and the shield bubble (SLED_DRAWN_HALF_WIDTH)
+        const drawnHalfWidth = 1.1 * scale; // body, wheels and the shield bubble (SLED_DRAWN_HALF_WIDTH)
         expect(centre - drawnHalfWidth, `${width}×${height} frame ${frame}`).toBeGreaterThan(width * 0.03);
         expect(centre + drawnHalfWidth, `${width}×${height} frame ${frame}`).toBeLessThan(width * 0.97);
         widest = Math.max(widest, Math.abs(centre - width / 2) / (width / 2));
       }
-      expect(widest, `${width}×${height}: the sled still moves across the screen`).toBeGreaterThan(0.15);
+      expect(yawSwing, `${width}×${height}: steering yaws the camera`).toBeGreaterThan(0.2);
       game.free();
     }
   });
-  it('the render layout matches, the sled steers, jumps, collects, crashes, and saves round-trip', () => {
+  it('the render layout matches, the car steers, jumps, collects, crashes, and saves round-trip', () => {
     expect(alpineSledModule.AlpineSled.render_length()).toBe(SledSlot.length);
     const game = new alpineSledModule.AlpineSled(1234);
     const view = createSledView(alpineSledMemory, game);
@@ -557,12 +559,13 @@ describe('Alpine Sled wasm', () => {
     expect(view()[SledSlot.phase]).toBe(SledPhase.Playing);
     expect(view()[SledSlot.segmentCount]).toBe(100);
     expect(view()[SledSlot.playerRelativeZ]).toBeCloseTo(6, 3);
-    // steering right
+    // steering right turns the car and yaws the camera
     game.set_input(2);
-    for (let frame = 0; frame < 30; frame++) game.advance(1 / 60);
+    for (let frame = 0; frame < 50; frame++) game.advance(1 / 60);
     game.set_input(0);
     expect(view()[SledSlot.playerX]).toBeGreaterThan(2);
     expect(view()[SledSlot.lean]).toBeGreaterThan(0.5);
+    expect(game.camera_yaw()).toBeGreaterThan(0.15);
     // jumping lifts the sled
     game.press_jump();
     let events = 0;

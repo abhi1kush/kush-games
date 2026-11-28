@@ -30,6 +30,13 @@ export class AlpineSled {
     /**
      * @returns {number}
      */
+    camera_yaw() {
+        const ret = wasm.alpinesled_camera_yaw(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
     collectibles() {
         const ret = wasm.alpinesled_collectibles(this.__wbg_ptr);
         return ret >>> 0;
@@ -38,7 +45,7 @@ export class AlpineSled {
         wasm.alpinesled_debug_clear_trail(this.__wbg_ptr);
     }
     /**
-     * Count of obstacles (kind < 4) within `ahead` metres of the sled.
+     * Count of obstacles (kind < 4) within `ahead` metres of the car.
      * @param {number} ahead
      * @returns {number}
      */
@@ -53,7 +60,7 @@ export class AlpineSled {
         wasm.alpinesled_debug_set_invincible(this.__wbg_ptr, invincible);
     }
     /**
-     * Put something `ahead` metres in front of the sled at sideways offset `x`.
+     * Put something `ahead` metres in front of the car at sideways offset `x`.
      * @param {number} kind
      * @param {number} ahead
      * @param {number} x
@@ -89,6 +96,20 @@ export class AlpineSled {
      */
     has_shield() {
         const ret = wasm.alpinesled_has_shield(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
+     * @returns {number}
+     */
+    heading() {
+        const ret = wasm.alpinesled_heading(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {boolean}
+     */
+    is_bumper_view() {
+        const ret = wasm.alpinesled_is_bumper_view(this.__wbg_ptr);
         return ret !== 0;
     }
     /**
@@ -186,6 +207,12 @@ export class AlpineSled {
         return ret >>> 0;
     }
     /**
+     * @param {boolean} bumper
+     */
+    set_bumper_view(bumper) {
+        wasm.alpinesled_set_bumper_view(this.__wbg_ptr, bumper);
+    }
+    /**
      * Held buttons: 1 left, 2 right.
      * @param {number} buttons
      */
@@ -207,7 +234,7 @@ export class AlpineSled {
         wasm.alpinesled_set_view_half_width(this.__wbg_ptr, view_half_width);
     }
     /**
-     * The sled's sideways screen position as a share of half the screen (0 = centre, ±1 = an edge).
+     * The car's sideways screen position as a share of half the screen (0 = centre, ±1 = an edge).
      * @returns {number}
      */
     sled_screen_share() {
@@ -230,6 +257,9 @@ export class AlpineSled {
     }
     start() {
         wasm.alpinesled_start(this.__wbg_ptr);
+    }
+    toggle_view() {
+        wasm.alpinesled_toggle_view(this.__wbg_ptr);
     }
 }
 if (Symbol.dispose) AlpineSled.prototype[Symbol.dispose] = AlpineSled.prototype.free;

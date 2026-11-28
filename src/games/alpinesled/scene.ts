@@ -1,7 +1,7 @@
 /**
  * The 3D view: a perspective projection of the wasm render buffer onto a 2D canvas. Every position in the buffer is
  * already relative to the camera (behind and above the sled), so a point (x, y, z) lands on screen at
- * (centre + x·focal/z, horizon − y·focal/z). The trail is drawn far to near as segment strips (snowfield, banked snow
+ * (centre + x·focal/z, horizon − y·focal/z). The snowy road is drawn far to near as segment strips (snowfield, snowbanks
  * edges, packed trail), with the scenery and obstacles of each strip drawn right after it, so hills hide what is
  * behind them. The sled and its rider are a small 3D model projected the same way, rolled into each turn.
  */
@@ -15,13 +15,15 @@ const BANK_INNER = TRAIL_HALF_WIDTH;
 const BANK_RIDGE = TRAIL_HALF_WIDTH + 1.2;
 const BANK_OUTER = TRAIL_HALF_WIDTH + 2.6;
 const BANK_HEIGHT = 0.5;
-const GROOVE_OFFSETS = [-3.9, -1.3, 1.3, 3.9];
-const GROOVE_HALF_WIDTH = 0.06;
-const GROOVE_DISTANCE = 140;
+const TYRE_TRACKS = [-0.52, 0.52] as const;
+const TYRE_HALF_WIDTH = 0.1;
+const LANE_EDGE = 2.6;
+const LANE_MARK_HALF_WIDTH = 0.045;
+const GROOVE_DISTANCE = 160;
 const SPRAY_CAPACITY = 140;
 const FLAKE_COUNT = 90;
 
-interface FogRamps { field: string[][]; trail: string[][]; groove: string[]; bankTop: string[]; bankLit: string[]; bankShade: string[] }
+interface FogRamps { field: string[][]; trail: string[][]; groove: string[]; laneMark: string[]; bankTop: string[]; bankLit: string[]; bankShade: string[] }
 
 export interface Scene {
   context: CanvasRenderingContext2D;
@@ -80,6 +82,7 @@ export function createScene(context: CanvasRenderingContext2D, width: number, he
       field: PALETTE.snowField.map(color => fogRamp(color as RGB)),
       trail: PALETTE.trail.map(color => fogRamp(color as RGB)),
       groove: fogRamp(PALETTE.groove),
+      laneMark: fogRamp(PALETTE.laneMark),
       bankTop: fogRamp(PALETTE.bankTop),
       bankLit: fogRamp([238, 243, 250]),
       bankShade: fogRamp(PALETTE.bankFace),
@@ -140,15 +143,26 @@ function drawStrip(scene: Scene, nearX: number, nearY: number, nearScale: number
     quad(context, scene.fog.bankTop[fog], outerFar, farY, ridgeFarX, farY - ridgeFar, ridgeNearX, nearY - ridgeNear, outerNear, nearY);
     quad(context, side < 0 ? scene.fog.bankLit[fog] : scene.fog.bankShade[fog], ridgeFarX, farY - ridgeFar, innerFar, farY, innerNear, nearY, ridgeNearX, nearY - ridgeNear);
   }
-  // the packed trail
+  // the packed snowy road
   const halfFar = BANK_INNER * farScale, halfNear = BANK_INNER * nearScale;
   quad(context, scene.fog.trail[(band >> 1) & 1][fog], farX - halfFar, farY, farX + halfFar, farY, nearX + halfNear, nearY, nearX - halfNear, nearY);
   if (grooves) {
-    const grooveColor = scene.fog.groove[fog];
-    for (const offset of GROOVE_OFFSETS) {
-      const grooveFar = farX + offset * farScale, grooveNear = nearX + offset * nearScale;
-      quad(context, grooveColor, grooveFar - GROOVE_HALF_WIDTH * farScale, farY, grooveFar + GROOVE_HALF_WIDTH * farScale, farY,
-        grooveNear + GROOVE_HALF_WIDTH * nearScale, nearY, grooveNear - GROOVE_HALF_WIDTH * nearScale, nearY);
+    const trackColor = scene.fog.groove[fog];
+    for (const offset of TYRE_TRACKS) {
+      const trackFar = farX + offset * farScale, trackNear = nearX + offset * nearScale;
+      quad(context, trackColor, trackFar - TYRE_HALF_WIDTH * farScale, farY, trackFar + TYRE_HALF_WIDTH * farScale, farY,
+        trackNear + TYRE_HALF_WIDTH * nearScale, nearY, trackNear - TYRE_HALF_WIDTH * nearScale, nearY);
+    }
+    // a soft dashed centre line and faint lane edges, so the trail reads as a road
+    if ((band & 1) === 0) {
+      const mark = scene.fog.laneMark[fog];
+      quad(context, mark, farX - LANE_MARK_HALF_WIDTH * farScale, farY, farX + LANE_MARK_HALF_WIDTH * farScale, farY,
+        nearX + LANE_MARK_HALF_WIDTH * nearScale, nearY, nearX - LANE_MARK_HALF_WIDTH * nearScale, nearY);
+    }
+    for (const side of [-LANE_EDGE, LANE_EDGE]) {
+      const farM = farX + side * farScale, nearM = nearX + side * nearScale;
+      quad(context, scene.fog.laneMark[fog], farM - LANE_MARK_HALF_WIDTH * 0.6 * farScale, farY, farM + LANE_MARK_HALF_WIDTH * 0.6 * farScale, farY,
+        nearM + LANE_MARK_HALF_WIDTH * 0.6 * nearScale, nearY, nearM - LANE_MARK_HALF_WIDTH * 0.6 * nearScale, nearY);
     }
   }
 }
@@ -221,7 +235,7 @@ function drawRamp(scene: Scene, render: Float32Array, offset: number, fog: numbe
   let nearZ = render[offset + 1], nearX = render[offset + 2], nearY = render[offset + 3];
   const farX = render[offset + 5], farY = render[offset + 6];
   const length = 4.5;
-  const farZ = nearZ + length;
+  const farZ = render[offset + 7] > 0.4 ? render[offset + 7] : nearZ + length;
   let nearLift = 0;
   if (nearZ < 0.6) {
     // the camera is passing over the ramp: cut it at the near plane
@@ -295,163 +309,163 @@ function drawEntity(scene: Scene, render: Float32Array, entity: number, clock: n
   } else drawSprite(context, sprite, screenX, baseY, width, height, alpha);
 }
 
-// ---------------------------------------------------------------- the sled and rider
+// ---------------------------------------------------------------- the car
 
-const sledPoints = new Float32Array(2);
+const carPoints = new Float32Array(2);
 
-interface SledPose { baseX: number; baseY: number; baseZ: number; roll: number; slope: number; yaw: number }
-function sledPoint(scene: Scene, pose: SledPose, modelX: number, modelY: number, modelZ: number): Float32Array {
+interface CarPose { baseX: number; baseY: number; baseZ: number; roll: number; slope: number; yaw: number }
+function carPoint(scene: Scene, pose: CarPose, modelX: number, modelY: number, modelZ: number): Float32Array {
+  const yawC = Math.cos(pose.yaw), yawS = Math.sin(pose.yaw);
+  const yawedX = modelX * yawC + modelZ * yawS;
+  const yawedZ = -modelX * yawS + modelZ * yawC;
   const cosine = Math.cos(pose.roll), sine = Math.sin(pose.roll);
-  const rolledX = modelX * cosine + modelY * sine;
-  const rolledY = -modelX * sine + modelY * cosine;
-  project(scene, pose.baseX + rolledX + modelZ * pose.yaw, pose.baseY + rolledY + modelZ * pose.slope, pose.baseZ + modelZ, sledPoints, 0);
-  if (sledPoints[0] < scene.sledLeft) scene.sledLeft = sledPoints[0];
-  if (sledPoints[0] > scene.sledRight) scene.sledRight = sledPoints[0];
-  return sledPoints;
+  const rolledX = yawedX * cosine + modelY * sine;
+  const rolledY = -yawedX * sine + modelY * cosine;
+  project(scene, pose.baseX + rolledX, pose.baseY + rolledY + yawedZ * pose.slope, pose.baseZ + yawedZ, carPoints, 0);
+  if (carPoints[0] < scene.sledLeft) scene.sledLeft = carPoints[0];
+  if (carPoints[0] > scene.sledRight) scene.sledRight = carPoints[0];
+  return carPoints;
 }
 
-function pathThrough(scene: Scene, pose: SledPose, points: readonly (readonly [number, number, number])[], close: boolean) {
+function pathCar(scene: Scene, pose: CarPose, points: readonly (readonly [number, number, number])[], close: boolean) {
   const { context } = scene;
   context.beginPath();
   points.forEach(([x, y, z], index) => {
-    const screen = sledPoint(scene, pose, x, y, z);
+    const screen = carPoint(scene, pose, x, y, z);
     if (index === 0) context.moveTo(screen[0], screen[1]); else context.lineTo(screen[0], screen[1]);
   });
   if (close) context.closePath();
 }
 
-const RUNNER_PATH = (side: number) => [[side * 0.45, 0.02, -0.8], [side * 0.45, 0.02, 0.62], [side * 0.45, 0.14, 0.86], [side * 0.45, 0.34, 0.94], [side * 0.45, 0.42, 0.82]] as const;
-const DECK = [[-0.52, 0.27, -0.82], [0.52, 0.27, -0.82], [0.47, 0.27, 0.72], [-0.47, 0.27, 0.72]] as const;
-const DECK_BACK = [[-0.52, 0.27, -0.82], [0.52, 0.27, -0.82], [0.52, 0.18, -0.82], [-0.52, 0.18, -0.82]] as const;
-const TORSO_LEFT = [[-0.3, 0.3, -0.4], [0, 0.3, -0.42], [0, 0.88, -0.2], [-0.24, 0.84, -0.18]] as const;
-const TORSO_RIGHT = [[0, 0.3, -0.42], [0.3, 0.3, -0.4], [0.24, 0.84, -0.18], [0, 0.88, -0.2]] as const;
+function fillCar(scene: Scene, pose: CarPose, points: readonly (readonly [number, number, number])[], color: string) {
+  pathCar(scene, pose, points, true);
+  scene.context.fillStyle = color;
+  scene.context.fill();
+}
+
+const BODY_REAR: readonly (readonly [number, number, number])[] = [[-0.5, 0.22, -0.92], [0.5, 0.22, -0.92], [0.5, 0.52, -0.92], [-0.5, 0.52, -0.92]];
+const BODY_FRONT: readonly (readonly [number, number, number])[] = [[-0.46, 0.22, 1.05], [0.46, 0.22, 1.05], [0.46, 0.46, 1.05], [-0.46, 0.46, 1.05]];
+const HOOD: readonly (readonly [number, number, number])[] = [[-0.48, 0.50, 0.42], [0.48, 0.50, 0.42], [0.46, 0.46, 1.00], [-0.46, 0.46, 1.00]];
+const ROOF: readonly (readonly [number, number, number])[] = [[-0.40, 0.90, -0.52], [0.40, 0.90, -0.52], [0.40, 0.88, 0.28], [-0.40, 0.88, 0.28]];
+const CABIN_REAR: readonly (readonly [number, number, number])[] = [[-0.44, 0.52, -0.72], [0.44, 0.52, -0.72], [0.40, 0.90, -0.52], [-0.40, 0.90, -0.52]];
+const WINDSHIELD: readonly (readonly [number, number, number])[] = [[-0.40, 0.88, 0.28], [0.40, 0.88, 0.28], [0.48, 0.50, 0.42], [-0.48, 0.50, 0.42]];
+const REAR_WINDOW: readonly (readonly [number, number, number])[] = [[-0.36, 0.58, -0.70], [0.36, 0.58, -0.70], [0.34, 0.86, -0.54], [-0.34, 0.86, -0.54]];
+const SIDE = (side: number, shade: boolean): readonly (readonly [number, number, number])[] => [
+  [side * 0.50, 0.22, -0.92], [side * 0.50, 0.52, -0.92], [side * 0.44, 0.52, -0.72], [side * 0.40, 0.90, -0.52],
+  [side * 0.40, 0.88, 0.28], [side * 0.48, 0.50, 0.42], [side * 0.46, 0.46, 1.05], [side * 0.46, 0.22, 1.05],
+];
+const SIDE_WINDOW = (side: number): readonly (readonly [number, number, number])[] => [
+  [side * 0.445, 0.58, -0.62], [side * 0.405, 0.86, -0.46], [side * 0.405, 0.84, 0.20], [side * 0.455, 0.56, 0.34],
+];
+const BUMPER_REAR: readonly (readonly [number, number, number])[] = [[-0.52, 0.22, -0.96], [0.52, 0.22, -0.96], [0.52, 0.36, -0.96], [-0.52, 0.36, -0.96]];
+const BUMPER_FRONT: readonly (readonly [number, number, number])[] = [[-0.48, 0.22, 1.10], [0.48, 0.22, 1.10], [0.48, 0.34, 1.10], [-0.48, 0.34, 1.10]];
+
+function drawWheel(scene: Scene, pose: CarPose, side: number, along: number, angle: number, scale: number) {
+  const { context } = scene;
+  // tyre: a dark ellipse at the hub, slightly flattened; a cream cap with a spinning bar
+  const hub = carPoint(scene, pose, side * 0.50, 0.20, along);
+  const top = carPoint(scene, pose, side * 0.50, 0.40, along);
+  const radiusX = Math.max(3, 0.13 * scale);
+  const radiusY = Math.max(3, Math.hypot(hub[0] - top[0], hub[1] - top[1]));
+  context.fillStyle = PALETTE.tyre;
+  context.beginPath(); context.ellipse(hub[0], hub[1], radiusX, radiusY, 0, 0, Math.PI * 2); context.fill();
+  context.fillStyle = PALETTE.tyreShade;
+  context.beginPath(); context.ellipse(hub[0], hub[1], radiusX * 0.78, radiusY * 0.78, 0, 0, Math.PI * 2); context.fill();
+  context.fillStyle = PALETTE.hub;
+  context.beginPath(); context.ellipse(hub[0], hub[1], radiusX * 0.45, radiusY * 0.45, 0, 0, Math.PI * 2); context.fill();
+  // a spoke that spins with the wheels
+  const spokeX = Math.sin(angle) * radiusX * 0.4;
+  const spokeY = Math.cos(angle) * radiusY * 0.4;
+  context.strokeStyle = PALETTE.hubShade;
+  context.lineWidth = Math.max(1, 0.03 * scale);
+  context.beginPath(); context.moveTo(hub[0] - spokeX, hub[1] - spokeY); context.lineTo(hub[0] + spokeX, hub[1] + spokeY); context.stroke();
+  scene.sledLeft = Math.min(scene.sledLeft, hub[0] - radiusX);
+  scene.sledRight = Math.max(scene.sledRight, hub[0] + radiusX);
+}
 
 function drawSled(scene: Scene, render: Float32Array, clock: number) {
   const { context } = scene;
-  scene.sledLeft = Infinity;
-  scene.sledRight = -Infinity;
   const phase = render[RenderSlot.phase] as Phase;
   const phaseSeconds = render[RenderSlot.phaseSeconds];
   const lean = render[RenderSlot.lean];
   const baseZ = render[RenderSlot.playerRelativeZ];
-  const scale = scene.focal / baseZ;
-  let roll = lean * 0.32;
+  const scale = scene.focal / Math.max(0.4, baseZ);
+  let roll = lean * 0.22;
   if (phase === Phase.Crashing || phase === Phase.GameOver) {
     const tumble = phase === Phase.GameOver ? 1 : Math.min(1, phaseSeconds / (CRASH_SECONDS * 0.6));
-    roll = (lean >= 0 ? 1 : -1) * tumble * 1.45 + Math.sin(tumble * Math.PI) * 0.6;
+    roll = (lean >= 0 ? 1 : -1) * tumble * 1.15 + Math.sin(tumble * Math.PI) * 0.4;
   }
-  const pose: SledPose = {
+  const pose: CarPose = {
     baseX: render[RenderSlot.playerRelativeX],
     baseY: render[RenderSlot.playerRelativeY],
     baseZ,
     roll,
     slope: render[RenderSlot.slope],
-    yaw: lean * 0.12,
+    yaw: render[RenderSlot.carYaw] ?? 0,
   };
-  // shadow on the snow (smaller and fainter the higher the sled flies)
+  scene.sledLeft = Infinity;
+  scene.sledRight = -Infinity;
+
+  // shadow on the snow (smaller and fainter the higher the car flies)
   const altitude = render[RenderSlot.altitude];
-  const shadowCenter = sledPoint(scene, { ...pose, baseY: render[RenderSlot.playerGroundY], roll: 0 }, 0, 0, 0);
-  const shadowX = shadowCenter[0], shadowY = shadowCenter[1];
+  const shadow = carPoint(scene, { ...pose, baseY: render[RenderSlot.playerGroundY], roll: 0 }, 0, 0, 0);
   const shadowSize = 1 / (1 + altitude * 0.35);
   context.fillStyle = `rgba(100,122,156,${(0.28 * shadowSize).toFixed(3)})`;
-  context.beginPath();
-  context.ellipse(shadowX, shadowY, 0.75 * scale * shadowSize, 0.22 * scale * shadowSize, 0, 0, Math.PI * 2);
+  context.beginPath(); context.ellipse(shadow[0], shadow[1], 0.85 * scale * shadowSize, 0.32 * scale * shadowSize, pose.yaw * 0.4, 0, Math.PI * 2); context.fill();
+
+  const yaw = pose.yaw;
+  const farSide = yaw >= 0 ? -1 : 1; // the far side of a right-turning car is the left
+  const nearSide = -farSide;
+  const wheelAngle = render[RenderSlot.wheelAngle] ?? 0;
+
+  // far (the nose) to near (the tail), so from the chase camera the rear sits on top
+  drawWheel(scene, pose, farSide, 0.62, wheelAngle, scale);
+  fillCar(scene, pose, BUMPER_FRONT, PALETTE.carTrim);
+  fillCar(scene, pose, BODY_FRONT, PALETTE.carBody);
+  for (const side of [-1, 1]) {
+    const light = carPoint(scene, pose, side * 0.38, 0.34, 1.07);
+    const glow = 0.10 * scale * (1.05 + Math.sin(clock * 6 + side) * 0.04);
+    context.fillStyle = `${PALETTE.headlightGlow}0.45)`;
+    context.beginPath(); context.ellipse(light[0], light[1], glow * 1.5, glow * 1.1, 0, 0, Math.PI * 2); context.fill();
+    context.fillStyle = PALETTE.headlight;
+    context.beginPath(); context.ellipse(light[0], light[1], glow, glow * 0.7, 0, 0, Math.PI * 2); context.fill();
+  }
+  fillCar(scene, pose, HOOD, PALETTE.carBodyLit);
+  fillCar(scene, pose, WINDSHIELD, PALETTE.carGlass);
+  pathCar(scene, pose, WINDSHIELD, true);
+  context.fillStyle = PALETTE.carGlassLit;
+  context.globalAlpha = 0.28;
   context.fill();
+  context.globalAlpha = 1;
+  fillCar(scene, pose, [[-0.50, 0.22, -0.92], [0.50, 0.22, -0.92], [0.46, 0.22, 1.05], [-0.46, 0.22, 1.05]], PALETTE.carBodyDeep);
+  fillCar(scene, pose, SIDE(farSide, true), farSide < 0 ? PALETTE.carBodyLit : PALETTE.carBodyShade);
+  fillCar(scene, pose, SIDE_WINDOW(farSide), PALETTE.carGlassDark);
+  fillCar(scene, pose, ROOF, PALETTE.carCabinShade);
+  fillCar(scene, pose, SIDE(nearSide, false), nearSide < 0 ? PALETTE.carBodyLit : PALETTE.carBodyShade);
+  fillCar(scene, pose, SIDE_WINDOW(nearSide), PALETTE.carGlass);
+  fillCar(scene, pose, CABIN_REAR, PALETTE.carCabin);
+  fillCar(scene, pose, REAR_WINDOW, PALETTE.carGlassDark);
+  fillCar(scene, pose, BODY_REAR, PALETTE.carBodyDeep);
+  fillCar(scene, pose, BUMPER_REAR, PALETTE.carBumper);
+  for (const side of [-1, 1]) {
+    const tail = carPoint(scene, pose, side * 0.40, 0.36, -0.94);
+    context.fillStyle = PALETTE.taillight;
+    context.beginPath(); context.ellipse(tail[0], tail[1], 0.08 * scale, 0.05 * scale, 0, 0, Math.PI * 2); context.fill();
+  }
+  drawWheel(scene, pose, farSide, -0.62, wheelAngle, scale);
+  drawWheel(scene, pose, nearSide, 0.62, wheelAngle, scale);
+  drawWheel(scene, pose, nearSide, -0.62, wheelAngle, scale);
 
-  const grace = render[RenderSlot.graceSeconds];
-  if (grace > 0 && Math.floor(clock * 14) % 2 === 0) context.globalAlpha = 0.45;
-  context.lineCap = 'round';
-  context.lineJoin = 'round';
-  // runners and struts
-  context.strokeStyle = PALETTE.woodDark;
-  context.lineWidth = Math.max(2, 0.07 * scale);
-  for (const side of [-1, 1]) { pathThrough(scene, pose, RUNNER_PATH(side), false); context.stroke(); }
-  context.lineWidth = Math.max(1.5, 0.05 * scale);
-  context.beginPath();
-  for (const side of [-1, 1]) for (const strutZ of [-0.55, 0.38]) {
-    const bottom = sledPoint(scene, pose, side * 0.45, 0.04, strutZ); context.moveTo(bottom[0], bottom[1]);
-    const top = sledPoint(scene, pose, side * 0.45, 0.26, strutZ); context.lineTo(top[0], top[1]);
-  }
-  context.stroke();
-  // deck and slats
-  context.fillStyle = PALETTE.woodDark;
-  pathThrough(scene, pose, DECK_BACK, true); context.fill();
-  context.fillStyle = PALETTE.wood;
-  pathThrough(scene, pose, DECK, true); context.fill();
-  context.strokeStyle = PALETTE.woodLight;
-  context.lineWidth = Math.max(1, 0.035 * scale);
-  context.beginPath();
-  for (const slatZ of [-0.55, -0.2, 0.15, 0.5]) {
-    const left = sledPoint(scene, pose, -0.5, 0.275, slatZ); context.moveTo(left[0], left[1]);
-    const right = sledPoint(scene, pose, 0.5, 0.275, slatZ); context.lineTo(right[0], right[1]);
-  }
-  context.stroke();
-  // the tow rope from the front curl to the rider's hands
-  context.strokeStyle = '#c9b48f';
-  context.lineWidth = Math.max(1, 0.025 * scale);
-  pathThrough(scene, pose, [[-0.45, 0.4, 0.84], [-0.22, 0.52, 0.2], [0.22, 0.52, 0.2], [0.45, 0.4, 0.84]], false); context.stroke();
-
-  if (phase !== Phase.GameOver) {
-    // rider: coat (two shaded halves), arms reaching for the rope, knitted hat with a pompom
-    context.fillStyle = PALETTE.coat;
-    pathThrough(scene, pose, TORSO_LEFT, true); context.fill();
-    context.fillStyle = PALETTE.coatShade;
-    pathThrough(scene, pose, TORSO_RIGHT, true); context.fill();
-    context.strokeStyle = PALETTE.coat;
-    context.lineWidth = Math.max(2, 0.13 * scale);
-    pathThrough(scene, pose, [[-0.25, 0.78, -0.18], [-0.3, 0.56, 0.05], [-0.22, 0.52, 0.2]], false); context.stroke();
-    context.strokeStyle = PALETTE.coatShade;
-    pathThrough(scene, pose, [[0.25, 0.78, -0.18], [0.3, 0.56, 0.05], [0.22, 0.52, 0.2]], false); context.stroke();
-    const head = sledPoint(scene, pose, 0, 1.04, -0.14);
-    const headX = head[0], headY = head[1];
-    context.fillStyle = PALETTE.hat;
-    context.beginPath(); context.arc(headX, headY, 0.18 * scale, 0, Math.PI * 2); context.fill();
-    context.fillStyle = PALETTE.scarf;
-    context.fillRect(headX - 0.18 * scale, headY + 0.03 * scale, 0.36 * scale, 0.06 * scale);
-    const pompom = sledPoint(scene, pose, 0, 1.25, -0.16);
-    context.fillStyle = PALETTE.pompom;
-    context.beginPath(); context.arc(pompom[0], pompom[1], 0.075 * scale, 0, Math.PI * 2); context.fill();
-    // the scarf trailing back over the shoulder in the wind, waving
-    const speed = render[RenderSlot.speed];
-    const flutter = 0.6 + Math.min(1, speed / 30) * 0.6;
-    context.strokeStyle = PALETTE.scarf;
-    context.lineWidth = Math.max(2, 0.1 * scale);
-    context.beginPath();
-    const neck = sledPoint(scene, pose, 0.12, 0.87, -0.2);
-    context.moveTo(neck[0], neck[1]);
-    for (let link = 1; link <= 5; link++) {
-      const wave = Math.sin(clock * 11 - link * 1.1) * 0.035 * link * flutter;
-      const point = sledPoint(scene, pose, 0.14 + link * 0.07 - lean * 0.05 * link, 0.87 + wave, -0.2 - link * 0.11 * flutter);
-      context.lineTo(point[0], point[1]);
-    }
-    context.stroke();
-    context.strokeStyle = PALETTE.scarfShade;
-    context.lineWidth = Math.max(1, 0.035 * scale);
-    context.stroke();
-  } else {
-    // wiped out: the rider sits up in the snow beside the sled, on the side toward the middle of the screen
-    const seat = sledPoint(scene, { ...pose, roll: 0 }, pose.baseX > 0 ? -1.3 : 1.3, 0, 0.2);
-    scene.sledLeft = Math.min(scene.sledLeft, seat[0] - 0.3 * scale);
-    scene.sledRight = Math.max(scene.sledRight, seat[0] + 0.3 * scale);
-    context.fillStyle = PALETTE.coat;
-    context.beginPath(); context.ellipse(seat[0], seat[1] - 0.35 * scale, 0.3 * scale, 0.38 * scale, 0.2, 0, Math.PI * 2); context.fill();
-    context.fillStyle = PALETTE.hat;
-    context.beginPath(); context.arc(seat[0] + 0.05 * scale, seat[1] - 0.85 * scale, 0.17 * scale, 0, Math.PI * 2); context.fill();
-    context.fillStyle = PALETTE.pompom;
-    context.beginPath(); context.arc(seat[0] + 0.08 * scale, seat[1] - 1.04 * scale, 0.07 * scale, 0, Math.PI * 2); context.fill();
-    context.fillStyle = PALETTE.scarf;
-    context.fillRect(seat[0] - 0.17 * scale, seat[1] - 0.72 * scale, 0.36 * scale, 0.07 * scale);
-  }
   context.globalAlpha = 1;
   if (render[RenderSlot.shield] > 0) {
-    const center = sledPoint(scene, { ...pose, roll: 0 }, 0, 0.62, 0); // the bubble stays upright around the leaning rider
+    const center = carPoint(scene, { ...pose, roll: 0 }, 0, 0.55, 0);
     const shimmer = 1 + Math.sin(clock * 5) * 0.04;
     context.fillStyle = `${PALETTE.shield}0.16)`;
     context.strokeStyle = `${PALETTE.shield}0.75)`;
     context.lineWidth = Math.max(1.5, 0.04 * scale);
-    scene.sledLeft = Math.min(scene.sledLeft, center[0] - 0.95 * scale * shimmer);
-    scene.sledRight = Math.max(scene.sledRight, center[0] + 0.95 * scale * shimmer);
-    context.beginPath(); context.ellipse(center[0], center[1], 0.95 * scale * shimmer, 0.85 * scale * shimmer, 0, 0, Math.PI * 2); context.fill(); context.stroke();
+    scene.sledLeft = Math.min(scene.sledLeft, center[0] - 1.05 * scale * shimmer);
+    scene.sledRight = Math.max(scene.sledRight, center[0] + 1.05 * scale * shimmer);
+    context.beginPath(); context.ellipse(center[0], center[1], 1.05 * scale * shimmer, 0.8 * scale * shimmer, 0, 0, Math.PI * 2); context.fill(); context.stroke();
   }
 }
 
@@ -473,7 +487,7 @@ function updateSpray(scene: Scene, render: Float32Array, seconds: number) {
   if (phase !== scene.lastPhase) {
     if (phase === Phase.Crashing) {
       // a burst of snow at the wipeout
-      const center = sledPoint(scene, { baseX: render[RenderSlot.playerRelativeX], baseY: render[RenderSlot.playerGroundY], baseZ, roll: 0, slope: 0, yaw: 0 }, 0, 0.3, 0);
+      const center = carPoint(scene, { baseX: render[RenderSlot.playerRelativeX], baseY: render[RenderSlot.playerGroundY], baseZ, roll: 0, slope: 0, yaw: 0 }, 0, 0.3, 0);
       for (let puff = 0; puff < 46; puff++) {
         const angle = Math.random() * Math.PI;
         const speed = (1.5 + Math.random() * 3.5) * scale;
@@ -487,11 +501,11 @@ function updateSpray(scene: Scene, render: Float32Array, seconds: number) {
     const lean = render[RenderSlot.lean];
     const rate = render[RenderSlot.speed] * 2.2 + lean * lean * 60;
     scene.sprayDebt += rate * seconds;
-    const pose: SledPose = { baseX: render[RenderSlot.playerRelativeX], baseY: render[RenderSlot.playerRelativeY], baseZ, roll: lean * 0.32, slope: 0, yaw: 0 };
+    const pose: CarPose = { baseX: render[RenderSlot.playerRelativeX], baseY: render[RenderSlot.playerRelativeY], baseZ, roll: lean * 0.22, slope: 0, yaw: render[RenderSlot.carYaw] ?? 0 };
     while (scene.sprayDebt >= 1) {
       scene.sprayDebt -= 1;
       const side = Math.random() < 0.5 ? -1 : 1;
-      const point = sledPoint(scene, pose, side * 0.45, 0.02, -0.75);
+      const point = carPoint(scene, pose, side * 0.50, 0.04, -0.70);
       const outward = (side * 0.6 - lean * 1.6 + (Math.random() - 0.5)) * scale;
       emitSpray(scene, point[0], point[1], outward, -(0.6 + Math.random() * 1.4) * scale, (0.035 + Math.random() * 0.06) * scale, 0.35 + Math.random() * 0.35);
     }
@@ -563,7 +577,14 @@ export function drawScene(scene: Scene, render: Float32Array, clock: number, sec
     const amount = scene.shake * height * 0.03;
     context.translate((Math.random() - 0.5) * amount, (Math.random() - 0.5) * amount);
   }
-  // sky and the mountain layers sliding with the trail's heading
+  // a slight roll into the turn, like a driving-game chase camera
+  const roll = render[RenderSlot.cameraRoll] ?? 0;
+  if (Math.abs(roll) > 0.002) {
+    context.translate(width / 2, horizonY + height * 0.18);
+    context.rotate(roll);
+    context.translate(-width / 2, -(horizonY + height * 0.18));
+  }
+  // sky and the mountain layers sliding with the camera's yaw
   context.drawImage(scene.backdrop.sky, 0, 0);
   const heading = render[RenderSlot.heading];
   const layerBases = [horizonY + height * 0.035, horizonY + height * 0.04, horizonY + height * 0.05];

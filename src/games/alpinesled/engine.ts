@@ -1,4 +1,4 @@
-/** Loads the Alpine Sled wasm once (only when the game opens) and keeps its memory for zero-copy reads. */
+/** Loads the Alpine Drive wasm once (only when the game opens) and keeps its memory for zero-copy reads. */
 import init, { AlpineSled } from '../../wasm/alpine_sled/alpine_sled.js';
 
 let ready: Promise<WebAssembly.Memory> | null = null;
@@ -46,8 +46,8 @@ const ENTITIES = SEGMENTS + DRAW_SEGMENTS * 3;
 export const RenderSlot = {
   phase: 0, phaseSeconds: 1, distance: 2, score: 3, gifts: 4, stars: 5, speed: 6, playerX: 7, altitude: 8, lean: 9, shield: 10, graceSeconds: 11,
   heading: 12, firstSegment: 13, segmentCount: 14, entityCount: 15, playerRelativeX: 16, playerRelativeY: 17, playerGroundY: 18, playerRelativeZ: 19,
-  motion: 20, slope: 21, collectibles: 22, curvature: 23,
-  segments: SEGMENTS, segmentStride: 3, entities: ENTITIES, entityStride: 7, length: ENTITIES + MAX_ENTITIES * 7,
+  motion: 20, slope: 21, collectibles: 22, curvature: 23, carYaw: 24, cameraRoll: 25, viewMode: 26, wheelAngle: 27,
+  segments: SEGMENTS, segmentStride: 3, entities: ENTITIES, entityStride: 8, length: ENTITIES + MAX_ENTITIES * 8,
 } as const;
 
 /**

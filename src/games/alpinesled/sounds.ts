@@ -1,4 +1,4 @@
-/** Alpine Sled's sounds: soft Web Audio tones and filtered snow-noise bursts (generated in the browser; no audio files). */
+/** Alpine Drive's sounds: soft Web Audio tones and filtered snow-noise bursts (generated in the browser; no audio files). */
 import { playSound, unlockAudio } from '../sharedSound';
 
 export type SoundKind = 'jump' | 'land' | 'ramp' | 'gift' | 'star' | 'shield' | 'shieldBreak' | 'crash' | 'gameOver' | 'milestone' | 'bankScrape' | 'start';

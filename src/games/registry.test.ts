@@ -25,7 +25,7 @@ describe('game registry', () => {
     const { mostLikedGames, playableGames, comingSoonGames, genres } = buildHomeSections();
     expect(mostLikedGames.map(game => game.title)).toEqual(['Power of 2', 'Color Trails', 'Flappy Wings', 'Paani Pour', 'Connect Four', 'Memory Match', 'Jal Path', 'Mountain Climb']);
     expect(findGame('jungle-strike')).toBeUndefined();
-    expect(playableGames.map(game => game.id)).toEqual(['power-of-2', 'snake', 'blocks', 'minesweeper', 'sudoku', 'chess', 'tic-tac-toe', 'memory-match', 'flappy-wings', 'breakout', 'arrow-out', 'color-trails', 'connect-four', 'checkers', 'kush-jump', 'antariksh-defenders', 'mithai-match', 'ludo', 'snakes-ladders', 'fleet-clash', 'carrom', 'jal-path', 'paani-pour', 'ember-lane', 'pralay-run', 'mountain-climb', 'zombie-road', 'little-painter', 'alpine-sled']);
+    expect(playableGames.map(game => game.id)).toEqual(['power-of-2', 'snake', 'blocks', 'minesweeper', 'sudoku', 'chess', 'tic-tac-toe', 'memory-match', 'flappy-wings', 'breakout', 'arrow-out', 'color-trails', 'connect-four', 'checkers', 'kush-jump', 'antariksh-defenders', 'mithai-match', 'ludo', 'snakes-ladders', 'fleet-clash', 'carrom', 'jal-path', 'paani-pour', 'ember-lane', 'pralay-run', 'mountain-climb', 'zombie-road', 'little-painter', 'alpine-drive']);
     expect(comingSoonGames).toEqual([]);
     expect(genres.map(entry => entry.genre)).toEqual(['Puzzle', 'Arcade', 'Strategy', 'Classic Board', 'Kids']);
     expect(genres.find(entry => entry.genre === 'Puzzle')!.count).toBe(playableGames.filter(game => game.categories.includes('Puzzle')).length);
@@ -54,5 +54,11 @@ describe('game registry', () => {
   it('finds games by id', () => {
     expect(findGame('snake')?.title).toBe('Snake');
     expect(findGame('nope')).toBeUndefined();
+  });
+
+  it('opens Alpine Drive from the old Alpine Sled id', () => {
+    expect(findGame('alpine-sled')?.id).toBe('alpine-drive');
+    expect(findGame('alpine-sled')?.title).toBe('Alpine Drive');
+    expect(findGame('alpine-drive')?.title).toBe('Alpine Drive');
   });
 });

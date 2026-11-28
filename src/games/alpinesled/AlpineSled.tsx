@@ -13,9 +13,10 @@ import '../shared.css';
 import '../online/online.css';
 import './alpinesled.css';
 
-const BEST_SCORE_STORAGE_KEY = 'kush-games-alpine-sled-best';
-const GAME_ID = 'alpine-sled';
-const GAME_NAME = 'Alpine Sled';
+const BEST_SCORE_STORAGE_KEY = 'kush-games-alpine-drive-best';
+const VIEW_STORAGE_KEY = 'kush-games-alpine-drive-view';
+const GAME_ID = 'alpine-drive';
+const GAME_NAME = 'Alpine Drive';
 /** Canvas pixels per CSS pixel, at most (keeps the fill cost low on phones with very dense screens). */
 const MAX_PIXEL_RATIO = 1.5;
 
@@ -52,6 +53,7 @@ function AlpineSledGame({ memory }: { memory: WebAssembly.Memory }) {
   const restoredRef = useRef<boolean | null>(null);
   if (!gameRef.current) {
     gameRef.current = new AlpineSled(randomSeed());
+    try { if (localStorage.getItem(VIEW_STORAGE_KEY) === 'bumper') gameRef.current.set_bumper_view(true); } catch { /* storage unavailable */ }
     const saved = saveSlot.load();
     restoredRef.current = saved !== null && gameRef.current.restore(Uint8Array.from(saved.bytes));
     if (saved && !restoredRef.current) saveSlot.clear();
@@ -65,14 +67,23 @@ function AlpineSledGame({ memory }: { memory: WebAssembly.Memory }) {
   const isPausedRef = useRef(restoredRef.current === true);
   useEffect(() => { if (restoredRef.current) setWasRestored(true); }, []);
   const [showsPauseControls, setShowsPauseControls] = useState(false);
-  const [bestScore, setBestScore] = useState(() => readStoredJson<number>(BEST_SCORE_STORAGE_KEY, 0));
+  const [bestScore, setBestScore] = useState(() => {
+    const current = readStoredJson<number>(BEST_SCORE_STORAGE_KEY, 0);
+    if (current) return current;
+    const legacy = readStoredJson<number>('kush-games-alpine-sled-best', 0);
+    if (legacy) { try { localStorage.setItem(BEST_SCORE_STORAGE_KEY, JSON.stringify(legacy)); } catch { /* storage unavailable */ } }
+    return legacy;
+  });
+  const [bumperView, setBumperView] = useState(() => {
+    try { return localStorage.getItem(VIEW_STORAGE_KEY) === 'bumper'; } catch { return false; }
+  });
   const bestScoreRef = useRef(bestScore);
   bestScoreRef.current = bestScore;
   const { isMuted, isMutedRef, toggleMute } = useSharedMute();
   const keyButtonsRef = useRef(0);
   const steerAxisRef = useRef({ pad: 0, canvas: 0 });
   const needsDrawRef = useRef(true);
-  /** test-only frame log: work and frame times, and where the sled was drawn (share of the screen width, 0 = left edge, 1 = right) */
+  /** test-only frame log: work and frame times, and where the car was drawn (share of the screen width, 0 = left edge, 1 = right) */
   const perfRef = useRef<{ workMilliseconds: Float64Array; frameMilliseconds: Float64Array; sledLeft: Float64Array; sledRight: Float64Array; sledShare: Float64Array; count: number } | null>(null);
   const hud = {
     distance: useRef<HTMLElement>(null), score: useRef<HTMLElement>(null), gifts: useRef<HTMLElement>(null), stars: useRef<HTMLElement>(null),
@@ -95,7 +106,8 @@ function AlpineSledGame({ memory }: { memory: WebAssembly.Memory }) {
   useEffect(() => () => { saveProgress(); gameRef.current.free(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // Test hook for e2e/alpine-sled.mjs (only with ?sledTest in the URL).
   useEffect(() => {
-    if (!new URLSearchParams(window.location.search).has('sledTest')) return;
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('sledTest') && !params.has('driveTest')) return;
     perfRef.current = { workMilliseconds: new Float64Array(1200), frameMilliseconds: new Float64Array(1200), sledLeft: new Float64Array(1200), sledRight: new Float64Array(1200), sledShare: new Float64Array(1200), count: 0 };
     const testWindow = window as unknown as { __sledTest?: unknown };
     testWindow.__sledTest = { game: gameRef.current, render: readRender, perf: perfRef.current };
@@ -117,6 +129,14 @@ function AlpineSledGame({ memory }: { memory: WebAssembly.Memory }) {
     setIsPaused(true);
     saveProgress();
   }, [saveProgress]);
+  const toggleView = useCallback(() => {
+    gameRef.current.toggle_view();
+    const bumper = gameRef.current.is_bumper_view();
+    setBumperView(bumper);
+    try { localStorage.setItem(VIEW_STORAGE_KEY, bumper ? 'bumper' : 'chase'); } catch { /* storage unavailable */ }
+    needsDrawRef.current = true;
+  }, []);
+
   const resume = useCallback(() => {
     primeAudio();
     isPausedRef.current = false;
@@ -173,7 +193,7 @@ function AlpineSledGame({ memory }: { memory: WebAssembly.Memory }) {
       canvas.height = height;
       sprites ??= createSprites();
       scene = createScene(context, width, height, sprites);
-      // the camera keeps the sled inside this layout's view (an upright phone sees a much narrower slice of the trail)
+      // the camera keeps the car inside this layout's view (an upright phone sees a much narrower slice of the trail)
       gameRef.current.set_view_half_width(viewGeometry(width, height).viewHalfWidth);
       needsDrawRef.current = true;
     };
@@ -252,7 +272,7 @@ function AlpineSledGame({ memory }: { memory: WebAssembly.Memory }) {
           perf.count++;
         }
       } catch (error) {
-        if (!hasLoggedError) { hasLoggedError = true; console.error('Alpine Sled frame failed', error); }
+        if (!hasLoggedError) { hasLoggedError = true; console.error('Alpine Drive frame failed', error); }
       }
     };
     frame = requestAnimationFrame(tick);
@@ -293,6 +313,7 @@ function AlpineSledGame({ memory }: { memory: WebAssembly.Memory }) {
       } else if (key === 'enter' && !event.repeat) { event.preventDefault(); advanceOverlayRef.current(); }
       else if (key === 'p' && !event.repeat) { if (isPausedRef.current) resume(); else pause(); }
       else if (key === 'm' && !event.repeat) toggleMute();
+      else if (key === 'c' && !event.repeat) { event.preventDefault(); toggleView(); }
     };
     const handleUp = (event: KeyboardEvent) => {
       const button = steeringButtonForKey(event.key.toLowerCase());
@@ -301,7 +322,7 @@ function AlpineSledGame({ memory }: { memory: WebAssembly.Memory }) {
     window.addEventListener('keydown', handleDown);
     window.addEventListener('keyup', handleUp);
     return () => { window.removeEventListener('keydown', handleDown); window.removeEventListener('keyup', handleUp); };
-  }, [jump, pause, resume, toggleMute]);
+  }, [jump, pause, resume, toggleMute, toggleView]);
 
   // Touching the slope itself: drag sideways to steer (relative to where the finger went down), swipe up or tap to jump.
   const canvasGesture = useRef<{ pointer: number; startX: number; startY: number; startTime: number; hasJumped: boolean; hasMoved: boolean } | null>(null);
@@ -340,11 +361,13 @@ function AlpineSledGame({ memory }: { memory: WebAssembly.Memory }) {
           disabled={!isPaused && phase !== Phase.Playing}>{isPaused ? '▶' : '❚❚'}</button>
         <button type="button" className="game-button" onClick={newGame} data-testid="sled-restart">Restart</button>
         <MuteButton isMuted={isMuted} onToggle={toggleMute} />
+        <button type="button" className="game-button" onClick={toggleView} data-testid="sled-view" aria-pressed={bumperView}
+          aria-label={bumperView ? 'Switch to the chase camera' : 'Switch to the bumper camera'}>{bumperView ? 'Bumper' : 'Chase'}</button>
         <span className="alpine-sled__best">Best <b data-testid="sled-best">{bestScore}</b></span>
       </div>
       <div className="alpine-sled__play">
         <div className="alpine-sled__stage" ref={stageRef}>
-          <canvas ref={canvasRef} className="alpine-sled__canvas" data-testid="sled-canvas" aria-label="Alpine Sled: a 3D snowy mountain trail"
+          <canvas ref={canvasRef} className="alpine-sled__canvas" data-testid="sled-canvas" aria-label="Alpine Drive: a 3D snowy mountain road"
             onPointerDown={onCanvasPointerDown} onPointerMove={onCanvasPointerMove} onPointerUp={onCanvasPointerEnd} onPointerCancel={onCanvasPointerEnd}
             onContextMenu={event => event.preventDefault()} />
           <div className="alpine-sled__hud" aria-live="off">
@@ -370,8 +393,8 @@ function AlpineSledGame({ memory }: { memory: WebAssembly.Memory }) {
                   {showsPauseControls && <ControlsPanel guide={CONTROLS_GUIDE} stopsClicks testId="sled-pause-controls" />}
                 </>
                 : phase === Phase.Ready ? <>
-                  <b className="alpine-sled__title">ALPINE<small>SLED</small></b>
-                  <span className="alpine-sled__tagline">Glide the mountain trail. Dodge, jump, fly.</span>
+                  <b className="alpine-sled__title">ALPINE<small>DRIVE</small></b>
+                  <span className="alpine-sled__tagline">Drive the snowy mountain road. Steer, hop, fly.</span>
                   {bestScore > 0 && <span>Best score {bestScore}</span>}
                   <ControlsPanel guide={CONTROLS_GUIDE} testId="sled-controls" />
                   <span className="alpine-sled__hint">Press Enter or tap to start</span>
@@ -394,9 +417,10 @@ function AlpineSledGame({ memory }: { memory: WebAssembly.Memory }) {
           jump();
         }} />
       </div>
-      <p className="game-help">←→ or A/D steer · Space, ↑ or W jump · P pause · M mute · Enter start · Esc back to the hub.
-        The sled glides downhill on its own and speeds up the further you go. Weave between pine trees, boulders, snowmen and fallen logs; hop the low ones,
-        and ride the wooden ramps to fly over everything for the golden stars hanging in the air. Gifts and stars add to your score, and a 🛡️ shield takes one hit for you.</p>
+      <p className="game-help">←→ or A/D steer · Space, ↑ or W hop · C camera · P pause · M mute · Enter start · Esc back to the hub.
+        The car drives downhill on its own and speeds up the further you go. Steer to turn — the camera swings with you, like a driving-game chase view.
+        Weave between pine trees, boulders, snowmen and fallen logs; hop the low ones, and ride the wooden ramps to fly over everything for the golden stars hanging in the air.
+        Gifts and stars add to your score, and a 🛡️ shield takes one hit for you.</p>
     </div>
   );
 }
@@ -404,14 +428,15 @@ function AlpineSledGame({ memory }: { memory: WebAssembly.Memory }) {
 const CONTROLS_GUIDE: ControlsGuide = {
   keyRows: [
     { keys: ['←', '→'], label: 'Steer (or A / D)' },
-    { keys: ['Space', '/', '↑', '/', 'W'], label: 'Jump' },
+    { keys: ['Space', '/', '↑', '/', 'W'], label: 'Hop (or a ramp)' },
+    { keys: ['C'], label: 'Chase or bumper camera' },
     { keys: ['P'], label: 'Pause' },
     { keys: ['M'], label: 'Mute' },
     { keys: ['Enter'], label: 'Start · play again' },
     { keys: ['Esc'], label: 'Back to the hub' },
   ],
-  touch: { leftControl: 'drag', leftLabel: 'Drag to steer', buttons: [{ name: 'JUMP', label: 'Tap to jump', color: 'rgba(94,140,196,0.85)' }] },
-  touchTips: ['Or drag on the slope to steer · swipe up or tap it to jump', 'Ramps launch you over everything · grab the stars up high'],
+  touch: { leftControl: 'drag', leftLabel: 'Drag to steer', buttons: [{ name: 'JUMP', label: 'Tap to hop', color: 'rgba(94,140,196,0.85)' }] },
+  touchTips: ['Or drag on the road to steer · swipe up or tap it to hop', 'Ramps launch you over everything · grab the stars up high', 'C switches between the chase camera and a closer bumper view'],
   weaponsLabel: 'On the trail',
   weapons: [
     { letter: '🎁', name: 'Gift +25', color: '#eaa5a5' },
@@ -421,7 +446,7 @@ const CONTROLS_GUIDE: ControlsGuide = {
 };
 
 /**
- * On-screen controls for phones: a wide drag pad (slide a thumb from where it touched and the sled steers that way,
+ * On-screen controls for phones: a wide drag pad (slide a thumb from where it touched and the car steers that way,
  * further for a harder turn) and a big JUMP button. Native pointer events, both thumbs at once.
  */
 function TouchControls({ steerAxisRef, onJump }: { steerAxisRef: React.MutableRefObject<{ pad: number; canvas: number }>; onJump: () => void }) {

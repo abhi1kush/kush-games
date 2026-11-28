@@ -1,8 +1,10 @@
-//! The Alpine Sled simulation: a wooden sled gliding down an endless curving, rolling snowy trail. The sled speeds up
-//! as the run gets longer; the player steers left and right between the banked snow edges and jumps. Ramps launch the
-//! sled into a long arc over the obstacles below, with golden stars hanging in the air. Pine trees, boulders,
-//! snowmen and fallen logs end the run unless a Shield absorbs the hit. Fixed 1/120 s steps; every pool is a fixed
-//! array (no allocation while playing).
+//! The Alpine Drive simulation: a little car driving down an endless curving, rolling snowy mountain road. The car
+//! speeds up as the run gets longer. Steering turns the car's heading and the car moves along that heading (it does
+//! not just slide sideways); releasing the stick eases the nose back onto the road so you are not fighting every bend.
+//! A chase camera sits behind the car and turns to follow its heading, with a little lag and a look-ahead into curves.
+//! The player can hop and ride ramps into a long arc over the obstacles below, with golden stars hanging in the air.
+//! Pine trees, boulders, snowmen and fallen logs end the run unless a Shield absorbs the hit. Fixed 1/120 s steps;
+//! every pool is a fixed array (no allocation while playing).
 use crate::track::{Track, TRAIL_HALF_WIDTH};
 
 pub const STEP_SECONDS: f32 = 1.0 / 120.0;
@@ -11,17 +13,18 @@ const HITCH_SECONDS: f32 = 0.1;
 /// Slow frames are simulated at most this long, so a struggling phone slows down instead of skipping through trees.
 const MAX_FRAME_SECONDS: f32 = 0.05;
 
-// ---------- the sled ----------
+// ---------- the car ----------
 pub const START_SPEED: f32 = 13.0;
 pub const MAX_SPEED: f32 = 32.0;
-/// Distance (metres) at which the sled is half way from its start speed to its top speed.
+/// Distance (metres) at which the car is half way from its start speed to its top speed.
 pub const HALF_SPEED_DISTANCE: f32 = 2200.0;
-pub const STEER_SPEED: f32 = 8.5;
-/// How quickly the sideways speed follows the steering (per second); halved in the air.
-const STEER_RESPONSE: f32 = 9.0;
-/// How strongly a bend pushes the sled toward its outside edge.
-const BEND_PUSH: f32 = 0.3;
-/// The sled's centre can go this far from the centre line before the banked edge stops it.
+/// How far the nose can point off the road (radians, about 26°).
+pub const MAX_STEER_ANGLE: f32 = 0.46;
+/// How quickly (per second) the heading follows the stick; halved in the air.
+const STEER_TURN_RATE: f32 = 5.5;
+/// How quickly (per second) the nose eases back onto the road when the stick is released.
+const STEER_CENTRE_RATE: f32 = 3.2;
+/// The car's centre can go this far from the centre line before the snowbank stops it.
 pub const SIDE_LIMIT: f32 = TRAIL_HALF_WIDTH - 0.7;
 pub const GRAVITY: f32 = 20.0;
 pub const JUMP_SPEED: f32 = 7.0;
@@ -29,26 +32,31 @@ pub const RAMP_LAUNCH_SPEED: f32 = 10.5;
 /// A jump pressed this long before landing still happens on landing.
 const JUMP_BUFFER_SECONDS: f32 = 0.15;
 pub const PLAYER_HALF_WIDTH: f32 = 0.55;
-pub const PLAYER_HALF_DEPTH: f32 = 0.7;
+pub const PLAYER_HALF_DEPTH: f32 = 0.85;
 pub const CRASH_SECONDS: f32 = 1.3;
 pub const SHIELD_GRACE_SECONDS: f32 = 1.0;
 pub const MILESTONE_METRES: f32 = 500.0;
 
-// ---------- the camera (behind and above the sled) ----------
+// ---------- the camera (behind and above the car, turning with its heading) ----------
 pub const CAMERA_BACK: f32 = 6.0;
 pub const CAMERA_HEIGHT: f32 = 2.5;
+/// A closer bumper / hood view.
+pub const BUMPER_BACK: f32 = 3.2;
+pub const BUMPER_HEIGHT: f32 = 1.5;
 pub const CRASH_PULLBACK: f32 = 5.0;
-/// The camera swings this share of the sled's sideways offset from the trail centre (the rest shows as the sled moving
-/// across the screen, which is what makes steering feel alive).
-pub const LATERAL_FOLLOW: f32 = 0.75;
-/// How quickly (per second) the camera eases toward that position.
-pub const LATERAL_FOLLOW_RATE: f32 = 9.0;
-/// The sled's centre is held within this share of half the screen on wide layouts.
+/// How quickly (per second) the camera's yaw eases toward the car's heading (a little lag so turns feel natural).
+pub const CAMERA_YAW_RATE: f32 = 5.0;
+/// How far ahead (metres) the camera peeks to start turning into a bend.
+pub const LOOK_AHEAD_METRES: f64 = 18.0;
+/// How much of the upcoming road heading is mixed into the camera's target yaw.
+pub const LOOK_AHEAD_BLEND: f32 = 0.28;
+/// How much the camera rolls (radians) at full steering lock.
+pub const CAMERA_ROLL_FROM_HEADING: f32 = 0.14;
+/// The car's centre is held within this share of half the screen on wide layouts.
 pub const SLED_SCREEN_COMFORT: f32 = 0.55;
-/// How far the drawn sled reaches sideways from its centre (metres): runners, rider, scarf and the shield bubble.
-pub const SLED_DRAWN_HALF_WIDTH: f32 = 1.05;
-/// The sled's drawn edges are held within this share of half the screen. On an upright phone the sled is big on
-/// screen, so this (not the comfort share above) is what holds it, and it sits a little closer to the middle there.
+/// How far the drawn car reaches sideways from its centre (metres): body, wheels and the shield bubble.
+pub const SLED_DRAWN_HALF_WIDTH: f32 = 1.1;
+/// The car's drawn edges are held within this share of half the screen.
 pub const SLED_EDGE_KEEP: f32 = 0.88;
 /// Half the screen width ÷ the focal length for the narrowest layout (an upright phone); the page reports the real one.
 pub const NARROWEST_VIEW_HALF_WIDTH: f32 = 1.0 / 3.0;
@@ -67,7 +75,7 @@ pub const VIEW_DISTANCE: f32 = SEGMENT_LENGTH * DRAW_SEGMENTS as f32;
 pub const MAX_ENTITIES: usize = 128;
 /// Stars hang this high above the snow after a ramp (the arc passes through them at any speed).
 pub const AIR_STAR_ALTITUDE: f32 = 3.0;
-/// How close in height the sled must be to a collectible to pick it up.
+/// How close in height the car must be to a collectible to pick it up.
 pub const PICKUP_REACH: f32 = 1.4;
 
 pub const GIFT_POINTS: u32 = 25;
@@ -156,7 +164,7 @@ pub fn cruise_speed(distance: f32) -> f32 {
     START_SPEED + (MAX_SPEED - START_SPEED) * distance / (distance + HALF_SPEED_DISTANCE)
 }
 
-#[derive(Clone)]
+#[cfg_attr(test, derive(Clone))]
 pub struct World {
     pub track: Track,
     pub random_state: u32,
@@ -164,10 +172,13 @@ pub struct World {
     pub phase_seconds: f32,
     /// Distance down the hill (metres); the run starts at 0.
     pub player_z: f64,
-    /// Sideways offset of the sled from the centre line.
+    /// Sideways offset of the car from the centre line.
     pub player_x: f32,
+    /// Rate of change of that offset (for lean and a crash bounce).
     pub sideways_speed: f32,
-    /// Height of the runners above the snow.
+    /// The car's heading relative to the road (radians): 0 is pointed down the road, positive turns right.
+    pub heading: f32,
+    /// Height of the tyres above the snow.
     pub altitude: f32,
     pub vertical_speed: f32,
     pub motion: Motion,
@@ -196,8 +207,14 @@ pub struct World {
     // camera smoothing
     pub camera_offset: f32,
     pub camera_lift: f32,
-    /// After a wipeout the camera eases back and up so the sled and what it hit are both in view.
+    /// After a wipeout the camera eases back and up so the car and what it hit are both in view.
     pub camera_pullback: f32,
+    /// The camera's world yaw (radians, 0 looks down +z), easing toward the car's heading.
+    pub camera_yaw: f32,
+    /// A slight roll that follows the steering, so the view leans into the turn.
+    pub camera_roll: f32,
+    /// Closer bumper / hood camera when true; the chase camera is the default.
+    pub bumper_view: bool,
     /// Half the screen width ÷ the focal length of the page's current layout (not saved: it belongs to the screen).
     pub view_half_width: f32,
     pub accumulated_seconds: f32,
@@ -214,6 +231,7 @@ impl World {
             player_z: 0.0,
             player_x: 0.0,
             sideways_speed: 0.0,
+            heading: 0.0,
             altitude: 0.0,
             vertical_speed: 0.0,
             motion: Motion::Sliding,
@@ -239,6 +257,9 @@ impl World {
             camera_offset: 0.0,
             camera_lift: 0.0,
             camera_pullback: 0.0,
+            camera_yaw: 0.0,
+            camera_roll: 0.0,
+            bumper_view: false,
             view_half_width: NARROWEST_VIEW_HALF_WIDTH,
             accumulated_seconds: 0.0,
             debug_invincible: false,
@@ -247,17 +268,36 @@ impl World {
         world
     }
 
-    /// Metres travelled for the score (frozen at a crash while the sled tumbles on).
+    /// Metres travelled for the score (frozen at a crash while the car tumbles on).
     pub fn distance(&self) -> f32 { self.scored_distance }
     pub fn score(&self) -> u32 { self.distance() as u32 + self.bonus_points }
     pub fn collectibles(&self) -> u32 { self.gifts + self.stars }
-    pub fn camera_z(&self) -> f64 { self.player_z - (CAMERA_BACK + self.camera_pullback) as f64 }
+    pub fn camera_back(&self) -> f32 {
+        let base = if self.bumper_view {
+            BUMPER_BACK.max(SLED_DRAWN_HALF_WIDTH / (self.view_half_width * 0.48))
+        } else { CAMERA_BACK };
+        base + self.camera_pullback
+    }
+    pub fn camera_height_base(&self) -> f32 { if self.bumper_view { BUMPER_HEIGHT } else { CAMERA_HEIGHT } }
+    /// Which way the road itself is pointing at `z` (world yaw, radians).
+    pub fn road_yaw(&self, z: f64) -> f32 {
+        // atan of the road's dx/dz, kept in f32 with a short approximation so we do not pull atanf into the wasm
+        let x = self.track.heading(z) as f32;
+        x / (1.0 + 0.28 * x * x)
+    }
+    /// The car's world yaw (road heading plus the steering angle).
+    pub fn car_world_yaw(&self) -> f32 { self.road_yaw(self.player_z) + self.heading }
+    pub fn car_world_x(&self) -> f64 { self.track.center_x(self.player_z) + self.player_x as f64 }
+    /// Shortest signed angle from `current` to `target` (radians, in (−π, π]).
+    pub fn set_bumper_view(&mut self, bumper: bool) { self.bumper_view = bumper; }
+    pub fn toggle_view(&mut self) { self.bumper_view = !self.bumper_view; }
+    pub fn camera_z(&self) -> f64 { self.player_z - (self.camera_yaw as f64).cos() * self.camera_back() as f64 }
 
     pub fn start(&mut self) {
         if self.phase == Phase::Ready { self.phase = Phase::Playing; self.phase_seconds = 0.0; }
     }
 
-    /// Queue a jump (it happens as soon as the sled is on the snow, within a short buffer).
+    /// Queue a jump (it happens as soon as the car is on the snow, within a short buffer).
     pub fn press_jump(&mut self) { if self.phase == Phase::Playing { self.jump_buffer = JUMP_BUFFER_SECONDS; } }
 
     pub fn random(&mut self) -> f32 {
@@ -294,11 +334,12 @@ impl World {
     }
 
     fn step_crashing(&mut self, seconds: f32) -> u32 {
-        // the sled tumbles to a stop in the snow
+        // the car tumbles to a stop in the snow
         self.speed *= (-3.5 * seconds).exp();
         self.player_z += (self.speed * seconds) as f64;
         self.sideways_speed *= (-4.0 * seconds).exp();
         self.player_x = limit(self.player_x + self.sideways_speed * seconds, -SIDE_LIMIT, SIDE_LIMIT);
+        self.heading += self.sideways_speed.signum() * 2.2 * seconds;
         if self.motion == Motion::Airborne || self.altitude > 0.0 {
             self.vertical_speed -= GRAVITY * seconds;
             self.altitude = (self.altitude + self.vertical_speed * seconds).max(0.0);
@@ -317,22 +358,15 @@ impl World {
         let cruise = cruise_speed(self.distance());
         self.speed += limit(cruise - self.speed, -6.0 * seconds, 3.0 * seconds);
 
-        // steering: the sideways speed follows the stick; bends push toward the outside edge
+        // steering turns the car's heading; releasing the stick eases the nose back onto the road
         let mut axis = self.steer_axis;
         if self.input & buttons::LEFT != 0 { axis -= 1.0; }
         if self.input & buttons::RIGHT != 0 { axis += 1.0; }
         let axis = limit(axis, -1.0, 1.0);
-        let response = if self.motion == Motion::Airborne { STEER_RESPONSE * 0.5 } else { STEER_RESPONSE };
-        self.sideways_speed += (axis * STEER_SPEED - self.sideways_speed) * (response * seconds).min(1.0);
-        let bend_drift = if self.motion == Motion::Airborne { 0.0 } else { -(self.track.curvature(self.player_z) as f32) * self.speed * self.speed * BEND_PUSH };
-        let wanted_x = self.player_x + (self.sideways_speed + bend_drift) * seconds;
-        self.player_x = limit(wanted_x, -SIDE_LIMIT, SIDE_LIMIT);
-        if self.player_x != wanted_x {
-            // pressed into the banked edge: it holds the sled and scrubs a little speed
-            if self.sideways_speed * self.player_x > 0.0 { self.sideways_speed = 0.0; }
-            self.speed = (self.speed - 4.0 * seconds).max(START_SPEED * 0.8);
-            happened |= events::BANK_SCRAPE;
-        }
+        let target = axis * MAX_STEER_ANGLE;
+        let mut turn_rate = if axis.abs() > 0.08 { STEER_TURN_RATE } else { STEER_CENTRE_RATE };
+        if self.motion == Motion::Airborne { turn_rate *= 0.5; }
+        self.heading += (target - self.heading) * (turn_rate * seconds).min(1.0);
 
         // jumping (buffered so a press just before landing still counts)
         if self.jump_buffer > 0.0 {
@@ -347,7 +381,21 @@ impl World {
         }
 
         let previous_z = self.player_z;
-        self.player_z += (self.speed * seconds) as f64;
+        // the car moves along its heading (world yaw = the road's heading plus the steering angle)
+        let previous_world_x = self.track.center_x(previous_z) + self.player_x as f64;
+        let world_yaw = (self.road_yaw(previous_z) + self.heading) as f64;
+        let travel = (self.speed * seconds) as f64;
+        self.player_z = previous_z + world_yaw.cos() * travel;
+        let wanted_x = (previous_world_x + world_yaw.sin() * travel - self.track.center_x(self.player_z)) as f32;
+        self.sideways_speed = (wanted_x - self.player_x) / seconds;
+        self.player_x = limit(wanted_x, -SIDE_LIMIT, SIDE_LIMIT);
+        if self.player_x != wanted_x {
+            // the snowbank holds the car and turns the nose back toward the road, scrubbing a little speed
+            if self.heading * self.player_x > 0.0 { self.heading *= 0.35; }
+            self.sideways_speed = 0.0;
+            self.speed = (self.speed - 4.0 * seconds).max(START_SPEED * 0.8);
+            happened |= events::BANK_SCRAPE;
+        }
         self.scored_distance = self.player_z as f32;
 
         // flying: a smooth arc under gravity, landing back on the snow
@@ -415,7 +463,7 @@ impl World {
             if !entity.active || entity.kind == EntityKind::Ramp { continue; }
             let size = kind_size(entity.kind);
             let reach_z = (size.half_depth + PLAYER_HALF_DEPTH) as f64;
-            // swept along the trail, so even a fast sled can't step over something thin
+            // swept along the trail, so even a fast car can't step over something thin
             if entity.z + reach_z < previous_z || entity.z - reach_z > self.player_z { continue; }
             if (entity.x - self.player_x).abs() >= size.half_width + PLAYER_HALF_WIDTH { continue; }
             if entity.kind.is_collectible() {
@@ -439,7 +487,7 @@ impl World {
                 } else {
                     self.phase = Phase::Crashing;
                     self.phase_seconds = 0.0;
-                    self.speed *= 0.3; // the sled thumps to a stop against it
+                    self.speed *= 0.3; // the car thumps to a stop against it
                     self.sideways_speed = if self.player_x >= entity.x { 3.0 } else { -3.0 };
                     if self.motion == Motion::OnRamp { self.motion = Motion::Airborne; self.vertical_speed = 0.0; }
                     return happened | events::CRASH;
@@ -450,12 +498,14 @@ impl World {
     }
 
     fn step_camera(&mut self, seconds: f32) {
-        let follow = (LATERAL_FOLLOW_RATE * seconds).min(1.0);
-        self.camera_offset += (self.player_x * LATERAL_FOLLOW - self.camera_offset) * follow;
+        let look = self.road_yaw(self.player_z + LOOK_AHEAD_METRES) - self.road_yaw(self.player_z);
+        let target = self.car_world_yaw() + look * LOOK_AHEAD_BLEND;
+        self.camera_yaw += (target - self.camera_yaw) * (CAMERA_YAW_RATE * seconds).min(1.0);
+        self.camera_roll = -self.heading * CAMERA_ROLL_FROM_HEADING;
         self.camera_lift += (self.altitude * 0.45 - self.camera_lift) * (6.0 * seconds).min(1.0);
         let pullback = if matches!(self.phase, Phase::Crashing | Phase::GameOver) { CRASH_PULLBACK } else { 0.0 };
         self.camera_pullback += (pullback - self.camera_pullback) * (3.0 * seconds).min(1.0);
-        self.camera_offset = self.held_camera_offset();
+        self.hold_camera_on_screen();
     }
 
     /// Tell the world how wide the screen is (half width ÷ focal length) so the camera can keep the sled inside it.
@@ -463,29 +513,47 @@ impl World {
         self.view_half_width = if view_half_width.is_finite() { limit(view_half_width, 0.12, 3.0) } else { NARROWEST_VIEW_HALF_WIDTH };
     }
 
-    /// How far (metres) the sled may sit sideways from the camera before it would leave the comfortable middle of the screen.
+    /// How far (metres) the car may sit sideways from the camera before it would leave the comfortable middle of the screen.
     pub fn sled_reach(&self) -> f32 {
-        let half_view_metres = self.view_half_width * (CAMERA_BACK + self.camera_pullback); // half the screen, at the sled
+        let half_view_metres = self.view_half_width * self.camera_back();
         (half_view_metres * SLED_SCREEN_COMFORT).min(half_view_metres * SLED_EDGE_KEEP - SLED_DRAWN_HALF_WIDTH).max(0.0)
     }
 
-    /// The camera's sideways offset from the trail centre under the sled, held close enough to the sled to keep it on screen.
-    fn held_camera_offset(&self) -> f32 {
-        let reach = self.sled_reach();
-        limit(self.camera_offset, self.player_x - reach, self.player_x + reach)
+    /// The car's position in camera space (x right, z forward).
+    pub fn car_in_camera(&self) -> (f32, f32) { self.world_to_camera(self.car_world_x(), self.player_z) }
+
+    /// Rotate a world point into camera space: the camera looks along `camera_yaw`, so a turn swings the whole view.
+    pub fn world_to_camera(&self, world_x: f64, world_z: f64) -> (f32, f32) {
+        let dx = (world_x - self.camera_x()) as f32;
+        let dz = (world_z - self.camera_z()) as f32;
+        let sine = (self.camera_yaw as f64).sin() as f32;
+        let cosine = (self.camera_yaw as f64).cos() as f32;
+        (dx * cosine - dz * sine, dx * sine + dz * cosine)
     }
 
-    /// The sled's sideways screen position as a share of half the screen (0 = centre, ±1 = an edge).
+    /// The car's sideways screen position as a share of half the screen (0 = centre, ±1 = an edge).
     pub fn sled_screen_share(&self) -> f32 {
-        let relative_x = self.track.center_x(self.player_z) + self.player_x as f64 - self.camera_x();
-        (relative_x / (self.player_z - self.camera_z())) as f32 / self.view_half_width
+        let (relative_x, relative_z) = self.car_in_camera();
+        relative_x / relative_z.max(0.4) / self.view_half_width
     }
 
-    /// The camera sits behind the sled but measures its sideways position from the trail centre *under the sled*, so a
-    /// curve never drags the sled toward the edge of the screen; only steering moves it, and that is held in check.
-    pub fn camera_x(&self) -> f64 { self.track.center_x(self.player_z) + self.held_camera_offset() as f64 }
-    /// The camera rides a fixed height above the snow under the sled (so the sled stays put on screen over crests and dips).
-    pub fn camera_y(&self) -> f64 { self.track.height(self.player_z) + (CAMERA_HEIGHT + self.camera_lift + self.camera_pullback * 0.35) as f64 }
+    /// If a sharp turn or a lagging camera would push the car off the screen, yaw a little more toward it.
+    #[inline(never)]
+    pub fn hold_camera_on_screen(&mut self) {
+        let share = self.sled_screen_share();
+        let half_view_metres = self.view_half_width * self.camera_back();
+        let edge = share.abs() + SLED_DRAWN_HALF_WIDTH / half_view_metres.max(0.4);
+        let keep = SLED_EDGE_KEEP.min(SLED_SCREEN_COMFORT + SLED_DRAWN_HALF_WIDTH / half_view_metres.max(0.4));
+        if edge > keep {
+            let excess = (edge - keep) * share.signum();
+            self.camera_yaw += excess * self.view_half_width;
+        }
+    }
+
+    /// The camera sits behind the car along its own yaw, so the view turns with the steering.
+    pub fn camera_x(&self) -> f64 { self.car_world_x() - (self.camera_yaw as f64).sin() * self.camera_back() as f64 }
+    /// The camera rides a fixed height above the snow under the car (so the car stays put on screen over crests and dips).
+    pub fn camera_y(&self) -> f64 { self.track.height(self.player_z) + (self.camera_height_base() + self.camera_lift + self.camera_pullback * 0.35) as f64 }
 
     // ---------- the trail ahead: rows of obstacles and collectibles ----------
     pub fn row_z(row: u32) -> f64 { FIRST_ROW_Z as f64 + row as f64 * ROW_LENGTH as f64 }
@@ -512,7 +580,7 @@ impl World {
         }
     }
 
-    /// A lane the sled can reach from the lanes left free in the row before (the same lane or a neighbour).
+    /// A lane the car can reach from the lanes left free in the row before (the same lane or a neighbour).
     fn reachable_lane(&mut self) -> usize {
         let mut choices = [0usize; LANE_COUNT];
         let mut count = 0;
@@ -555,7 +623,7 @@ impl World {
                 self.spawn(EntityKind::Star, landing + ahead, x, AIR_STAR_ALTITUDE + lift);
             }
             self.rows_since_ramp = 0;
-            // the landing zone stays clear: two rows, three once the sled is fast enough to fly further
+            // the landing zone stays clear: two rows, three once the car is fast enough to fly further
             self.calm_rows = if cruise_speed(z as f32) > 24.0 { 3 } else { 2 };
             self.previous_free_lanes = ALL_LANES & !(1 << lane);
             return;
@@ -618,29 +686,16 @@ impl World {
     }
 
     // ---------- test hooks ----------
+
     #[cfg(test)]
-    pub fn debug_spawn_row(&mut self, row: u32) { self.spawn_row(row); }
-    pub fn clear_entities(&mut self) { for entity in self.entities.iter_mut() { entity.active = false; } }
+    pub fn hold_camera_for_test(&mut self) { self.hold_camera_on_screen(); }
 
-    /// Jump straight to `distance` metres; the trail ahead is generated afresh from 40 m in front of the sled.
-    pub fn teleport(&mut self, distance: f64) {
-        self.player_z = distance.max(0.0);
-        self.scored_distance = self.player_z as f32;
-        self.clear_entities();
-        // the trail refills from just ahead of the sled
-        self.next_row = (((self.player_z + 40.0 - FIRST_ROW_Z as f64) / ROW_LENGTH as f64).ceil()).max(0.0) as u32;
-        self.previous_free_lanes = ALL_LANES;
-        self.calm_rows = 0;
-        self.next_milestone = ((self.distance() / MILESTONE_METRES).floor() + 1.0) * MILESTONE_METRES;
-        self.speed = cruise_speed(self.distance());
-        self.spawn_ahead();
-    }
-
-    // ---------- save / load ----------
-    pub fn save(&self) -> Vec<u8> {
+    /// A version-1 (Alpine Sled) save of this run, for checking that old saves still load.
+    #[cfg(test)]
+    pub fn save_as_version_1_for_test(&self) -> Vec<u8> {
         let mut writer = Writer { bytes: Vec::with_capacity(96 + MAX_ENTITIES * 17) };
         writer.bytes.extend_from_slice(&SAVE_MAGIC);
-        writer.byte(SAVE_VERSION);
+        writer.byte(1);
         writer.word(self.track.seed);
         writer.word(self.random_state);
         writer.double(self.player_z);
@@ -665,16 +720,80 @@ impl World {
         }
         writer.bytes
     }
+    #[cfg(test)]
+    pub fn debug_spawn_row(&mut self, row: u32) { self.spawn_row(row); }
+    pub fn clear_entities(&mut self) { for entity in self.entities.iter_mut() { entity.active = false; } }
+
+    /// Jump straight to `distance` metres; the trail ahead is generated afresh from 40 m in front of the car.
+    pub fn teleport(&mut self, distance: f64) {
+        self.player_z = distance.max(0.0);
+        self.scored_distance = self.player_z as f32;
+        self.clear_entities();
+        // the trail refills from just ahead of the sled
+        self.next_row = (((self.player_z + 40.0 - FIRST_ROW_Z as f64) / ROW_LENGTH as f64).ceil()).max(0.0) as u32;
+        self.previous_free_lanes = ALL_LANES;
+        self.calm_rows = 0;
+        self.next_milestone = ((self.distance() / MILESTONE_METRES).floor() + 1.0) * MILESTONE_METRES;
+        self.speed = cruise_speed(self.distance());
+        self.heading = 0.0;
+        self.sideways_speed = 0.0;
+        self.camera_yaw = self.road_yaw(self.player_z);
+        self.camera_roll = 0.0;
+        self.camera_offset = 0.0;
+        self.spawn_ahead();
+    }
+
+    // ---------- save / load ----------
+    pub fn save(&self) -> Vec<u8> {
+        let mut writer = Writer { bytes: Vec::with_capacity(96 + MAX_ENTITIES * 17) };
+        writer.bytes.extend_from_slice(&SAVE_MAGIC);
+        writer.byte(SAVE_VERSION);
+        writer.word(self.track.seed);
+        writer.word(self.random_state);
+        writer.double(self.player_z);
+        for value in [self.player_x, self.sideways_speed, self.altitude, self.vertical_speed] { writer.float(value); }
+        writer.byte(self.motion as u8);
+        writer.double(self.ramp_top_z);
+        writer.float(self.speed);
+        for value in [self.bonus_points, self.gifts, self.stars] { writer.word(value); }
+        writer.byte(self.has_shield as u8);
+        for value in [self.grace_seconds, self.airborne_seconds, self.next_milestone] { writer.float(value); }
+        for value in [self.next_row, self.rows_since_shield, self.rows_since_ramp, self.calm_rows] { writer.word(value); }
+        writer.byte(self.previous_free_lanes);
+        writer.float(self.camera_offset);
+        writer.float(self.camera_lift);
+        writer.float(self.heading);
+        writer.float(self.camera_yaw);
+        let active = self.entities.iter().filter(|entity| entity.active).count();
+        writer.byte(active as u8);
+        for entity in self.entities.iter().filter(|entity| entity.active) {
+            writer.byte(entity.kind as u8);
+            writer.double(entity.z);
+            writer.float(entity.x);
+            writer.float(entity.altitude);
+        }
+        writer.bytes
+    }
 
     /// Rebuild a run from `save()` bytes. The world is unchanged if the bytes are not a valid save.
     /// A restored run is in the Playing phase (the screen shows it paused until the player resumes).
     pub fn restore(&mut self, bytes: &[u8]) -> bool {
-        match World::parse(bytes) { Some(mut world) => { world.view_half_width = self.view_half_width; *self = world; true } None => false }
+        match World::parse(bytes) {
+            Some(mut world) => {
+                world.view_half_width = self.view_half_width;
+                world.bumper_view = self.bumper_view;
+                *self = world;
+                true
+            }
+            None => false,
+        }
     }
 
     fn parse(bytes: &[u8]) -> Option<World> {
         let mut reader = Reader { bytes, position: 0 };
-        if reader.take(SAVE_MAGIC.len())? != SAVE_MAGIC || reader.byte()? != SAVE_VERSION { return None; }
+        if reader.take(SAVE_MAGIC.len())? != SAVE_MAGIC { return None; }
+        let version = reader.byte()?;
+        if version != 1 && version != SAVE_VERSION { return None; }
         let mut world = World::new(reader.word()?);
         world.clear_entities();
         world.random_state = reader.word()?;
@@ -703,6 +822,15 @@ impl World {
         world.previous_free_lanes = reader.byte()? & ALL_LANES;
         world.camera_offset = reader.float()?;
         world.camera_lift = reader.float()?;
+        if version >= 2 {
+            world.heading = reader.float()?;
+            world.camera_yaw = reader.float()?;
+            if !world.heading.is_finite() || !world.camera_yaw.is_finite() { return None; }
+            world.heading = limit(world.heading, -1.5, 1.5);
+        } else {
+            world.heading = 0.0;
+            world.camera_yaw = world.road_yaw(world.player_z);
+        }
         let count = reader.byte()? as usize;
         if count > MAX_ENTITIES { return None; }
         for index in 0..count {
@@ -715,7 +843,7 @@ impl World {
         }
         if reader.position != bytes.len() { return None; }
         let floats = [world.player_x, world.sideways_speed, world.altitude, world.vertical_speed, world.speed, world.grace_seconds,
-            world.airborne_seconds, world.next_milestone, world.camera_offset, world.camera_lift];
+            world.airborne_seconds, world.next_milestone, world.camera_offset, world.camera_lift, world.heading, world.camera_yaw];
         if floats.iter().any(|value| !value.is_finite()) || !world.ramp_top_z.is_finite() { return None; }
         if world.player_x.abs() > SIDE_LIMIT + 0.01 || !(0.0..=MAX_SPEED * 2.0).contains(&world.speed) || world.altitude < 0.0 { return None; }
         world.phase = Phase::Playing;
@@ -724,13 +852,13 @@ impl World {
     }
 }
 
-/// Can the sled get to `lane` from any of the `free_lanes` of the row before (same lane or a neighbour)?
+/// Can the car get to `lane` from any of the `free_lanes` of the row before (same lane or a neighbour)?
 fn reachable_from(free_lanes: u8, lane: usize) -> bool {
     (lane.saturating_sub(1)..=(lane + 1).min(LANE_COUNT - 1)).any(|from| free_lanes & (1 << from) != 0)
 }
 
 pub const SAVE_MAGIC: [u8; 2] = *b"AS";
-pub const SAVE_VERSION: u8 = 1;
+pub const SAVE_VERSION: u8 = 2;
 
 struct Writer { bytes: Vec<u8> }
 impl Writer {

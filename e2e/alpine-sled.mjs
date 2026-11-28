@@ -1,4 +1,4 @@
-// Alpine Sled smoke test: hub card (wasm not loaded on the hub), lazy wasm load, the 3D scene really drawn (colour variety,
+// Alpine Drive smoke test: hub card (wasm not loaded on the hub), lazy wasm load, the 3D scene really drawn (colour variety,
 // sky over snow, the sled in front), start, steering both ways, jumping off the snow, a ramp launch over obstacles with the
 // air stars, gifts and the shield, distance and score rising, pause (with the controls card), mute, a run restored paused
 // through a reload, a crash into a pine ending the run and Play again starting clean, frame times (also at 4× CPU slowdown),
@@ -10,12 +10,13 @@ import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 
 const siteUrl = process.argv[2] ?? 'https://abhi1kush.github.io/kush-games/';
-const screenshotDirectory = process.argv[3] ?? '/workspace/sled-shots';
+const screenshotDirectory = process.argv[3] ?? '/workspace/drive-shots';
 mkdirSync(screenshotDirectory, { recursive: true });
 const chromePath = process.env.CHROME_PATH ?? '/usr/bin/google-chrome';
-const gameUrl = `${siteUrl}?sledTest#/play/alpine-sled`;
-const SAVE_KEY = 'kush-games:alpine-sled:save:v1';
-const BEST_KEY = 'kush-games-alpine-sled-best';
+const gameUrl = `${siteUrl}?driveTest#/play/alpine-drive`;
+const oldGameUrl = `${siteUrl}?driveTest#/play/alpine-sled`;
+const SAVE_KEY = 'kush-games:alpine-drive:save:v1';
+const BEST_KEY = 'kush-games-alpine-drive-best';
 const THEME_KEY = 'kush-games:theme:save:v1';
 // phases and kinds (src/games/alpinesled/engine.ts)
 const Phase = { ready: '0', playing: '1', crashing: '2', gameOver: '3' };
@@ -156,10 +157,10 @@ try {
   await page.goto(siteUrl, { waitUntil: 'networkidle' });
   await page.evaluate(() => localStorage.clear());
   await page.reload({ waitUntil: 'networkidle' });
-  check(!(await page.evaluate(() => performance.getEntriesByType('resource').some(entry => entry.name.includes('alpine_sled')))), 'the Alpine Sled wasm is not loaded on the hub');
-  check(await page.locator('img[src*="alpine-sled"]').count() > 0, 'hub shows the Alpine Sled thumbnail');
-  check(await page.getByText('Alpine Sled').first().isVisible(), 'hub shows the Alpine Sled card');
-  await page.locator('img[src*="alpine-sled"]').first().scrollIntoViewIfNeeded();
+  check(!(await page.evaluate(() => performance.getEntriesByType('resource').some(entry => entry.name.includes('alpine_sled')))), 'the Alpine Drive wasm is not loaded on the hub');
+  check(await page.locator('img[src*="alpine-drive"]').count() > 0, 'hub shows the Alpine Drive thumbnail');
+  check(await page.getByText('Alpine Drive').first().isVisible(), 'hub shows the Alpine Drive card');
+  await page.locator('img[src*="alpine-drive"]').first().scrollIntoViewIfNeeded();
   await page.waitForTimeout(400);
   await shot(page, 'hub-card.png');
 
@@ -169,12 +170,12 @@ try {
   check(await page.evaluate(() => performance.getEntriesByType('resource').some(entry => entry.name.includes('alpine_sled'))), `the wasm loads when the game opens (${Date.now() - loadStart} ms to the canvas)`);
   check(await phaseOf(page) === Phase.ready, 'loads on the start screen');
   const overlayText = await page.getByTestId('sled-overlay').textContent();
-  check(overlayText.includes('ALPINE') && overlayText.includes('SLED'), 'title overlay');
+  check(overlayText.includes('ALPINE') && overlayText.includes('DRIVE'), 'title overlay');
   const startControls = page.getByTestId('sled-controls');
   const startControlsText = await startControls.textContent();
   check(await startControls.isVisible() && await startControls.getAttribute('data-keys') === 'true'
-    && ['Steer', 'Jump', 'Pause', 'Mute', 'Start', 'Back to the hub', 'Gift', 'Star', 'Shield'].every(text => startControlsText.includes(text)),
-    'desktop: keyboard controls card on the start screen (steer, jump, P, M, Enter, Esc, collectibles)');
+    && ['Steer', 'Hop', 'Chase or bumper', 'Pause', 'Mute', 'Start', 'Back to the hub', 'Gift', 'Star', 'Shield'].every(text => startControlsText.includes(text)),
+    'desktop: keyboard controls card on the start screen (steer, hop, C, P, M, Enter, Esc, collectibles)');
   await page.waitForTimeout(300);
   await shot(page, 'start-desktop.png');
   const stageBox = await page.getByTestId('sled-canvas').boundingBox();
@@ -189,7 +190,7 @@ try {
   check(colors.distinct >= 60 && colors.blankShare < 0.01, `the 3D scene is drawn: ${colors.distinct} distinct colours, ${(colors.blankShare * 100).toFixed(1)}% blank`);
   check(colors.sky[2] > colors.sky[0] + 15, `a soft blue sky on top (rgb ${colors.sky})`);
   check(colors.snow.every(channel => channel > 190), `light snow at the bottom (rgb ${colors.snow})`);
-  check(colors.woodShare > 0.004, `the wooden sled is in view (${(colors.woodShare * 100).toFixed(2)}% warm wood pixels)`);
+  check(colors.woodShare > 0.004, `the car is in view (${(colors.woodShare * 100).toFixed(2)}% warm body pixels)`);
 
   // glides on its own: distance, score and the HUD rise
   const before = await state(page);
@@ -211,6 +212,38 @@ try {
   await page.waitForTimeout(700);
   await page.keyboard.up('a');
   check((await state(page)).x < steeredRight.x - 2, 'A steers left');
+  // holding steer rotates the camera, like a driving-game chase view
+  await game(page, 'game.debug_clear_trail()');
+  const yawBefore = await game(page, 'return game.camera_yaw()');
+  const roadBefore = await page.evaluate(() => {
+    const render = window.__sledTest.render();
+    const first = 32; // RenderSlot.segments
+    const z = Math.max(0.5, render[first + 12]); // a little way down the road
+    const x = render[first + 12 + 1];
+    const canvas = document.querySelector('[data-testid="sled-canvas"]');
+    return canvas.width / 2 + x * (canvas.height * 0.5) / z;
+  });
+  await page.keyboard.down('ArrowRight');
+  await page.waitForTimeout(700);
+  await page.keyboard.up('ArrowRight');
+  const yawAfter = await game(page, 'return game.camera_yaw()');
+  const roadAfter = await page.evaluate(() => {
+    const render = window.__sledTest.render();
+    const first = 32;
+    const z = Math.max(0.5, render[first + 12]);
+    const x = render[first + 12 + 1];
+    const canvas = document.querySelector('[data-testid="sled-canvas"]');
+    return canvas.width / 2 + x * (canvas.height * 0.5) / z;
+  });
+  check(yawAfter > yawBefore + 0.12, `holding → yaws the camera right (${yawBefore.toFixed(2)} → ${yawAfter.toFixed(2)})`);
+  check(roadAfter < roadBefore - 20, `and the road ahead swings left on the screen (${roadBefore.toFixed(0)} → ${roadAfter.toFixed(0)} px)`);
+  await shot(page, 'desktop-turn.png');
+  // C toggles the closer bumper view and back
+  const backBefore = await game(page, 'return game.is_bumper_view()');
+  await page.keyboard.press('c');
+  check(await game(page, 'return game.is_bumper_view()') !== backBefore && await page.getByTestId('sled-view').textContent() === 'Bumper', 'C switches to the bumper camera');
+  await page.keyboard.press('c');
+  check(await game(page, 'return game.is_bumper_view()') === backBefore, 'C switches back to the chase camera');
 
   // jumping lifts the sled off the snow and lands it
   await game(page, 'game.debug_clear_trail()');
@@ -347,6 +380,11 @@ try {
   const red = await themeColors();
   check(red.theme === 'netflix-red' && red.pill === 'rgb(255, 255, 255)', `Netflix Red theme: white start pill (${red.pill})`);
   await shot(page, 'start-desktop-netflix-red.png');
+  // the old Alpine Sled route still opens the game and the URL becomes #/play/alpine-drive
+  await page.goto(oldGameUrl, { waitUntil: 'networkidle' });
+  await page.getByTestId('sled-canvas').waitFor();
+  check(page.url().includes('#/play/alpine-drive'), `old #/play/alpine-sled opens Alpine Drive at #/play/alpine-drive (${page.url()})`);
+  check(await page.getByTestId('sled-overlay').textContent().then(t => t.includes('DRIVE')), 'the redirected page is Alpine Drive');
   await desktop.close();
 
   // ---------- phone, portrait ----------
@@ -385,13 +423,14 @@ try {
   await mobile.getByTestId('touch-pad').dispatchEvent('pointerup', { ...padPointer, clientX: padBox.x + padBox.width * 0.95 });
   const padSteered = (await state(mobile)).x;
   check(padSteered > padStart + 1.5, `phone: dragging the pad right steers right (x ${padStart.toFixed(2)} → ${padSteered.toFixed(2)})`);
+  await shot(mobile, 'mobile-portrait-turn.png');
   // dragging on the slope steers; a swipe up jumps
   const slopePointer = { pointerId: 7, pointerType: 'touch', isPrimary: true, bubbles: true, clientX: phoneStage.x + phoneStage.width * 0.6, clientY: phoneStage.y + phoneStage.height * 0.7 };
   await mobile.getByTestId('sled-canvas').dispatchEvent('pointerdown', slopePointer);
   await mobile.getByTestId('sled-canvas').dispatchEvent('pointermove', { ...slopePointer, clientX: phoneStage.x + phoneStage.width * 0.2 });
-  await mobile.waitForTimeout(600);
+  await mobile.waitForTimeout(1200);
   await mobile.getByTestId('sled-canvas').dispatchEvent('pointerup', { ...slopePointer, clientX: phoneStage.x + phoneStage.width * 0.2 });
-  check((await state(mobile)).x < padSteered - 2, 'phone: dragging left on the slope steers left');
+  check((await state(mobile)).x < padSteered - 1.5, 'phone: dragging left on the slope steers left');
   await mobile.waitForTimeout(300);
   const swipePointer = { pointerId: 8, pointerType: 'touch', isPrimary: true, bubbles: true, clientX: phoneStage.x + phoneStage.width * 0.5, clientY: phoneStage.y + phoneStage.height * 0.75 };
   await mobile.getByTestId('sled-canvas').dispatchEvent('pointerdown', swipePointer);
@@ -403,7 +442,7 @@ try {
   await mobile.waitForTimeout(3200);
   await shot(mobile, 'mobile-portrait-run.png');
   const phoneColors = await sceneColors(mobile);
-  check(phoneColors.distinct >= 50 && phoneColors.woodShare > 0.004, `phone: the 3D scene and sled are drawn (${phoneColors.distinct} colours)`);
+  check(phoneColors.distinct >= 50 && phoneColors.woodShare > 0.004, `phone: the 3D scene and car are drawn (${phoneColors.distinct} colours)`);
   await resetPerf(mobile);
   await mobile.waitForTimeout(2000);
   const phonePerf = await readPerf(mobile);

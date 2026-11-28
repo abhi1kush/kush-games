@@ -155,6 +155,17 @@ describe('save slots', () => {
     expect(hasSavedGame('mountain-climb', storage)).toBe(true);
   });
 
+  it('moves Alpine Sled\'s save and best score to Alpine Drive', () => {
+    const storage = memoryStorage();
+    storage.setItem('kush-games:alpine-sled:save:v1', '{"version":1,"savedAt":0,"data":{"bytes":[1,2,3]}}');
+    storage.setItem('kush-games-alpine-sled-best', '2048');
+    migrateRenamedGameData(storage);
+    expect(storage.getItem('kush-games:alpine-drive:save:v1')).toBe('{"version":1,"savedAt":0,"data":{"bytes":[1,2,3]}}');
+    expect(storage.getItem('kush-games-alpine-drive-best')).toBe('2048');
+    expect(storage.getItem('kush-games:alpine-sled:save:v1')).toBeNull();
+    expect(storage.getItem('kush-games-alpine-sled-best')).toBeNull();
+  });
+
   it('never overwrites newer data already under the new key', () => {
     const storage = memoryStorage();
     storage.setItem('kush-games:2048:save:v1', 'old');
